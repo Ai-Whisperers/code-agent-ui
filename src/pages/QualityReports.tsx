@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -12,6 +13,7 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
+import { BarChart2, Loader2, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { QualityReport, RepoSettings } from '@/types/api'
@@ -21,22 +23,166 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, T
 const CHART_OPTIONS = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { position: 'top' as const } },
+  plugins: {
+    legend: { position: 'top' as const },
+    tooltip: { callbacks: { title: (items: { label: string }[]) => items[0]?.label ?? '' } },
+  },
   scales: {
-    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+    y: {
+      beginAtZero: true,
+      max: 100,
+      grid: { color: 'rgba(0,0,0,0.05)' },
+      ticks: { callback: (v: number | string) => `${v}%` },
+    },
     x: { grid: { display: false } },
   },
+}
+
+type RowData = {
+  repo: RepoSettings
+  report: QualityReport | undefined
+  isLoading: boolean
+}
+
+export default function QualityReportsPage() {
+  const [selected, setSelected] = useState<RowData | null>(null)
+
+  const { data: repos, isLoading: reposLoading } = useQuery<RepoSettings[]>({
+    queryKey: ['repos'],
+    queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
+  })
+
+  const qualityRepos = (Array.isArray(repos) ? repos : []).filter((r) => r.qualityReportEnabled)
+
+  const reportQueries = useQueries({
+    queries: qualityRepos.map((repo) => ({
+      queryKey: ['quality-report', repo.workspace, repo.repoSlug, 'main'],
+      queryFn: () =>
+        api
+          .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`)
+          .then((r) => r.data as QualityReport)
+          .catch(() => undefined),
+      enabled: qualityRepos.length > 0,
+    })),
+  })
+
+  const rows: RowData[] = qualityRepos.map((repo, i) => ({
+    repo,
+    report: reportQueries[i]?.data,
+    isLoading: reportQueries[i]?.isLoading ?? false,
+  }))
+
+  const isLoading = reposLoading || reportQueries.some((q) => q.isLoading)
+
+  return (
+    <main>
+      <PageHeader
+        title="Quality Reports"
+        subtitle="Code quality metrics per repository."
+      />
+
+      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
+              {['Workspace', 'Repo', 'Archetype', 'Version', 'Score', 'Linter Errors', 'Avg Complexity', 'Last Measured', ''].map((h) => (
+                <th
+                  key={h}
+                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? Array.from({ length: 4 }).map((_, i) => (
+                  <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
+                    <td colSpan={9} className="px-4 py-3">
+                      <div className="h-5 skeleton-shimmer rounded" />
+                    </td>
+                  </tr>
+                ))
+              : rows.length === 0
+              ? (
+                <tr>
+                  <td colSpan={9} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
+                    No repositories have quality reports enabled.
+                  </td>
+                </tr>
+              )
+              : rows.map((row, i) => (
+                  <tr
+                    key={`${row.repo.workspace}/${row.repo.repoSlug}`}
+                    className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
+                      i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
+                    }`}
+                    onClick={() => setSelected(row)}
+                  >
+                    <td className="px-4 py-3 font-medium">{row.repo.workspace}</td>
+                    <td className="px-4 py-3">{row.repo.repoSlug}</td>
+                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                      {row.repo.archetype ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                      {row.repo.archetypeVersion ?? '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ScoreBadge score={row.report?.score} />
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.report?.linter?.errorCount ?? '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      {row.report?.complexity?.avgComplexity?.toFixed(1) ?? '—'}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                      {row.report ? new Date(row.report.measuredAt).toLocaleString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">
+                      View
+                    </td>
+                  </tr>
+                ))}
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <ReportDialog
+          row={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </main>
+  )
+}
+
+function ScoreBadge({ score }: { score?: number }) {
+  if (score === undefined) return <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+  const pct = score * 100
+  const color =
+    score >= 0.8
+      ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+      : score >= 0.5
+      ? 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'
+      : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-[var(--border-radius-tag)] ${color}`}>
+      {pct.toFixed(0)}%
+    </span>
+  )
 }
 
 function ScoreGauge({ score }: { score?: number }) {
   const pct = score ?? 0
   const color =
-    pct >= 80
+    pct >= 0.8
       ? 'var(--color-status-border-success)'
-      : pct >= 50
+      : pct >= 0.5
       ? 'var(--color-status-border-attention)'
       : 'var(--color-status-border-critical)'
-
   return (
     <div className="flex flex-col items-center justify-center p-6">
       <svg width="120" height="120" viewBox="0 0 120 120">
@@ -48,57 +194,68 @@ function ScoreGauge({ score }: { score?: number }) {
           fill="none"
           stroke={color}
           strokeWidth="10"
-          strokeDasharray={`${(pct / 100) * 314} 314`}
+          strokeDasharray={`${pct * 314} 314`}
           strokeLinecap="round"
           transform="rotate(-90 60 60)"
         />
-        <text x="60" y="65" textAnchor="middle" fontSize="22" fontWeight="bold" fill={color}>
-          {pct.toFixed(0)}
+        <text x="60" y="60" textAnchor="middle" fontSize="20" fontWeight="bold" fill={color}>
+          {(pct * 100).toFixed(0)}%
+        </text>
+        <text x="60" y="78" textAnchor="middle" fontSize="10" fill="var(--color-fonts-font-color-support)">
+          score
         </text>
       </svg>
-      <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-2">Overall Score</p>
     </div>
   )
 }
 
-export default function QualityReportsPage() {
-  const [workspace, setWorkspace] = useState('')
-  const [repoSlug, setRepoSlug] = useState('')
-  const [branch, setBranch] = useState('main')
+function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="bg-[var(--color-cards-small-section-background)] rounded-[var(--border-radius-small)] p-3">
+      <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-1">{label}</p>
+      <p className="text-lg font-bold text-[var(--color-fonts-font-color-headings)]">{value}</p>
+    </div>
+  )
+}
 
-  const { data: repos } = useQuery<RepoSettings[]>({
-    queryKey: ['repos'],
-    queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
-  })
-
-  const canFetch = workspace && repoSlug && branch
-
-  const { data: report, isLoading: reportLoading } = useQuery<QualityReport>({
-    queryKey: ['quality-report', workspace, repoSlug, branch],
-    queryFn: () =>
-      api.get(`/metrics/quality-reports/${workspace}/${repoSlug}/${branch}`).then((r) => r.data),
-    enabled: !!canFetch,
-  })
+function ReportDialog({ row, onClose }: { row: RowData; onClose: () => void }) {
+  const navigate = useNavigate()
+  const { repo, report } = row
 
   const { data: history } = useQuery<QualityReport[]>({
-    queryKey: ['quality-history', workspace, repoSlug, branch],
+    queryKey: ['quality-history', repo.workspace, repo.repoSlug, 'main'],
     queryFn: () =>
       api
-        .get(`/metrics/quality-reports/${workspace}/${repoSlug}/${branch}/history`)
+        .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main/history`)
         .then((r) => r.data)
         .catch(() => []),
-    enabled: !!canFetch,
   })
 
-  const repoList = Array.isArray(repos) ? repos : []
-  const historyList = Array.isArray(history) ? history : []
+  const qualityJobMutation = useMutation({
+    mutationFn: () => {
+      const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+      const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
+      return api
+        .post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`, { repoUrl })
+        .then((r) => r.data as { jobId: string })
+    },
+    onSuccess: (data) => {
+      if (data?.jobId) {
+        navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+      }
+    },
+  })
+
+  const historyList = [...(Array.isArray(history) ? history : [])].sort(
+    (a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime(),
+  )
 
   const chartData = {
-    labels: historyList.map((r) => new Date(r.measuredAt).toLocaleDateString()),
+    labels: historyList.map((r) => new Date(r.measuredAt).toLocaleString()),
     datasets: [
       {
-        label: 'Score',
-        data: historyList.map((r) => r.score ?? 0),
+        label: 'Score %',
+        data: historyList.map((r) => +((r.score ?? 0) * 100).toFixed(1)),
         borderColor: '#00B4FF',
         backgroundColor: 'rgba(0,180,255,0.08)',
         fill: true,
@@ -116,97 +273,111 @@ export default function QualityReportsPage() {
   }
 
   return (
-    <main>
-      <PageHeader
-        title="Quality Reports"
-        subtitle="Track code quality metrics over time."
-      />
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3 mb-6">
-        <select
-          value={`${workspace}/${repoSlug}`}
-          onChange={(e) => {
-            const [ws, rs] = e.target.value.split('/')
-            setWorkspace(ws ?? '')
-            setRepoSlug(rs ?? '')
-          }}
-          className="px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none"
-        >
-          <option value="/">Select repository…</option>
-          {repoList.map((r) => (
-            <option key={`${r.workspace}/${r.repoSlug}`} value={`${r.workspace}/${r.repoSlug}`}>
-              {r.workspace} / {r.repoSlug}
-            </option>
-          ))}
-        </select>
-
-        <input
-          type="text"
-          value={branch}
-          onChange={(e) => setBranch(e.target.value)}
-          placeholder="Branch"
-          className="w-40 px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none"
-        />
-      </div>
-
-      {!canFetch && (
-        <div className="text-center py-10 text-[var(--color-fonts-font-color-support)]">
-          Select a repository and branch to view quality reports.
-        </div>
-      )}
-
-      {canFetch && reportLoading && (
-        <div className="space-y-4">
-          {[1, 2].map((i) => (
-            <div key={i} className="h-40 skeleton-shimmer rounded-[var(--border-radius-card)]" />
-          ))}
-        </div>
-      )}
-
-      {canFetch && !reportLoading && report && (
-        <div className="space-y-5">
-          {/* Latest report */}
-          <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] overflow-hidden">
-            <div className="px-5 py-3 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
-              <h3>Latest Report — {new Date(report.measuredAt).toLocaleString()}</h3>
-            </div>
-            <div className="flex flex-wrap">
-              <ScoreGauge score={report.score} />
-              <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-3 gap-4 p-5">
-                <MetricCard label="Line Coverage" value={`${(report.coverage?.lineCoverage ?? 0).toFixed(1)}%`} />
-                <MetricCard label="Linter Errors" value={report.linter?.errorCount ?? '—'} />
-                <MetricCard label="Linter Warnings" value={report.linter?.warningCount ?? '—'} />
-                <MetricCard label="Security Issues" value={report.aikido?.issueCount ?? '—'} />
-                <MetricCard label="Critical Issues" value={report.aikido?.criticalCount ?? '—'} />
-                <MetricCard
-                  label="Avg Complexity"
-                  value={report.complexity?.avgCyclomaticComplexity?.toFixed(1) ?? '—'}
-                />
-              </div>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_8px_32px_rgba(0,0,0,0.24)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-small-section-background)]">
+          <div>
+            <h3 className="font-semibold">
+              {repo.workspace} / {repo.repoSlug}
+            </h3>
+            <div className="flex items-center gap-3 mt-1">
+              {repo.archetype && (
+                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                  Archetype: <span className="font-medium text-[var(--color-fonts-font-color-primary)]">{repo.archetype}</span>
+                </span>
+              )}
+              {repo.archetypeVersion && (
+                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                  Version: <span className="font-medium text-[var(--color-fonts-font-color-primary)]">{repo.archetypeVersion}</span>
+                </span>
+              )}
+              {report && (
+                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                  {new Date(report.measuredAt).toLocaleString()}
+                </span>
+              )}
             </div>
           </div>
-
-          {/* History chart */}
-          {historyList.length > 1 && (
-            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-              <h3 className="mb-4">Trend</h3>
-              <div style={{ height: 260 }}>
-                <Line data={chartData} options={CHART_OPTIONS} />
-              </div>
-            </div>
-          )}
+          <button
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-icons-icon)] transition-colors"
+          >
+            <X size={16} />
+          </button>
         </div>
-      )}
-    </main>
-  )
-}
 
-function MetricCard({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="bg-[var(--color-cards-small-section-background)] rounded-[var(--border-radius-small)] p-3">
-      <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-1">{label}</p>
-      <p className="text-lg font-bold text-[var(--color-fonts-font-color-headings)]">{value}</p>
+        {/* Body */}
+        <div className="p-5 space-y-5">
+          {report ? (
+            <>
+              {/* Score + metrics */}
+              <div className="flex flex-wrap">
+                <ScoreGauge score={report.score} />
+                <div className="flex-1 min-w-0 grid grid-cols-2 gap-3 py-4 pr-2">
+                  <MetricCard label="Line Coverage" value={`${(report.coverage?.lineCoverage ?? 0).toFixed(1)}%`} />
+                  <MetricCard label="Linter Errors" value={report.linter?.errorCount ?? '—'} />
+                  <MetricCard label="Linter Warnings" value={report.linter?.warningCount ?? '—'} />
+                  <MetricCard label="Security Issues" value={report.aikido?.issueCount ?? '—'} />
+                  <MetricCard label="Critical Issues" value={report.aikido?.criticalCount ?? '—'} />
+                  <MetricCard label="Avg Complexity" value={report.complexity?.avgComplexity?.toFixed(1) ?? '—'} />
+                  <MetricCard label="Max Complexity" value={report.complexity?.maxComplexity ?? '—'} />
+                  <MetricCard
+                    label="Methods Above Threshold"
+                    value={
+                      report.complexity?.methodsAboveThreshold !== undefined
+                        ? `${report.complexity.methodsAboveThreshold} / ${report.complexity.totalMethods ?? '?'}`
+                        : '—'
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Trend chart */}
+              {historyList.length > 1 && (
+                <div>
+                  <h4 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">Trend</h4>
+                  <div style={{ height: 220 }}>
+                    <Line data={chartData} options={CHART_OPTIONS} />
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="py-6 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+              No report available yet. Run a quality report to get started.
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex justify-end pt-2 border-t border-[var(--color-cards-card-stroke)]">
+            {qualityJobMutation.isError && (
+              <p className="mr-auto text-xs text-[var(--color-status-border-critical)]">
+                Failed to start job. Please try again.
+              </p>
+            )}
+            <button
+              onClick={() => qualityJobMutation.mutate()}
+              disabled={qualityJobMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {qualityJobMutation.isPending ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <BarChart2 size={15} />
+              )}
+              {qualityJobMutation.isPending ? 'Starting…' : 'Run Quality Report'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

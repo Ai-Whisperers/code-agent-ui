@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Plus, Save, X } from 'lucide-react'
+import { Save, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { RepoSettings } from '@/types/api'
@@ -8,6 +8,7 @@ import type { RepoSettings } from '@/types/api'
 export default function RepoSettingsPage() {
   const qc = useQueryClient()
   const [editRepo, setEditRepo] = useState<RepoSettings | null>(null)
+  const [showArchived, setShowArchived] = useState(false)
 
   const { data: repos, isLoading } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -23,7 +24,8 @@ export default function RepoSettingsPage() {
     },
   })
 
-  const list = Array.isArray(repos) ? repos : []
+  const all = Array.isArray(repos) ? repos : []
+  const list = showArchived ? all : all.filter((r) => !r.archived)
 
   return (
     <main>
@@ -31,40 +33,49 @@ export default function RepoSettingsPage() {
         title="Repository Settings"
         subtitle="Manage per-repository configuration."
         actions={
-          <button
-            onClick={() =>
-              setEditRepo({
-                workspace: '',
-                repoSlug: '',
-                reviewEnabled: false,
-                vectorEnabled: false,
-                docsEnabled: false,
-                upgradeEnabled: false,
-                qualityReportEnabled: false,
-              })
-            }
-            className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
-          >
-            <Plus size={15} />
-            Add Repository
-          </button>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                className={`relative w-10 h-5 rounded-full transition-colors ${
+                  showArchived ? 'bg-[var(--color-buttons-button-primary)]' : 'bg-[var(--color-inputs-input-border)]'
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                    showArchived ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+              <span className="text-sm text-[var(--color-fonts-font-color-support)]">Show archived</span>
+            </label>
+          </div>
         }
       />
 
       {editRepo && (
-        <RepoEditor
-          repo={editRepo}
-          onSave={(r) => saveMutation.mutate(r)}
-          onCancel={() => setEditRepo(null)}
-          isSaving={saveMutation.isPending}
-        />
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setEditRepo(null)}
+        >
+          <div onClick={(e) => e.stopPropagation()}>
+            <RepoEditor
+              repo={editRepo}
+              onSave={(r) => saveMutation.mutate(r)}
+              onCancel={() => setEditRepo(null)}
+              isSaving={saveMutation.isPending}
+            />
+          </div>
+        </div>
       )}
 
       <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
-              {['Workspace', 'Repo', 'Review', 'Vectors', 'Docs', 'Upgrade', 'Quality', ''].map((h) => (
+              {['Workspace', 'Repo', 'Review', 'Vectors', 'Docs', 'Upgrade', 'Quality', 'Archived', ''].map((h) => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
@@ -78,7 +89,7 @@ export default function RepoSettingsPage() {
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={8} className="px-4 py-3">
+                    <td colSpan={9} className="px-4 py-3">
                       <div className="h-5 skeleton-shimmer rounded" />
                     </td>
                   </tr>
@@ -86,7 +97,7 @@ export default function RepoSettingsPage() {
               : list.length === 0
               ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
+                  <td colSpan={9} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
                     No repositories configured yet.
                   </td>
                 </tr>
@@ -95,7 +106,7 @@ export default function RepoSettingsPage() {
                   <tr
                     key={`${repo.workspace}/${repo.repoSlug}`}
                     className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-                      i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
+                      repo.archived ? 'opacity-50' : i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
                     }`}
                     onClick={() => setEditRepo(repo)}
                   >
@@ -108,6 +119,9 @@ export default function RepoSettingsPage() {
                         </td>
                       ),
                     )}
+                    <td className="px-4 py-3">
+                      <ToggleBadge value={!!repo.archived} />
+                    </td>
                     <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">Edit</td>
                   </tr>
                 ))}
@@ -152,8 +166,8 @@ function Toggle({
         }`}
       >
         <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
-            value ? 'translate-x-5' : 'translate-x-0.5'
+          className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+            value ? 'translate-x-5' : 'translate-x-0'
           }`}
         />
       </button>
@@ -179,7 +193,7 @@ function RepoEditor({
     setForm((p) => ({ ...p, [name]: value }))
 
   return (
-    <div className="mb-6 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+    <div className="relative w-full max-w-lg bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
       <div className="flex items-center justify-between mb-4">
         <h3>
           {form.workspace && form.repoSlug
@@ -225,6 +239,7 @@ function RepoEditor({
             ['docsEnabled', 'Documentation'],
             ['upgradeEnabled', 'Dependency Upgrades'],
             ['qualityReportEnabled', 'Quality Reports'],
+            ['archived', 'Archived'],
           ] as const
         ).map(([name, label]) => (
           <Toggle key={name} label={label} value={form[name] as boolean} onChange={toggle(name)} />

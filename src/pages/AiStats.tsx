@@ -15,6 +15,16 @@ import type { AiCallSummary, AiCallDailyStat, AiCallRecord } from '@/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 
+// Pricing per million tokens (USD). Matches Anthropic's published rates.
+const MODEL_PRICING: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {
+  default: { input: 3.0, output: 15.0, cacheWrite: 3.75, cacheRead: 0.30 },
+}
+
+function calcCost(model: string, input: number, output: number, cacheWrite: number, cacheRead: number): number {
+  const p = MODEL_PRICING[model] ?? MODEL_PRICING.default
+  return (input * p.input + output * p.output + cacheWrite * p.cacheWrite + cacheRead * p.cacheRead) / 1_000_000
+}
+
 const BAR_OPTIONS = {
   responsive: true,
   maintainAspectRatio: false,
@@ -25,20 +35,100 @@ const BAR_OPTIONS = {
   },
 }
 
+type RawSummaryItem = {
+  callCount: number
+  estimatedCostUsd: number
+  uniqueJobs: number
+  totalInputTokens: number
+  totalOutputTokens: number
+}
+
+type RawDailyStat = {
+  day: string
+  callCount: number
+  estimatedCostUsd: number
+  totalInputTokens: number
+  totalOutputTokens: number
+}
+
+type RawCallRecord = {
+  id: number
+  jobId: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheCreationInputTokens: number
+  cacheReadInputTokens: number
+  createdAt: string
+}
+
 export default function AiStatsPage() {
   const { data: summary } = useQuery<AiCallSummary>({
     queryKey: ['ai-calls-summary'],
-    queryFn: () => api.get('/stats/ai-calls/summary').then((r) => r.data),
+    queryFn: () =>
+      api.get('/stats/ai-calls/summary').then((r) => {
+        const items: RawSummaryItem[] = Array.isArray(r.data) ? r.data : []
+        const totalCalls = items.reduce((s, i) => s + i.callCount, 0)
+        const totalCostUsd = items.reduce((s, i) => s + i.estimatedCostUsd, 0)
+        const totalInputTokens = items.reduce((s, i) => s + i.totalInputTokens, 0)
+        const totalOutputTokens = items.reduce((s, i) => s + i.totalOutputTokens, 0)
+        const totalUniqueJobs = items.reduce((s, i) => s + i.uniqueJobs, 0)
+        return {
+          totalCalls,
+          totalCostUsd,
+          totalInputTokens,
+          totalOutputTokens,
+          avgCostPerJob: totalUniqueJobs > 0 ? totalCostUsd / totalUniqueJobs : null,
+        } satisfies AiCallSummary
+      }),
   })
 
   const { data: daily } = useQuery<AiCallDailyStat[]>({
     queryKey: ['ai-calls-daily'],
-    queryFn: () => api.get('/stats/ai-calls/daily').then((r) => r.data).catch(() => []),
+    queryFn: () =>
+      api
+        .get('/stats/ai-calls/daily')
+        .then((r) =>
+          (r.data as RawDailyStat[]).map((d) => ({
+            date: d.day,
+            calls: d.callCount,
+            inputTokens: d.totalInputTokens,
+            outputTokens: d.totalOutputTokens,
+            costUsd: d.estimatedCostUsd,
+          })),
+        )
+        .catch(() => []),
   })
 
   const { data: records } = useQuery<{ items: AiCallRecord[]; total: number }>({
     queryKey: ['ai-calls-records'],
-    queryFn: () => api.get('/stats/ai-calls?page=0&size=20').then((r) => r.data).catch(() => ({ items: [], total: 0 })),
+    queryFn: () =>
+      api
+        .get('/stats/ai-calls?page=0&size=20')
+        .then((r) => {
+          const raw: RawCallRecord[] = Array.isArray(r.data) ? r.data : (r.data?.items ?? [])
+          return {
+            items: raw.map((rec) => {
+              const input = rec.inputTokens ?? 0
+              const output = rec.outputTokens ?? 0
+              const cacheWrite = rec.cacheCreationInputTokens ?? 0
+              const cacheRead = rec.cacheReadInputTokens ?? 0
+              return {
+                id: String(rec.id),
+                jobId: rec.jobId,
+                model: rec.model,
+                inputTokens: input,
+                outputTokens: output,
+                cacheReadTokens: cacheRead,
+                cacheWriteTokens: cacheWrite,
+                costUsd: calcCost(rec.model, input, output, cacheWrite, cacheRead),
+                calledAt: rec.createdAt,
+              }
+            }),
+            total: raw.length,
+          }
+        })
+        .catch(() => ({ items: [], total: 0 })),
   })
 
   const dailyList = Array.isArray(daily) ? daily : []
@@ -79,9 +169,9 @@ export default function AiStatsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         {[
           ['Total Calls', summary?.totalCalls ?? '—'],
-          ['Total Cost', summary ? `$${summary.totalCostUsd.toFixed(2)}` : '—'],
-          ['Avg Cost / Job', summary ? `$${summary.avgCostPerJob.toFixed(3)}` : '—'],
-          ['Input Tokens', summary ? summary.totalInputTokens.toLocaleString() : '—'],
+          ['Total Cost', summary?.totalCostUsd != null ? `$${summary.totalCostUsd.toFixed(2)}` : '—'],
+          ['Avg Cost / Job', summary?.avgCostPerJob != null ? `$${summary.avgCostPerJob.toFixed(3)}` : '—'],
+          ['Input Tokens', summary?.totalInputTokens != null ? summary.totalInputTokens.toLocaleString() : '—'],
         ].map(([label, value]) => (
           <div
             key={String(label)}

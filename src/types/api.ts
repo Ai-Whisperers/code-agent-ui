@@ -80,6 +80,7 @@ export interface RepoSettings {
   confluenceParentPageId?: string
   archetype?: string
   archetypeVersion?: string
+  archived?: boolean
 }
 
 // ---- Automation Hooks ----
@@ -160,7 +161,13 @@ export interface QualityReport {
   coverage?: CoverageSection
   linter?: LinterSection
   aikido?: { issueCount?: number; criticalCount?: number }
-  complexity?: { avgCyclomaticComplexity?: number; highComplexityMethodCount?: number }
+  complexity?: {
+    avgComplexity?: number
+    maxComplexity?: number
+    totalMethods?: number
+    methodsAboveThreshold?: number
+    threshold?: number
+  }
   reviewQuality?: { avgScore?: number; totalReviews?: number }
 }
 

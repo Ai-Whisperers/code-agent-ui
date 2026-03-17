@@ -1,13 +1,13 @@
 body {
   background: var(--color-page-background);
-  color: var(--text-color);
+  color: var(--color-fonts-font-color-primary);
   line-height: 24px;
   font-family: 'Manrope', sans-serif;
   font-size: 14px;
 }
 
 .application-menu-text {
-  color: var(--fonts-font_color_primary, #004766);
+  color: var(--color-fonts-font-color-primary, #004766);
   font-family: Lato;
   font-size: 16px;
   font-weight: 400;
@@ -40,7 +40,7 @@ h1 {
   @apply font-bold leading-[100%];
   font-family: 'Bricolage Grotesque';
   font-size: 18px;
-  color: var(--fonts-font_color_headings, #002433);
+  color: var(--color-fonts-font-color-headings, #002433);
 }
 
 h2 {

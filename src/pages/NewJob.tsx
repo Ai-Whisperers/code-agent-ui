@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Send } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { JobType } from '@/types/api'
@@ -101,20 +101,23 @@ export default function NewJob() {
             <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
               Job Type
             </label>
-            <select
-              value={jobType}
-              onChange={(e) => {
-                setJobType(e.target.value)
-                setFormData({})
-              }}
-              className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-            >
-              {SUPPORTED_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                value={jobType}
+                onChange={(e) => {
+                  setJobType(e.target.value)
+                  setFormData({})
+                }}
+                className="w-full appearance-none pl-3 pr-8 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+              >
+                {SUPPORTED_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-icons-icon)]" />
+            </div>
           </div>
 
           {/* Dynamic fields */}
