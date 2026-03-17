@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: code_agent
+      POSTGRES_USER: code_agent
+      POSTGRES_PASSWORD: code_agent
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U code_agent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  code-agent-ui:
+    build:
+      context: .
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8080}
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8180}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-code-agent}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-code-agent-ui}
+    ports:
+      - "3000:80"
+    profiles:
+      - ui
+
+volumes:
+  postgres_data:

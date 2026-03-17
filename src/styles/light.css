@@ -1,0 +1,327 @@
+:root {
+          /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     PADDINGS - Light Mode
+     ============================================ */
+  --paddings-left-right: 16px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     GAPS - Light Mode
+     ============================================ */
+  --gaps-vertical-between-inputs: 16px;
+  --gaps-text-chevron: 24px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BORDER RADIUS - Light Mode
+     ============================================ */
+  --radius-border-radius-button: 22px;
+  --radius-border-radius-button-small: 16px;
+  --radius-border-radius-tag: 2px;
+  --radius-border-radius-card: 8px;
+  --radius-border-radius-small: 4px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     COLOR DEFINITIONS - Light Mode
+     ============================================ */
+  --colors-color-definitions-primary-primary-950: #002433;
+  --colors-color-definitions-primary-primary-900: #004766;
+  --colors-color-definitions-primary-primary-800: #006B99;
+  --colors-color-definitions-primary-primary-700: #008FCC;
+  --colors-color-definitions-primary-primary-600: #00A1E6;
+  --colors-color-definitions-primary-primary-500: #00B4FF;
+  --colors-color-definitions-primary-primary-400: #33C2FF;
+  --colors-color-definitions-primary-primary-300: #66D1FF;
+  --colors-color-definitions-primary-primary-200: #99E0FF;
+  --colors-color-definitions-primary-primary-150: #CCF0FF;
+  --colors-color-definitions-primary-primary-100: #E5F7FF;
+  --colors-color-definitions-primary-primary-50: #F7FCFF;
+  --colors-color-definitions-secondary-secondary-800: #9B005D;
+  --colors-color-definitions-secondary-secondary-600: #E9008C;
+  --colors-color-definitions-secondary-secondary-700: #FF37AF;
+  --colors-color-definitions-secondary-secondary-500: #FF85CE;
+  --colors-color-definitions-secondary-secondary-400: #FF9DD8;
+  --colors-color-definitions-secondary-secondary-300: #FFB6E2;
+  --colors-color-definitions-secondary-secondary-200: #FFCEEB;
+  --colors-color-definitions-secondary-secondary-100: #FFE7F5;
+  --colors-color-definitions-secondary-secondary-50: #FFF3FA;
+  --colors-color-definitions-status-error-100: #FFEEEE;
+  --colors-color-definitions-status-error-500: #FF575A;
+  --colors-color-definitions-status-error-600: #FF1216;
+  --colors-color-definitions-status-error-700: #CD0003;
+  --colors-color-definitions-status-error-800: #890002;
+  --colors-color-definitions-status-warning-100: #FFF8EF;
+  --colors-color-definitions-status-warning-500: #FFBD60;
+  --colors-color-definitions-status-warning-600: #FFA01B;
+  --colors-color-definitions-status-warning-700: #D37B00;
+  --colors-color-definitions-status-warning-800: #8D5200;
+  --colors-color-definitions-status-succes-200: #E6FDF4;
+  --colors-color-definitions-status-succes-500: #16DB93;
+  --colors-color-definitions-status-succes-600: #11AF75;
+  --colors-color-definitions-status-succes-700: #0D8358;
+  --colors-color-definitions-status-succes-800: #09573A;
+  --colors-color-definitions-neutrals-neutral-0: #FFFFFF;
+  --colors-color-definitions-neutrals-neutral-100: #FAFAFA;
+  --colors-color-definitions-neutrals-neutral-150: #EBEBEB;
+  --colors-color-definitions-neutrals-neutral-200: #E5E5E5;
+  --colors-color-definitions-neutrals-neutral-500: #CCCCCC;
+  --colors-color-definitions-neutrals-neutral-600: #B8B8B8;
+  --colors-color-definitions-neutrals-neutral-700: #8F8F8F;
+  --colors-color-definitions-neutrals-neutral-800: #525252;
+  --colors-color-definitions-neutrals-neutral-900: #141414;
+  --colors-color-definitions-status-info-150: #CCF0FF;
+  --colors-color-definitions-status-info-500: #00B4FF;
+  --colors-color-definitions-status-info-950: #002433;
+  --colors-color-definitions-support-support-100: #FEFDFC;
+  --colors-color-definitions-support-support-200: #FBFBFB;
+  --colors-color-definitions-support-support-300: #F9F9F8;
+  --colors-color-definitions-support-support-500: #F6F5F4;
+  --colors-color-definitions-support-support-550: #EFECE9;
+  --colors-color-definitions-support-support-600: #E8E4E1;
+  --colors-color-definitions-support-support-650: #E0DCD9;
+  --colors-color-definitions-support-support-700: #CAC4BE;
+  --colors-color-definitions-support-support-750: #B4ABA3;
+  --colors-color-definitions-support-support-800: #6C6258;
+  --colors-color-definitions-charts-charts-blues-chart-blue-100: #E5F7FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-200: #99E0FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-300: #4DC9FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-500: #00B4FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-600: #007DB3;
+  --colors-color-definitions-charts-charts-blues-chart-blue-800: #004766;
+  --colors-color-definitions-charts-charts-blues-chart-blue-900: #002433;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-100: #FFF3FA;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-200: #FFCEEB;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-300: #FFA9DD;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-500: #FF85CE;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-600: #FF10A0;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-800: #9B005D;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-900: #4E002F;
+  --colors-color-definitions-charts-charts-purples-purple-100: #F4EEFF;
+  --colors-color-definitions-charts-charts-purples-purple-200: #D4BAFF;
+  --colors-color-definitions-charts-charts-purples-purple-300: #B486FF;
+  --colors-color-definitions-charts-charts-purples-purple-500: #9452FF;
+  --colors-color-definitions-charts-charts-purples-purple-600: #5A00EC;
+  --colors-color-definitions-charts-charts-purples-purple-800: #340087;
+  --colors-color-definitions-charts-charts-purples-purple-900: #1A0043;
+  --colors-color-definitions-charts-charts-reds-reds-100: #FFEEEE;
+  --colors-color-definitions-charts-charts-reds-reds-200: #FFBCBD;
+  --colors-color-definitions-charts-charts-reds-reds-300: #FF898B;
+  --colors-color-definitions-charts-charts-reds-reds-500: #FF575A;
+  --colors-color-definitions-charts-charts-reds-reds-600: #EF0004;
+  --colors-color-definitions-charts-charts-reds-reds-800: #890002;
+  --colors-color-definitions-charts-charts-reds-reds-900: #440001;
+  --colors-color-definitions-charts-charts-oranges-orange-100: #FFF8EF;
+  --colors-color-definitions-charts-charts-oranges-orange-200: #FFE5C0;
+  --colors-color-definitions-charts-charts-oranges-orange-300: #FFD190;
+  --colors-color-definitions-charts-charts-oranges-orange-500: #FFBD60;
+  --colors-color-definitions-charts-charts-oranges-orange-600: #F69000;
+  --colors-color-definitions-charts-charts-oranges-orange-800: #8D5200;
+  --colors-color-definitions-charts-charts-oranges-orange-900: #462900;
+  --colors-color-definitions-charts-charts-greens-green-100: #E6FDF4;
+  --colors-color-definitions-charts-charts-greens-green-200: #9DF5D5;
+  --colors-color-definitions-charts-charts-greens-green-300: #53EEB5;
+  --colors-color-definitions-charts-charts-greens-green-500: #16DB93;
+  --colors-color-definitions-charts-charts-greens-green-600: #0F9966;
+  --colors-color-definitions-charts-charts-greens-green-800: #09573A;
+  --colors-color-definitions-charts-charts-greens-green-900: #042C1D;
+  --colors-color-definitions-charts-charts-greys-grey-100: #FAFAFA;
+  --colors-color-definitions-charts-charts-greys-grey-150: #EBEBEB;
+  --colors-color-definitions-charts-charts-greys-grey-400: #DBDBDB;
+  --colors-color-definitions-charts-charts-greys-grey-500: #CCCCCC;
+  --colors-color-definitions-charts-charts-greys-grey-700: #8F8F8F;
+  --colors-color-definitions-charts-charts-greys-grey-800: #525252;
+  --colors-color-definitions-charts-charts-greys-grey-850: #292929;
+  --colors-color-definitions-shadows-strokes-overlay: rgba(128, 128, 128, 0.8500000238418579);
+  --colors-color-definitions-shadows-strokes-transparant: rgba(255, 255, 255, 0);
+  --colors-color-definitions-shadows-strokes-ghost-hover: rgba(0, 36, 51, 0.05000000074505806);
+  --colors-color-definitions-shadows-strokes-ghost-active: rgba(0, 36, 51, 0.10000000149011612);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BASE COLORS - Light Mode
+     ============================================ */
+  --colors-page-page-background: #F9F9F8;
+  --colors-page-page-transparent-overlay: rgba(128, 128, 128, 0.8500000238418579);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     FONT COLORS - Light Mode
+     ============================================ */
+  --colors-fonts-font-color-headings: #002433;
+  --colors-fonts-font-color-primary: #141414;
+  --colors-fonts-font-color-inverse: #FFFFFF;
+  --colors-fonts-font-color-support: #525252;
+  --colors-fonts-font-color-support-always-grey: #525252;
+  --colors-fonts-font-color-disabled: #8F8F8F;
+  --colors-fonts-always-dark: #004766;
+  --colors-fonts-always-light: #FFFFFF;
+  --colors-fonts-font-color-buttons: #004766;
+  --colors-fonts-font-color-brand: #00B4FF;
+  --colors-fonts-font-tab-active: #006B99;
+  --colors-fonts-font-tab-inactive: #008FCC;
+  --colors-fonts-font-color-button-disabled: #B8B8B8;
+  --colors-fonts-font-color-input-label: #004766;
+  --colors-fonts-font-color-user-input: #141414;
+  --colors-fonts-font-color-input-placeholder: #8F8F8F;
+  --colors-icons-icon-always-dark: #004766;
+  --colors-icons-icon-always-light: #FFFFFF;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     CARD COLORS - Light Mode
+     ============================================ */
+  --colors-cards-card-background: #FFFFFF;
+  --colors-cards-card-background-hover: #F6F5F4;
+  --colors-cards-card-stroke: rgba(0, 71, 102, 0.03999999910593033);
+  --colors-cards-card-drop-shadow: rgba(0, 71, 102, 0.009999999776482582);
+  --colors-cards-card-marketing-background: #FFE7F5;
+  --colors-cards-card-marketing-stroke: #FFE7F5;
+  --colors-cards-date-background: #E5F7FF;
+  --colors-cards-date-today-background: #E5F7FF;
+  --colors-cards-date-background-past: #FAFAFA;
+  --colors-cards-small-section-background: #F6F5F4;
+  --colors-cards-cards-divider: #CCCCCC;
+  --colors-color-definitions-shadows-strokes-card-shadow: rgba(0, 71, 102, 0.009999999776482582);
+  --colors-color-definitions-shadows-strokes-card-stroke: rgba(0, 71, 102, 0.03999999910593033);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     NAVIGATION COLORS - Light Mode
+     ============================================ */
+  --colors-navigation-menu-transparent-overlay: #F9F9F8;
+  --colors-navigation-menu-card: #EFECE9;
+  --colors-navigation-menu-border: #B4ABA3;
+  --colors-navigation-menu-item-active: #E0DCD9;
+  --colors-navigation-menu-item-hover-background: #E0DCD9;
+  --colors-navigation-menu-item-hover-font: #004766;
+  --colors-navigation-menu-mobile-underline: #66D1FF;
+  --colors-navigation-tabs-underlining: #E8E4E1;
+  --colors-navigation-tabs-hover-underlining: #008FCC;
+  --colors-navigation-tabs-active-tab: #006B99;
+  --colors-navigation-user-avatar-background: #004766;
+  --colors-navigation-menu-background: #E5F7FF;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BUTTON COLORS - Light Mode
+     ============================================ */
+  --colors-buttons-button-primary: #00B4FF;
+  --colors-buttons-button-primary-hover: #33C2FF;
+  --colors-buttons-button-primary-active: #00A1E6;
+  --colors-buttons-button-disabled: #E5E5E5;
+  --colors-buttons-button-secondary: #004766;
+  --colors-buttons-button-secondary-hover: #00A1E6;
+  --colors-buttons-button-secondary-active: #002433;
+  --colors-buttons-button-ghost: rgba(255, 255, 255, 0);
+  --colors-buttons-button-ghost-hover: rgba(0, 36, 51, 0.05000000074505806);
+  --colors-buttons-button-ghost-active: rgba(0, 36, 51, 0.10000000149011612);
+  --colors-buttons-button-ghost-stroke: #004766;
+  --colors-buttons-button-back: #EFECE9;
+  --colors-buttons-button-back-hover: #E8E4E1;
+  --colors-buttons-button-back-active: #E8E4E1;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     INPUT FIELD COLORS - Light Mode
+     ============================================ */
+  --colors-inputs-input-background: #FFFFFF;
+  --colors-inputs-input-disabled: #FAFAFA;
+  --colors-inputs-input-border: #E5E5E5;
+  --colors-inputs-checkbox-border: #004766;
+  --colors-inputs-checkbox-background: #FFFFFF;
+  --colors-inputs-checkbox-fill: #008FCC;
+  --colors-inputs-search-field-border: #FFCEEB;
+  --colors-inputs-search-field-background: #FFB6E2;
+  --colors-inputs-search-icon: #9B005D;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     STATUS COLORS - Light Mode
+     ============================================ */
+  --colors-status-border-critical: #FF575A;
+  --colors-status-border-attention: #FFBD60;
+  --colors-status-border-success: #16DB93;
+  --colors-status-border-neutral: #00B4FF;
+  --colors-status-critical-background: #FFEEEE;
+  --colors-status-attention-background: #FFF8EF;
+  --colors-status-success-background: #E6FDF4;
+  --colors-status-neutral-background: #E5F7FF;
+  --colors-status-neutral-background2: #F7FCFF;
+  --colors-status-neutral-background3: #B4ABA3;
+  --colors-tags-neutral-background: #F6F5F4;
+  --colors-tags-success-background: #E6FDF4;
+  --colors-tags-attention-background: #FFF8EF;
+  --colors-tags-critical-background: #FFEEEE;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     TAG COLORS - Light Mode
+     ============================================ */
+  --colors-tags-font-neutral: #004766;
+  --colors-tags-font-success: #09573A;
+  --colors-tags-font-attention: #8D5200;
+  --colors-tags-font-critical: #890002;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     ICON COLORS - Light Mode
+     ============================================ */
+  --colors-icons-icon: #004766;
+  --colors-icons-icon-hamburger-menu: #00A1E6;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     TABLE COLORS - Light Mode
+     ============================================ */
+  --colors-tables-table-header: rgba(255, 255, 255, 0);
+  --colors-tables-table-hover: #F6F5F4;
+  --colors-tables-table-cell-stroke: #F6F5F4;
+  --colors-tables-table-header-stroke: #E8E4E1;
+  --colors-tables-fixed-cell-stroke: #CAC4BE;
+  --colors-tables-table-row-a: #F9F9F8;
+  --colors-tables-table-row-b: rgba(255, 255, 255, 0);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     FILTER COLORS - Light Mode
+     ============================================ */
+  --colors-filters-filter-background: #CCF0FF;
+  --colors-filters-filter-hover: #E5F7FF;
+  --colors-filters-filter-active: #99E0FF;
+  --colors-filters-segmented-control-background: #CCF0FF;
+  --colors-filters-segmented-control-active: #F7FCFF;
+  
+}

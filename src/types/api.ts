@@ -1,0 +1,216 @@
+// ---- Jobs ----
+
+export type JobStatus =
+  | 'PENDING'
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'SUCCESS'
+  | 'FAILED'
+  | 'AWAITING_APPROVAL'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED'
+
+export type JobType =
+  | 'FIX'
+  | 'REVIEW'
+  | 'FIX_PR'
+  | 'REPLY'
+  | 'FIX_COMMENT'
+  | 'HOOK'
+  | 'GENERATE_TESTS'
+  | 'GENERATE_DOCS'
+  | 'SYNC_CONFLUENCE'
+  | 'METRICS'
+  | 'QUALITY_REPORT'
+
+export interface JobStatusResponse {
+  jobId: string
+  jobType: JobType
+  status: JobStatus
+  createdAt: string
+  summary?: string
+  errorMessage?: string
+  prUrl?: string
+  prId?: string
+  filesChanged?: number
+  linesChanged?: number
+  queuePosition?: number
+}
+
+export interface RunFixRequest {
+  repoUrl: string
+  branchName?: string
+  jiraKey?: string
+  prompt?: string
+  targetBranch?: string
+  planId?: string
+}
+
+export interface ReviewPrRequest {
+  repoUrl: string
+  prId: string
+}
+
+export interface GenerateTestsRequest {
+  repoUrl: string
+  branchName?: string
+  targetFiles?: string[]
+}
+
+export interface RejectRequest {
+  reason: string
+}
+
+// ---- Repo Settings ----
+
+export interface RepoSettings {
+  id?: number
+  workspace: string
+  repoSlug: string
+  reviewEnabled: boolean
+  vectorEnabled: boolean
+  docsEnabled: boolean
+  upgradeEnabled: boolean
+  qualityReportEnabled: boolean
+  ruleNames?: string[]
+  reviewPrompt?: string
+  disabledHooks?: string[]
+  confluenceSpaceKey?: string
+  confluenceParentPageId?: string
+  archetype?: string
+  archetypeVersion?: string
+}
+
+// ---- Automation Hooks ----
+
+export interface AutomationHook {
+  name: string
+  enabled: boolean
+  description?: string
+  trigger?: string
+  prompt?: string
+}
+
+// ---- Prompt Templates ----
+
+export interface PromptTemplate {
+  key: string
+  content: string
+  isOverride: boolean
+}
+
+// ---- Execution Plans ----
+
+export type PlanStatus = 'DRAFT' | 'APPROVED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+
+export interface PlanStep {
+  stepId: string
+  order: number
+  title: string
+  description?: string
+  status: string
+}
+
+export interface PlanPhase {
+  phaseOrder: number
+  title: string
+  steps: PlanStep[]
+}
+
+export interface ExecutionPlan {
+  planId: string
+  status: PlanStatus
+  title: string
+  summary?: string
+  sourceType?: string
+  sourceRef?: string
+  repoUrl?: string
+  targetBranch?: string
+  createdAt: string
+  updatedAt?: string
+  approvedAt?: string
+  errorMessage?: string
+  planData?: {
+    phases?: PlanPhase[]
+  }
+}
+
+// ---- Quality Reports ----
+
+export interface CoverageSection {
+  lineCoverage?: number
+  branchCoverage?: number
+  methodCoverage?: number
+}
+
+export interface LinterSection {
+  errorCount?: number
+  warningCount?: number
+  infoCount?: number
+}
+
+export interface QualityReport {
+  reportId: string
+  workspace: string
+  repoSlug: string
+  branch: string
+  measuredAt: string
+  score?: number
+  coverage?: CoverageSection
+  linter?: LinterSection
+  aikido?: { issueCount?: number; criticalCount?: number }
+  complexity?: { avgCyclomaticComplexity?: number; highComplexityMethodCount?: number }
+  reviewQuality?: { avgScore?: number; totalReviews?: number }
+}
+
+// ---- AI Stats ----
+
+export interface AiCallSummary {
+  totalCalls: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCostUsd: number
+  avgCostPerJob: number
+}
+
+export interface AiCallDailyStat {
+  date: string
+  calls: number
+  inputTokens: number
+  outputTokens: number
+  costUsd: number
+}
+
+export interface AiCallRecord {
+  id: string
+  jobId: string
+  model: string
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  costUsd: number
+  calledAt: string
+}
+
+// ---- Review Metrics ----
+
+export interface ReviewMetrics {
+  workspace: string
+  repoSlug: string
+  totalReviews: number
+  avgScore: number
+  lastReviewAt?: string
+}
+
+// ---- Memory ----
+
+export interface MemoryEntry {
+  id: string
+  workspace: string
+  repoSlug: string
+  content: string
+  createdAt: string
+  active: boolean
+}

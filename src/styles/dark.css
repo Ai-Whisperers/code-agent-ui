@@ -1,0 +1,312 @@
+.dark {
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     PADDINGS - Dark Mode
+     ============================================ */
+  --paddings-left-right: 16px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     GAPS - Dark Mode
+     ============================================ */
+  --gaps-vertical-between-inputs: 16px;
+  --gaps-text-chevron: 24px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BORDER RADIUS - Dark Mode
+     ============================================ */
+  --radius-border-radius-button: 22px;
+  --radius-border-radius-button-small: 16px;
+  --radius-border-radius-tag: 8px;
+  --radius-border-radius-card: 8px;
+  --radius-border-radius-small: 4px;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     COLOR DEFINITIONS - Dark Mode
+     ============================================ */
+  --colors-color-definitions-primary-primary-950: #0B2A3A;
+  --colors-color-definitions-primary-primary-900: #0F3E56;
+  --colors-color-definitions-primary-primary-800: #145B7A;
+  --colors-color-definitions-primary-primary-700: #1C7FA8;
+  --colors-color-definitions-primary-primary-600: #239FCC;
+  --colors-color-definitions-primary-primary-500: #2CC3FF;
+  --colors-color-definitions-primary-primary-400: #5FD2FF;
+  --colors-color-definitions-primary-primary-300: #8FE1FF;
+  --colors-color-definitions-primary-primary-200: #BCEEFF;
+  --colors-color-definitions-primary-primary-150: #DCF7FF;
+  --colors-color-definitions-primary-primary-100: #EDFCFF;
+  --colors-color-definitions-primary-primary-50: #F5FCFF;
+  --colors-color-definitions-secondary-secondary-800: #4A1F3A;
+  --colors-color-definitions-secondary-secondary-600: #7A2F5E;
+  --colors-color-definitions-secondary-secondary-700: #A83F81;
+  --colors-color-definitions-secondary-secondary-500: #FF9AD8;
+  --colors-color-definitions-secondary-secondary-400: #FFB4E2;
+  --colors-color-definitions-secondary-secondary-300: #FFD2F0;
+  --colors-color-definitions-secondary-secondary-200: #FFDEF4;
+  --colors-color-definitions-secondary-secondary-100: #FFEBF8;
+  --colors-color-definitions-secondary-secondary-50: #FFF7FC;
+  --colors-color-definitions-status-error-100: #FFEEEE;
+  --colors-color-definitions-status-error-500: #FF575A;
+  --colors-color-definitions-status-error-600: #FF1216;
+  --colors-color-definitions-status-error-700: #CD0003;
+  --colors-color-definitions-status-error-800: #890002;
+  --colors-color-definitions-status-warning-100: #FFF8EF;
+  --colors-color-definitions-status-warning-500: #FFBD60;
+  --colors-color-definitions-status-warning-600: #FFA01B;
+  --colors-color-definitions-status-warning-700: #D37B00;
+  --colors-color-definitions-status-warning-800: #8D5200;
+  --colors-color-definitions-status-succes-200: #E6FDF4;
+  --colors-color-definitions-status-succes-500: #16DB93;
+  --colors-color-definitions-status-succes-600: #11AF75;
+  --colors-color-definitions-status-succes-700: #0D8358;
+  --colors-color-definitions-status-succes-800: #09573A;
+  --colors-color-definitions-neutrals-neutral-0: #E6EDF7;
+  --colors-color-definitions-neutrals-neutral-100: #A5B0C8;
+  --colors-color-definitions-neutrals-neutral-150: #FFFFFF;
+  --colors-color-definitions-neutrals-neutral-200: #7C88A3;
+  --colors-color-definitions-neutrals-neutral-500: #55627F;
+  --colors-color-definitions-neutrals-neutral-600: #3D4A66;
+  --colors-color-definitions-neutrals-neutral-700: #273146;
+  --colors-color-definitions-neutrals-neutral-800: #1A2030;
+  --colors-color-definitions-neutrals-neutral-900: #0E1116;
+  --colors-color-definitions-status-info-150: #DCF7FF;
+  --colors-color-definitions-status-info-500: #8FE1FF;
+  --colors-color-definitions-status-info-950: #0F3E56;
+  --colors-color-definitions-support-support-100: #E7F2FE;
+  --colors-color-definitions-support-support-200: #CEE5FD;
+  --colors-color-definitions-support-support-300: #1285B6;
+  --colors-color-definitions-support-support-500: #007FB6;
+  --colors-color-definitions-support-support-550: #006591;
+  --colors-color-definitions-support-support-600: #004B6E;
+  --colors-color-definitions-support-support-650: #00344D;
+  --colors-color-definitions-support-support-700: #00344D;
+  --colors-color-definitions-support-support-750: #001E30;
+  --colors-color-definitions-support-support-800: #00121F;
+  --colors-color-definitions-charts-charts-blues-chart-blue-100: #DCF7FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-200: #8FE1FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-300: #5FD2FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-500: #2CC3FF;
+  --colors-color-definitions-charts-charts-blues-chart-blue-600: #1C7FA8;
+  --colors-color-definitions-charts-charts-blues-chart-blue-800: #145B7A;
+  --colors-color-definitions-charts-charts-blues-chart-blue-900: #0F3E56;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-100: #FFF7FC;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-200: #FFD2F0;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-300: #FFB4E2;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-500: #FF9AD8;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-600: #A83F81;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-800: #7A2F5E;
+  --colors-color-definitions-charts-charts-pinks-chart-pink-900: #4A1F3A;
+  --colors-color-definitions-charts-charts-purples-purple-100: #DDD6FF;
+  --colors-color-definitions-charts-charts-purples-purple-200: #B8A5FF;
+  --colors-color-definitions-charts-charts-purples-purple-300: #B8A5FF;
+  --colors-color-definitions-charts-charts-purples-purple-500: #7A5AF8;
+  --colors-color-definitions-charts-charts-purples-purple-600: #403074;
+  --colors-color-definitions-charts-charts-purples-purple-800: #34265A;
+  --colors-color-definitions-charts-charts-purples-purple-900: #2A1F45;
+  --colors-color-definitions-charts-charts-reds-reds-100: #FEE2E2;
+  --colors-color-definitions-charts-charts-reds-reds-200: #FCA5A5;
+  --colors-color-definitions-charts-charts-reds-reds-300: #F87171;
+  --colors-color-definitions-charts-charts-reds-reds-500: #EF4444;
+  --colors-color-definitions-charts-charts-reds-reds-600: #6B1F23;
+  --colors-color-definitions-charts-charts-reds-reds-800: #511518;
+  --colors-color-definitions-charts-charts-reds-reds-900: #3B0D10;
+  --colors-color-definitions-charts-charts-oranges-orange-100: #FEF3C7;
+  --colors-color-definitions-charts-charts-oranges-orange-200: #FCD34D;
+  --colors-color-definitions-charts-charts-oranges-orange-300: #FBBF24;
+  --colors-color-definitions-charts-charts-oranges-orange-500: #F59E0B;
+  --colors-color-definitions-charts-charts-oranges-orange-600: #6B3A0D;
+  --colors-color-definitions-charts-charts-oranges-orange-800: #4F2C09;
+  --colors-color-definitions-charts-charts-oranges-orange-900: #3A2106;
+  --colors-color-definitions-charts-charts-greens-green-100: #D1FAE5;
+  --colors-color-definitions-charts-charts-greens-green-200: #6EE7B7;
+  --colors-color-definitions-charts-charts-greens-green-300: #34D399;
+  --colors-color-definitions-charts-charts-greens-green-500: #10B981;
+  --colors-color-definitions-charts-charts-greens-green-600: #065F46;
+  --colors-color-definitions-charts-charts-greens-green-800: #064E34;
+  --colors-color-definitions-charts-charts-greens-green-900: #052E1E;
+  --colors-color-definitions-charts-charts-greys-grey-100: #FAFAFA;
+  --colors-color-definitions-charts-charts-greys-grey-150: #EBEBEB;
+  --colors-color-definitions-charts-charts-greys-grey-400: #DBDBDB;
+  --colors-color-definitions-charts-charts-greys-grey-500: #CCCCCC;
+  --colors-color-definitions-charts-charts-greys-grey-700: #8F8F8F;
+  --colors-color-definitions-charts-charts-greys-grey-800: #525252;
+  --colors-color-definitions-charts-charts-greys-grey-850: #292929;
+  --colors-color-definitions-shadows-strokes-overlay: rgba(255, 255, 255, 0.6000000238418579);
+  --colors-color-definitions-shadows-strokes-transparant: rgba(255, 255, 255, 0);
+  --colors-color-definitions-shadows-strokes-ghost-hover: rgba(0, 36, 51, 0.05000000074505806);
+  --colors-color-definitions-shadows-strokes-ghost-active: rgba(0, 36, 51, 0.10000000149011612);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BASE COLORS - Dark Mode
+     ============================================ */
+  --colors-page-page-background: #0B2A3A;
+  --colors-page-page-transparent-overlay: rgba(255, 255, 255, 0.6000000238418579);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     FONT COLORS - Dark Mode
+     ============================================ */
+  --colors-fonts-font-color-headings: #FAFAFA;
+  --colors-fonts-font-color-primary: #FAFAFA;
+  --colors-fonts-font-color-inverse: #00344D;
+  --colors-fonts-font-color-support: #7C88A3;
+  --colors-fonts-font-color-support-always-grey: #273146;
+  --colors-fonts-font-color-disabled: #273146;
+  --colors-fonts-always-dark: #0F3E56;
+  --colors-fonts-always-light: #FAFAFA;
+  --colors-fonts-font-color-buttons: #0F3E56;
+  --colors-fonts-font-color-brand: #2CC3FF;
+  --colors-fonts-font-tab-active: #145B7A;
+  --colors-fonts-font-tab-inactive: #1C7FA8;
+  --colors-fonts-font-color-button-disabled: #3D4A66;
+  --colors-fonts-font-color-input-label: #0F3E56;
+  --colors-fonts-font-color-user-input: #0E1116;
+  --colors-fonts-font-color-input-placeholder: #273146;
+  --colors-icons-icon-always-dark: #0F3E56;
+  --colors-icons-icon-always-light: #E6EDF7;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     CARD COLORS - Dark Mode
+     ============================================ */
+  --colors-cards-card-background: #0F3E56;
+  --colors-cards-card-background-hover: #145B7A;
+  --colors-cards-card-stroke: rgba(0, 71, 102, 0.10000000149011612);
+  --colors-cards-card-drop-shadow: rgba(0, 71, 102, 0.10000000149011612);
+  --colors-cards-card-marketing-background: #FFD2F0;
+  --colors-cards-card-marketing-stroke: #A83F81;
+  --colors-cards-date-background: #EDFCFF;
+  --colors-cards-date-today-background: #EDFCFF;
+  --colors-cards-date-background-past: #A5B0C8;
+  --colors-cards-small-section-background: #55627F;
+  --colors-cards-cards-divider: #7C88A3;
+  --colors-color-definitions-shadows-strokes-card-shadow: #FFFFFF;
+  --colors-color-definitions-shadows-strokes-card-stroke: rgba(0, 71, 102, 0.10000000149011612);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     NAVIGATION COLORS - Dark Mode
+     ============================================ */
+  --colors-navigation-menu-transparent-overlay: #0F3E56;
+  --colors-navigation-menu-card: #145B7A;
+  --colors-navigation-menu-border: #001E30;
+  --colors-navigation-menu-item-active: #0F3E56;
+  --colors-navigation-menu-item-hover-background: #00344D;
+  --colors-navigation-menu-item-hover-font: #007FB6;
+  --colors-navigation-menu-mobile-underline: #8FE1FF;
+  --colors-navigation-tabs-underlining: #EBEBEB;
+  --colors-navigation-tabs-hover-underlining: #239FCC;
+  --colors-navigation-tabs-active-tab: #239FCC;
+  --colors-navigation-user-avatar-background: #145B7A;
+  --colors-navigation-menu-background: #BCEEFF;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     BUTTON COLORS - Dark Mode
+     ============================================ */
+  --colors-buttons-button-primary: #5FD2FF;
+  --colors-buttons-button-primary-hover: #5FD2FF;
+  --colors-buttons-button-primary-active: #239FCC;
+  --colors-buttons-button-disabled: #7C88A3;
+  --colors-buttons-button-secondary: #0B2A3A;
+  --colors-buttons-button-secondary-hover: #2CC3FF;
+  --colors-buttons-button-secondary-active: #0B2A3A;
+  --colors-buttons-button-ghost: rgba(255, 255, 255, 0);
+  --colors-buttons-button-ghost-hover: rgba(0, 36, 51, 0.05000000074505806);
+  --colors-buttons-button-ghost-active: rgba(0, 36, 51, 0.10000000149011612);
+  --colors-buttons-button-ghost-stroke: #0B2A3A;
+  --colors-buttons-button-back: #006591;
+  --colors-buttons-button-back-hover: #1285B6;
+  --colors-buttons-button-back-active: #004B6E;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     INPUT FIELD COLORS - Dark Mode
+     ============================================ */
+  --colors-inputs-input-background: #1285B6;
+  --colors-inputs-input-disabled: #E6EDF7;
+  --colors-inputs-input-border: #7C88A3;
+  --colors-inputs-checkbox-border: #0B2A3A;
+  --colors-inputs-checkbox-background: #FFFFFF;
+  --colors-inputs-checkbox-fill: #1C7FA8;
+  --colors-inputs-search-field-border: #FFDEF4;
+  --colors-inputs-search-field-background: #FFD2F0;
+  --colors-inputs-search-icon: #4A1F3A;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     STATUS COLORS - Dark Mode
+     ============================================ */
+  --colors-status-border-critical: #EF4444;
+  --colors-status-border-attention: #FFBD60;
+  --colors-status-border-success: #11AF75;
+  --colors-status-border-neutral: #55627F;
+  --colors-status-critical-background: #FFEEEE;
+  --colors-status-attention-background: #FFF8EF;
+  --colors-status-success-background: #E6FDF4;
+  --colors-status-neutral-background: #A5B0C8;
+  --colors-status-neutral-background2: #239FCC;
+  --colors-status-neutral-background3: #145B7A;
+  --colors-tags-neutral-background: #DCF7FF;
+  --colors-tags-success-background: #16DB93;
+  --colors-tags-attention-background: #FFF8EF;
+  --colors-tags-critical-background: #FFEEEE;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     TAG COLORS - Dark Mode
+     ============================================ */
+  --colors-tags-font-neutral: #EBEBEB;
+  --colors-tags-font-success: #10B981;
+  --colors-tags-font-attention: #F59E0B;
+  --colors-tags-font-critical: #CD0003;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     ICON COLORS - Dark Mode
+     ============================================ */
+  --colors-icons-icon: #E6EDF7;
+  --colors-icons-icon-hamburger-menu: #239FCC;
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     TABLE COLORS - Dark Mode
+     ============================================ */
+  --colors-tables-table-header: rgba(153, 224, 255, 0);
+  --colors-tables-table-hover: #E8E2D9;
+  --colors-tables-table-cell-stroke: #007FB6;
+  --colors-tables-table-header-stroke: #004B6E;
+  --colors-tables-fixed-cell-stroke: #00344D;
+  --colors-tables-table-row-a: #1285B6;
+  --colors-tables-table-row-b: rgba(255, 255, 255, 0.6000000238418579);
+  /* ============================================
+       /* ============================================
+       /* ============================================
+       /* ============================================
+     FILTER COLORS - Dark Mode
+     ============================================ */
+  --colors-filters-filter-background: #DCF7FF;
+  --colors-filters-filter-hover: #EDFCFF;
+  --colors-filters-filter-active: #BCEEFF;
+  --colors-filters-segmented-control-background: #DCF7FF;
+  --colors-filters-segmented-control-active: #F5FCFF;
+  
+}
