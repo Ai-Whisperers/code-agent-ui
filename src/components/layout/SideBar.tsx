@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
-import { LogOut, Bot } from 'lucide-react'
+import { LogOut } from 'lucide-react'
+import codeAgentLogo from '@/assets/code-agent-logo.png'
 import { Menu } from '@/components/navigation/menu/Menu'
 import { ApplicationMenuItems } from '@/config/applicationMenu'
 import { logout } from '@/store/auth-store'
@@ -48,9 +49,7 @@ export function SideBar({ user, isMobileExpanded = false, onNavigate }: SideBarP
         className="flex items-center gap-3 px-3 py-4 shrink-0 cursor-pointer"
         onClick={() => navigate({ to: '/' })}
       >
-        <div className="w-8 h-8 shrink-0 rounded-lg bg-[var(--color-buttons-button-primary)] flex items-center justify-center">
-          <Bot size={18} className="text-white" />
-        </div>
+        <img src={codeAgentLogo} alt="Code Agent" className="w-8 h-8 shrink-0 object-contain" />
         {isExpanded && (
           <span className="text-sm font-bold text-[var(--color-fonts-font-color-headings)] truncate whitespace-nowrap">
             Code Agent

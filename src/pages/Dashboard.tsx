@@ -59,19 +59,19 @@ export default function Dashboard() {
         />
         <StatCard
           label="Total Cost (USD)"
-          value={summary ? `$${summary.totalCostUsd.toFixed(2)}` : '—'}
+          value={summary?.totalCostUsd != null ? `$${summary.totalCostUsd.toFixed(2)}` : '—'}
           icon={<TrendingUp size={18} />}
           accent="text-[var(--color-status-border-neutral)]"
         />
         <StatCard
           label="Avg Cost / Job"
-          value={summary ? `$${summary.avgCostPerJob.toFixed(3)}` : '—'}
+          value={summary?.avgCostPerJob != null ? `$${summary.avgCostPerJob.toFixed(3)}` : '—'}
           icon={<CheckCircle2 size={18} />}
           accent="text-[var(--color-status-border-success)]"
         />
         <StatCard
           label="Input Tokens"
-          value={summary ? summary.totalInputTokens.toLocaleString() : '—'}
+          value={summary?.totalInputTokens != null ? summary.totalInputTokens.toLocaleString() : '—'}
           icon={<ListOrdered size={18} />}
         />
       </div>

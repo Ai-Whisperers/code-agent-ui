@@ -167,11 +167,11 @@ export interface QualityReport {
 // ---- AI Stats ----
 
 export interface AiCallSummary {
-  totalCalls: number
-  totalInputTokens: number
-  totalOutputTokens: number
-  totalCostUsd: number
-  avgCostPerJob: number
+  totalCalls: number | null
+  totalInputTokens: number | null
+  totalOutputTokens: number | null
+  totalCostUsd: number | null
+  avgCostPerJob: number | null
 }
 
 export interface AiCallDailyStat {
