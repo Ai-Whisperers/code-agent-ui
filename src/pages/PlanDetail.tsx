@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, CheckCircle, Play, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle, Play, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { ExecutionPlan, PlanPhase } from '@/types/api'
@@ -111,8 +111,8 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
                   </div>
                   <div className="divide-y divide-[var(--color-tables-table-cell-stroke)]">
                     {phase.steps.map((step) => (
-                      <div key={step.stepId} className="px-5 py-3 flex items-center gap-3">
-                        <span className="w-6 h-6 shrink-0 rounded-full bg-[var(--color-filters-filter-background)] text-[var(--color-fonts-font-color-buttons)] text-xs flex items-center justify-center font-semibold">
+                      <div key={step.stepId} className="px-5 py-3 flex items-start gap-3">
+                        <span className="w-6 h-6 mt-0.5 shrink-0 rounded-full bg-[var(--color-filters-filter-background)] text-[var(--color-fonts-font-color-buttons)] text-xs flex items-center justify-center font-semibold">
                           {step.order}
                         </span>
                         <div className="flex-1 min-w-0">
@@ -124,8 +124,14 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
                               {step.description}
                             </p>
                           )}
+                          {step.status === 'FAILED' && step.errorMessage && (
+                            <div className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-tags-font-critical)]">
+                              <AlertCircle size={13} className="mt-0.5 shrink-0" />
+                              <span>{step.errorMessage}</span>
+                            </div>
+                          )}
                         </div>
-                        <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                        <span className={`text-xs shrink-0 ${step.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
                           {step.status}
                         </span>
                       </div>

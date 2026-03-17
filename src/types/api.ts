@@ -112,6 +112,7 @@ export interface PlanStep {
   title: string
   description?: string
   status: string
+  errorMessage?: string | null
 }
 
 export interface PlanPhase {
