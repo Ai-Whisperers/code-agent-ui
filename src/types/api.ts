@@ -78,6 +78,7 @@ export interface RepoSettings {
   disabledHooks?: string[]
   confluenceSpaceKey?: string
   confluenceParentPageId?: string
+  gitPlatformUrl?: string
   archetype?: string
   archetypeVersion?: string
   archived?: boolean
@@ -210,6 +211,10 @@ export interface ReviewMetrics {
   avgScore: number
   lastReviewAt?: string
 }
+
+// ---- Upgrades ----
+
+export type LatestVersionsResponse = Record<string, string>
 
 // ---- Memory ----
 

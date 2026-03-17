@@ -1,9 +1,12 @@
-import { useQuery, useQueries } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
-import { X } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { ArrowUpCircle, Loader2, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { VersionBadge } from '@/components/VersionBadge'
+import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
-import type { ReviewMetrics, RepoSettings } from '@/types/api'
+import type { ReviewMetrics, RepoSettings, LatestVersionsResponse } from '@/types/api'
 
 type RowData = {
   repo: RepoSettings
@@ -19,7 +22,13 @@ export default function ReviewMetricsPage() {
     queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
   })
 
-  const reviewRepos = (Array.isArray(repos) ? repos : []).filter((r) => r.reviewEnabled)
+  const { data: latestVersions } = useQuery<LatestVersionsResponse>({
+    queryKey: ['latest-versions'],
+    queryFn: () => api.get('/upgrades/latest-versions').then((r) => r.data).catch(() => ({})),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const reviewRepos = (Array.isArray(repos) ? repos : []).filter((r) => r.reviewEnabled && !r.archived)
 
   const metricQueries = useQueries({
     queries: reviewRepos.map((repo) => ({
@@ -89,8 +98,12 @@ export default function ReviewMetricsPage() {
                     <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
                       {row.repo.archetype ?? '—'}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
-                      {row.repo.archetypeVersion ?? '—'}
+                    <td className="px-4 py-3">
+                      <VersionBadge
+                        version={row.repo.archetypeVersion}
+                        archetype={row.repo.archetype}
+                        latestVersions={latestVersions}
+                      />
                     </td>
                     <td className="px-4 py-3">
                       {row.metrics?.totalReviews ?? '—'}
@@ -113,7 +126,7 @@ export default function ReviewMetricsPage() {
       </div>
 
       {selected && (
-        <MetricsDialog row={selected} onClose={() => setSelected(null)} />
+        <MetricsDialog row={selected} latestVersions={latestVersions} onClose={() => setSelected(null)} />
       )}
     </main>
   )
@@ -145,8 +158,31 @@ function MetricCard({ label, value }: { label: string; value: React.ReactNode })
   )
 }
 
-function MetricsDialog({ row, onClose }: { row: RowData; onClose: () => void }) {
+function MetricsDialog({
+  row,
+  latestVersions,
+  onClose,
+}: {
+  row: RowData
+  latestVersions?: LatestVersionsResponse
+  onClose: () => void
+}) {
   const { repo, metrics } = row
+  const navigate = useNavigate()
+
+  const upgradeJobMutation = useMutation({
+    mutationFn: () =>
+      api
+        .post(`/upgrades/check/${repo.workspace}/${repo.repoSlug}`)
+        .then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      if (data?.jobId) {
+        navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+      }
+    },
+  })
+
+  const versionOutdated = isVersionOutdated(repo.archetypeVersion, repo.archetype, latestVersions)
 
   return (
     <div
@@ -176,9 +212,11 @@ function MetricsDialog({ row, onClose }: { row: RowData; onClose: () => void }) 
               {repo.archetypeVersion && (
                 <span className="text-xs text-[var(--color-fonts-font-color-support)]">
                   Version:{' '}
-                  <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
-                    {repo.archetypeVersion}
-                  </span>
+                  <VersionBadge
+                    version={repo.archetypeVersion}
+                    archetype={repo.archetype}
+                    latestVersions={latestVersions}
+                  />
                 </span>
               )}
             </div>
@@ -192,7 +230,7 @@ function MetricsDialog({ row, onClose }: { row: RowData; onClose: () => void }) 
         </div>
 
         {/* Body */}
-        <div className="p-5">
+        <div className="p-5 space-y-4">
           {metrics ? (
             <div className="grid grid-cols-3 gap-3">
               <MetricCard label="Total Reviews" value={metrics.totalReviews} />
@@ -210,6 +248,28 @@ function MetricsDialog({ row, onClose }: { row: RowData; onClose: () => void }) 
             <p className="py-6 text-center text-sm text-[var(--color-fonts-font-color-support)]">
               No review metrics available yet.
             </p>
+          )}
+
+          {versionOutdated && (
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-cards-card-stroke)]">
+              {upgradeJobMutation.isError && (
+                <p className="mr-auto text-xs text-[var(--color-status-border-critical)]">
+                  Failed to start job. Please try again.
+                </p>
+              )}
+              <button
+                onClick={() => upgradeJobMutation.mutate()}
+                disabled={upgradeJobMutation.isPending}
+                className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm font-medium hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+              >
+                {upgradeJobMutation.isPending ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <ArrowUpCircle size={15} />
+                )}
+                {upgradeJobMutation.isPending ? 'Starting…' : 'Run Upgrade'}
+              </button>
+            </div>
           )}
         </div>
       </div>

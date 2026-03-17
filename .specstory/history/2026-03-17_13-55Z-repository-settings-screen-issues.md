@@ -284,3 +284,42 @@ Done. The "Add Repository" button and its associated `Plus` icon import have bee
 
 ---
 
+_**User**_
+
+The review metrics should hide archived repositories.
+
+---
+
+_**Agent (model claude-4.6-sonnet-medium-thinking, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+Let me read the ReviewMetrics page to understand its current structure.</details></think>
+
+---
+
+<tool-use data-tool-type="read" data-tool-name="read_file_v2">
+<details><summary>Tool use: **read_file_v2** • Read file: /Users/gerbert/Documents/workspace_ai/code-agent-ui/src/pages/ReviewMetrics.tsx</summary>
+
+</details>
+</tool-use>
+
+---
+
+The fix is a one-liner — just add `!r.archived` to the filter on line 22:
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/gerbert/Documents/workspace_ai/code-agent-ui/src/pages/ReviewMetrics.tsx</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+Done. Archived repositories are now excluded from the Review Metrics page by adding `&& !r.archived` to the existing filter.
+
+---
+
