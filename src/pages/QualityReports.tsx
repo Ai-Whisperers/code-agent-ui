@@ -18,7 +18,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
-import type { QualityReport, RepoSettings, LatestVersionsResponse } from '@/types/api'
+import type { QualityReport, RepoSettings, LatestVersionsResponse, ExecutionPlan } from '@/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -295,6 +295,9 @@ function ReportDialog({
   const navigate = useNavigate()
   const { repo, report } = row
 
+  const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+  const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
+
   const { data: history } = useQuery<QualityReport[]>({
     queryKey: ['quality-history', repo.workspace, repo.repoSlug, 'main'],
     queryFn: () =>
@@ -304,14 +307,22 @@ function ReportDialog({
         .catch(() => []),
   })
 
+  const { data: plans } = useQuery<ExecutionPlan[]>({
+    queryKey: ['plans'],
+    queryFn: () => api.get('/plans').then((r) => r.data).catch(() => []),
+  })
+
+  const hasActivePlan = (Array.isArray(plans) ? plans : []).some(
+    (p) =>
+      (p.status === 'RUNNING' || p.status === 'APPROVED') &&
+      p.repoUrl === repoUrl,
+  )
+
   const qualityJobMutation = useMutation({
-    mutationFn: () => {
-      const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
-      const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
-      return api
+    mutationFn: () =>
+      api
         .post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`, { repoUrl })
-        .then((r) => r.data as { jobId: string })
-    },
+        .then((r) => r.data as { jobId: string }),
     onSuccess: (data) => {
       if (data?.jobId) {
         navigate({ to: '/jobs/$id', params: { id: data.jobId } })
@@ -323,9 +334,11 @@ function ReportDialog({
     mutationFn: () =>
       api
         .post(`/upgrades/check/${repo.workspace}/${repo.repoSlug}`)
-        .then((r) => r.data as { jobId: string }),
+        .then((r) => r.data as { jobId?: string; planId?: string }),
     onSuccess: (data) => {
-      if (data?.jobId) {
+      if (data?.planId) {
+        navigate({ to: '/plans/$id', params: { id: data.planId } })
+      } else if (data?.jobId) {
         navigate({ to: '/jobs/$id', params: { id: data.jobId } })
       }
     },
@@ -455,10 +468,19 @@ function ReportDialog({
                 Failed to start job. Please try again.
               </p>
             )}
+            {!qualityJobMutation.isError && !upgradeJobMutation.isError && hasActivePlan && (
+              <p className="mr-auto text-xs text-[var(--color-tags-font-attention)]">
+                An upgrade plan is already running for this repository.
+              </p>
+            )}
             {versionOutdated && (
               <button
-                onClick={() => upgradeJobMutation.mutate()}
-                disabled={upgradeJobMutation.isPending}
+                onClick={() => {
+                  if (!upgradeJobMutation.isPending && !hasActivePlan) {
+                    upgradeJobMutation.mutate()
+                  }
+                }}
+                disabled={upgradeJobMutation.isPending || hasActivePlan}
                 className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm font-medium hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
               >
                 {upgradeJobMutation.isPending ? (
@@ -470,7 +492,11 @@ function ReportDialog({
               </button>
             )}
             <button
-              onClick={() => qualityJobMutation.mutate()}
+              onClick={() => {
+                if (!qualityJobMutation.isPending) {
+                  qualityJobMutation.mutate()
+                }
+              }}
               disabled={qualityJobMutation.isPending}
               className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
