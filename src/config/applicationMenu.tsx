@@ -121,6 +121,14 @@ export function ApplicationMenuItems(
           type: 'item',
           onClick: () => go('/settings/prompts'),
         },
+        {
+          id: 'memories',
+          label: 'Memories',
+          path: '/settings/memories',
+          isActive: currentPath === '/settings/memories',
+          type: 'item',
+          onClick: () => go('/settings/memories'),
+        },
       ],
     },
   ]

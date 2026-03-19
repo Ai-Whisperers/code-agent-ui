@@ -26,6 +26,7 @@ import NewPlan from '@/pages/NewPlan'
 import QualityReportsPage from '@/pages/QualityReports'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import AiStatsPage from '@/pages/AiStats'
+import MemoriesPage from '@/pages/Memories'
 import AccessDenied from '@/pages/AccessDenied'
 
 import './styles/index.css'
@@ -168,6 +169,12 @@ const aiStatsRoute = createRoute({
   component: AiStatsPage,
 })
 
+const memoriesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/memories',
+  component: MemoriesPage,
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -189,6 +196,7 @@ const routeTree = rootRoute.addChildren([
     qualityRoute,
     reviewMetricsRoute,
     aiStatsRoute,
+    memoriesRoute,
   ]),
   accessDeniedRoute,
 ])
