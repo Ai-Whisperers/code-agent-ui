@@ -36,6 +36,7 @@ import {
   MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  ShieldAlert,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { refreshToken, getToken } from '@/lib/keycloak'
@@ -457,6 +458,36 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   )
 }
 
+// ── Secret scanning ────────────────────────────────────────────────────────────
+
+const SECRET_PATTERNS: { type: string; regex: RegExp }[] = [
+  { type: 'AWS Access Key', regex: /AKIA[0-9A-Z]{16}/g },
+  { type: 'GitHub Token', regex: /gh[pousr]_[A-Za-z0-9_]{36,251}/g },
+  { type: 'Anthropic API Key', regex: /sk-ant-[a-zA-Z0-9-]{32,}/g },
+  { type: 'OpenAI API Key', regex: /sk-[A-Za-z0-9T]{20,}/g },
+  { type: 'Private Key', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g },
+  { type: 'JWT', regex: /eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/g },
+  { type: 'Database URL', regex: /(?:postgresql|mysql|mongodb):\/\/[^@\s]+:[^@\s]+@/gi },
+]
+
+function detectSecrets(text: string): string[] {
+  const found = new Set<string>()
+  for (const { type, regex } of SECRET_PATTERNS) {
+    regex.lastIndex = 0
+    if (regex.test(text)) found.add(type)
+  }
+  return [...found]
+}
+
+function redactSecrets(text: string): string {
+  let out = text
+  for (const { type, regex } of SECRET_PATTERNS) {
+    regex.lastIndex = 0
+    out = out.replace(regex, `[REDACTED:${type.replace(/ /g, '_').toUpperCase()}]`)
+  }
+  return out
+}
+
 // ── Conversation helpers ────────────────────────────────────────────────────────
 
 const CONV_LS_KEY = (id: string) => `conv_messages_${id}`
@@ -698,6 +729,10 @@ export default function Chat() {
   )
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [secretWarning, setSecretWarning] = useState<{
+    findings: string[]
+    pendingText: string
+  } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -885,10 +920,23 @@ export default function Chat() {
     navigate({ to: '/chat' })
   }, [navigate])
 
+  const handleSend = useCallback(
+    (text: string) => {
+      if (!text.trim() || isStreaming) return
+      const findings = detectSecrets(text)
+      if (findings.length > 0) {
+        setSecretWarning({ findings, pendingText: text })
+        return
+      }
+      sendMessage(text)
+    },
+    [isStreaming, sendMessage],
+  )
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      sendMessage(input)
+      handleSend(input)
     }
   }
 
@@ -1053,6 +1101,62 @@ export default function Chat() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Secret warning banner */}
+        {secretWarning && (
+          <div className="shrink-0 mx-4 sm:mx-8 mb-2 rounded-[var(--border-radius-card)] border border-amber-400/60 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <ShieldAlert
+                size={18}
+                className="shrink-0 mt-0.5 text-amber-600 dark:text-amber-400"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  Possible secrets detected
+                </p>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {secretWarning.findings.map((f) => (
+                    <span
+                      key={f}
+                      className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-300/60"
+                    >
+                      {f}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  <button
+                    onClick={() => {
+                      sendMessage(redactSecrets(secretWarning.pendingText))
+                      setSecretWarning(null)
+                    }}
+                    className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors"
+                  >
+                    Redact &amp; Send
+                  </button>
+                  <button
+                    onClick={() => {
+                      sendMessage(secretWarning.pendingText)
+                      setSecretWarning(null)
+                    }}
+                    className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-amber-400/60 bg-transparent hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-medium transition-colors"
+                  >
+                    Send Anyway
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSecretWarning(null)
+                      setTimeout(() => textareaRef.current?.focus(), 0)
+                    }}
+                    className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-transparent hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] text-xs font-medium transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Input bar */}
         <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
           <div className="flex gap-3 items-end">
@@ -1073,7 +1177,7 @@ export default function Chat() {
               style={{ maxHeight: '160px', overflowY: 'auto' }}
             />
             <button
-              onClick={() => sendMessage(input)}
+              onClick={() => handleSend(input)}
               disabled={!input.trim() || isStreaming}
               className="flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-button)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
             >
