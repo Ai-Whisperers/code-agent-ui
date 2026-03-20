@@ -37,10 +37,11 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   ShieldAlert,
+  ChevronRight,
 } from 'lucide-react'
 import api from '@/lib/api'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ProductConfig, ConversationSummary } from '@/types/api'
+import type { ChatEvent, ChatMessage, ThinkingStep, ConversationSummary } from '@/types/api'
 
 ChartJS.register(
   CategoryScale,
@@ -57,7 +58,7 @@ ChartJS.register(
   Filler,
 )
 
-mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose' })
+mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', suppressErrorRendering: true })
 
 // ── MermaidDiagram ─────────────────────────────────────────────────────────────
 
@@ -383,50 +384,57 @@ const TOOL_LABELS: Record<string, string> = {
   web_search: 'Searching the web',
 }
 
-function ToolActivityBadge({ tool }: { tool: string }) {
-  const label = TOOL_LABELS[tool] ?? `Using ${tool.replace(/_/g, ' ')}`
+// ── ThinkingPanel ──────────────────────────────────────────────────────────────
+
+function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive?: boolean }) {
+  const [expanded, setExpanded] = useState(!!isLive)
+
+  const toolCount = steps.filter((s) => s.kind === 'tool').length
+  const summary = toolCount > 0
+    ? `Used ${toolCount} tool${toolCount !== 1 ? 's' : ''}`
+    : 'Thought through the answer'
+
   return (
-    <div className="mb-2">
-      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-[var(--color-cards-card-stroke)]">
-        <span className="w-1.5 h-1.5 rounded-full bg-[var(--color-buttons-button-primary)] animate-pulse" />
-        {label}…
-      </span>
+    <div className="mb-3 pb-3 border-b border-[var(--color-cards-card-stroke)]">
+      <button
+        onClick={() => setExpanded((e) => !e)}
+        className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] opacity-60 hover:opacity-100 transition-opacity w-full text-left"
+      >
+        <ChevronRight
+          size={11}
+          className={`shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+        />
+        {isLive ? (
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
+            Thinking…
+          </span>
+        ) : (
+          <span>{summary}</span>
+        )}
+      </button>
+      {expanded && steps.length > 0 && (
+        <div className="mt-2 ml-3 border-l border-[var(--color-cards-card-stroke)] pl-3 flex flex-col gap-2">
+          {steps.map((step, i) =>
+            step.kind === 'thought' ? (
+              <p
+                key={i}
+                className="text-xs italic text-[var(--color-fonts-font-color-support)] opacity-60 leading-relaxed"
+              >
+                {step.text}
+              </p>
+            ) : (
+              <div
+                key={i}
+                className="inline-flex items-center gap-1.5 self-start px-2 py-0.5 rounded text-xs font-mono bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-[var(--color-cards-card-stroke)]"
+              >
+                {TOOL_LABELS[step.name] ?? step.name.replace(/_/g, ' ')}
+              </div>
+            ),
+          )}
+        </div>
+      )}
     </div>
-  )
-}
-
-// ── ProductSelector ────────────────────────────────────────────────────────────
-
-function ProductSelector({
-  value,
-  onChange,
-}: {
-  value: string
-  onChange: (id: string) => void
-}) {
-  const { data: products = [] } = useQuery<ProductConfig[]>({
-    queryKey: ['products'],
-    queryFn: () =>
-      api
-        .get('/customer-registry/products')
-        .then((r) => r.data)
-        .catch(() => []),
-  })
-
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] cursor-pointer"
-    >
-      <option value="">All products</option>
-      {products.map((p) => (
-        <option key={p.productId} value={p.productId}>
-          {p.productId}
-          {p.displayName ? ` — ${p.displayName}` : ''}
-        </option>
-      ))}
-    </select>
   )
 }
 
@@ -452,6 +460,9 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         <Bot size={15} className="text-white" />
       </div>
       <div className="flex-1 min-w-0 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] rounded-tl-sm px-4 py-3">
+        {message.thinkingSteps && message.thinkingSteps.length > 0 && (
+          <ThinkingPanel steps={message.thinkingSteps} isLive={false} />
+        )}
         <MarkdownMessage content={message.content} />
       </div>
     </div>
@@ -720,9 +731,8 @@ export default function Chat() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingContent, setStreamingContent] = useState('')
+  const [streamingThinkingSteps, setStreamingThinkingSteps] = useState<ThinkingStep[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
-  const [activeTool, setActiveTool] = useState<string | null>(null)
-  const [selectedProductId, setSelectedProductId] = useState('')
   const [input, setInput] = useState('')
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     params.conversationId ?? null,
@@ -751,7 +761,7 @@ export default function Chat() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent])
+  }, [messages, streamingContent, streamingThinkingSteps])
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -766,7 +776,7 @@ export default function Chat() {
       setInput('')
       setIsStreaming(true)
       setStreamingContent('')
-      setActiveTool(null)
+      setStreamingThinkingSteps([])
       setMobileSidebarOpen(false)
 
       if (textareaRef.current) {
@@ -774,6 +784,7 @@ export default function Chat() {
       }
 
       let accumulatedContent = ''
+      const accumulatedThinkingSteps: ThinkingStep[] = []
 
       try {
         await refreshToken()
@@ -788,7 +799,6 @@ export default function Chat() {
           },
           body: JSON.stringify({
             message: text.trim(),
-            ...(selectedProductId ? { productId: selectedProductId } : {}),
             ...(activeConversationId ? { conversationId: activeConversationId } : {}),
           }),
         })
@@ -822,21 +832,33 @@ export default function Chat() {
             }
 
             switch (event.type) {
+              case 'thinking': {
+                const last = accumulatedThinkingSteps[accumulatedThinkingSteps.length - 1]
+                if (last?.kind === 'thought') {
+                  // Merge streaming tokens into the current thought instead of creating new entries
+                  last.text += event.text ?? ''
+                } else {
+                  accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
+                }
+                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                break
+              }
               case 'text':
                 accumulatedContent += event.text ?? ''
                 setStreamingContent(accumulatedContent)
                 break
               case 'tool_start':
-                setActiveTool(event.tool ?? null)
+                accumulatedThinkingSteps.push({ kind: 'tool', name: event.tool ?? '' })
+                setStreamingThinkingSteps([...accumulatedThinkingSteps])
                 break
               case 'tool_end':
-                setActiveTool(null)
                 break
               case 'done': {
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   role: 'assistant',
                   content: accumulatedContent,
+                  thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
                 }
                 setMessages((prev) => {
                   const next = [...prev, assistantMsg]
@@ -846,8 +868,8 @@ export default function Chat() {
                   return next
                 })
                 setStreamingContent('')
+                setStreamingThinkingSteps([])
                 setIsStreaming(false)
-                setActiveTool(null)
                 // Navigate to the conversation URL if we just created a new one
                 if (event.conversationId && event.conversationId !== activeConversationId) {
                   setActiveConversationId(event.conversationId)
@@ -866,8 +888,8 @@ export default function Chat() {
                   },
                 ])
                 setStreamingContent('')
+                setStreamingThinkingSteps([])
                 setIsStreaming(false)
-                setActiveTool(null)
                 return
             }
           }
@@ -877,7 +899,12 @@ export default function Chat() {
         if (accumulatedContent) {
           setMessages((prev) => [
             ...prev,
-            { id: crypto.randomUUID(), role: 'assistant', content: accumulatedContent },
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: accumulatedContent,
+              thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+            },
           ])
         }
       } catch {
@@ -892,10 +919,10 @@ export default function Chat() {
       } finally {
         setIsStreaming(false)
         setStreamingContent('')
-        setActiveTool(null)
+        setStreamingThinkingSteps([])
       }
     },
-    [isStreaming, selectedProductId, activeConversationId, navigate, queryClient],
+    [isStreaming, activeConversationId, navigate, queryClient],
   )
 
   const handleSelectConversation = useCallback(
@@ -903,7 +930,6 @@ export default function Chat() {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
       setStreamingContent('')
-      setActiveTool(null)
       setMobileSidebarOpen(false)
       navigate({ to: '/chat/$conversationId', params: { conversationId: id } })
     },
@@ -914,7 +940,6 @@ export default function Chat() {
     setActiveConversationId(null)
     setMessages([])
     setStreamingContent('')
-    setActiveTool(null)
     setInput('')
     setMobileSidebarOpen(false)
     navigate({ to: '/chat' })
@@ -1039,8 +1064,6 @@ export default function Chat() {
               AI Chat
             </p>
           </div>
-
-          <ProductSelector value={selectedProductId} onChange={setSelectedProductId} />
         </div>
 
         {/* Messages */}
@@ -1055,8 +1078,7 @@ export default function Chat() {
                   How can I help you today?
                 </p>
                 <p className="text-[var(--color-fonts-font-color-support)] text-sm mt-1 max-w-sm">
-                  Ask about your codebase, architecture, team members, or anything else. Select a
-                  product above to scope the context.
+                  Ask about your codebase, architecture, team members, or anything else.
                 </p>
               </div>
             </div>
@@ -1073,8 +1095,10 @@ export default function Chat() {
                 <Bot size={15} className="text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                {activeTool && <ToolActivityBadge tool={activeTool} />}
                 <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] rounded-tl-sm px-4 py-3">
+                  {streamingThinkingSteps.length > 0 && (
+                    <ThinkingPanel steps={streamingThinkingSteps} isLive={true} />
+                  )}
                   {streamingContent ? (
                     <MarkdownMessage content={streamingContent} />
                   ) : (

@@ -16,6 +16,7 @@ import type {
   KnowledgeStatEntry,
   KnowledgeSearchResponse,
   KnowledgeSearchResult,
+  ProductConfig,
 } from '@/types/api'
 
 // ── Shared input styles ────────────────────────────────────────────────────────
@@ -391,6 +392,15 @@ function SemanticSearchSection() {
   const [topK, setTopK] = useState('10')
   const [hasSearched, setHasSearched] = useState(false)
 
+  const { data: products = [] } = useQuery<ProductConfig[]>({
+    queryKey: ['products'],
+    queryFn: () =>
+      api
+        .get('/customer-registry/products')
+        .then((r) => r.data)
+        .catch(() => []),
+  })
+
   function toggleSource(src: string) {
     setSelectedSources((prev) =>
       prev.includes(src) ? prev.filter((s) => s !== src) : [...prev, src],
@@ -400,8 +410,8 @@ function SemanticSearchSection() {
   const { data, isFetching, refetch } = useQuery<KnowledgeSearchResponse>({
     queryKey: ['knowledge-search', query, selectedSources, productId, topK],
     queryFn: () => {
-      const params = new URLSearchParams({ query, topK })
-      if (selectedSources.length > 0) params.set('sourceTypes', selectedSources.join(','))
+      const params = new URLSearchParams({ q: query, topK })
+      selectedSources.forEach((s) => params.append('sourceType', s))
       if (productId.trim()) params.set('productId', productId.trim())
       return api.get(`/knowledge/search?${params.toString()}`).then((r) => r.data)
     },
@@ -474,16 +484,21 @@ function SemanticSearchSection() {
             </div>
           </div>
 
-          {/* Product ID */}
+          {/* Product */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--color-fonts-font-color-support)]">Product ID:</span>
-            <input
-              type="text"
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">Product:</span>
+            <select
               value={productId}
               onChange={(e) => setProductId(e.target.value)}
-              placeholder="optional"
-              className="h-7 px-2 text-xs font-mono w-32 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)]"
-            />
+              className={`${selectCls} h-7 text-xs`}
+            >
+              <option value="">all</option>
+              {products.map((p) => (
+                <option key={p.productId} value={p.productId}>
+                  {p.displayName}
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Top-K */}
@@ -559,7 +574,13 @@ export default function KnowledgeIndexPage() {
     queryFn: () => api.get('/knowledge/stats').then((r) => r.data),
   })
 
-  const stats = statsData?.stats ?? []
+  const stats: KnowledgeStatEntry[] = statsData
+    ? [
+        { sourceType: 'jira', count: statsData.jira, lastIndexed: null },
+        { sourceType: 'confluence', count: statsData.confluence, lastIndexed: null },
+        { sourceType: 'jira-attachment', count: statsData.jiraAttachment, lastIndexed: null },
+      ]
+    : []
 
   // Index mutation
   const indexMutation = useMutation({

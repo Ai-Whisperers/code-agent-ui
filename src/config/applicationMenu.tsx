@@ -7,6 +7,15 @@ import {
   MessageSquare,
   ChevronDown,
   BookOpen,
+  FolderGit2,
+  Zap,
+  FileText,
+  Brain,
+  Users,
+  Sliders,
+  ShieldCheck,
+  GitPullRequest,
+  BotMessageSquare,
 } from 'lucide-react'
 
 export interface NavigationMenuItem {
@@ -42,6 +51,15 @@ export function ApplicationMenuItems(
       onClick: () => go('/'),
     },
     {
+      id: 'chat',
+      label: 'Chat',
+      icon: <MessageSquare size={18} />,
+      path: '/chat',
+      isActive: currentPath === '/chat',
+      type: 'item',
+      onClick: () => go('/chat'),
+    },
+    {
       id: 'jobs',
       label: 'Jobs',
       icon: <Wrench size={18} />,
@@ -60,15 +78,6 @@ export function ApplicationMenuItems(
       onClick: () => go('/plans'),
     },
     {
-      id: 'chat',
-      label: 'Chat',
-      icon: <MessageSquare size={18} />,
-      path: '/chat',
-      isActive: currentPath === '/chat',
-      type: 'item',
-      onClick: () => go('/chat'),
-    },
-    {
       id: 'metrics-section',
       label: 'Metrics',
       type: 'parent',
@@ -78,6 +87,7 @@ export function ApplicationMenuItems(
         {
           id: 'quality-reports',
           label: 'Quality Reports',
+          icon: <ShieldCheck size={16} />,
           path: '/metrics/quality',
           isActive: currentPath === '/metrics/quality',
           type: 'item',
@@ -86,6 +96,7 @@ export function ApplicationMenuItems(
         {
           id: 'review-metrics',
           label: 'Review Metrics',
+          icon: <GitPullRequest size={16} />,
           path: '/metrics/reviews',
           isActive: currentPath === '/metrics/reviews',
           type: 'item',
@@ -94,6 +105,7 @@ export function ApplicationMenuItems(
         {
           id: 'ai-stats',
           label: 'AI Stats',
+          icon: <BotMessageSquare size={16} />,
           path: '/stats',
           isActive: currentPath === '/stats',
           type: 'item',
@@ -111,6 +123,7 @@ export function ApplicationMenuItems(
         {
           id: 'repos',
           label: 'Repositories',
+          icon: <FolderGit2 size={16} />,
           path: '/settings/repos',
           isActive: currentPath === '/settings/repos',
           type: 'item',
@@ -119,6 +132,7 @@ export function ApplicationMenuItems(
         {
           id: 'hooks',
           label: 'Hooks',
+          icon: <Zap size={16} />,
           path: '/settings/hooks',
           isActive: currentPath === '/settings/hooks',
           type: 'item',
@@ -127,6 +141,7 @@ export function ApplicationMenuItems(
         {
           id: 'prompts',
           label: 'Prompts',
+          icon: <FileText size={16} />,
           path: '/settings/prompts',
           isActive: currentPath === '/settings/prompts',
           type: 'item',
@@ -135,6 +150,7 @@ export function ApplicationMenuItems(
         {
           id: 'memories',
           label: 'Memories',
+          icon: <Brain size={16} />,
           path: '/settings/memories',
           isActive: currentPath === '/settings/memories',
           type: 'item',
@@ -143,6 +159,7 @@ export function ApplicationMenuItems(
         {
           id: 'customers',
           label: 'Customers',
+          icon: <Users size={16} />,
           path: '/settings/customers',
           isActive: currentPath === '/settings/customers',
           type: 'item',
@@ -160,6 +177,7 @@ export function ApplicationMenuItems(
         {
           id: 'system-settings',
           label: 'System',
+          icon: <Sliders size={16} />,
           path: '/settings/system',
           isActive: currentPath === '/settings/system',
           type: 'item',

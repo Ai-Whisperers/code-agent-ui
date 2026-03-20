@@ -328,7 +328,9 @@ export interface KnowledgeStatEntry {
 }
 
 export interface KnowledgeStatsResponse {
-  stats: KnowledgeStatEntry[]
+  jira: number
+  confluence: number
+  jiraAttachment: number
 }
 
 export interface KnowledgeIndexJiraRequest {
@@ -362,17 +364,22 @@ export interface ChatRequest {
 }
 
 export interface ChatEvent {
-  type: 'text' | 'tool_start' | 'tool_end' | 'done' | 'error'
+  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'done' | 'error'
   text?: string
   tool?: string
   error?: string
   conversationId?: string
 }
 
+export type ThinkingStep =
+  | { kind: 'thought'; text: string }
+  | { kind: 'tool'; name: string }
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+  thinkingSteps?: ThinkingStep[]
 }
 
 export interface ConversationSummary {
