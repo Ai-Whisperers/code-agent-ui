@@ -4,6 +4,7 @@ import {
   Settings,
   GitBranch,
   BarChart3,
+  MessageSquare,
   ChevronDown,
 } from 'lucide-react'
 
@@ -56,6 +57,15 @@ export function ApplicationMenuItems(
       isActive: currentPath.startsWith('/plans'),
       type: 'item',
       onClick: () => go('/plans'),
+    },
+    {
+      id: 'chat',
+      label: 'Chat',
+      icon: <MessageSquare size={18} />,
+      path: '/chat',
+      isActive: currentPath === '/chat',
+      type: 'item',
+      onClick: () => go('/chat'),
     },
     {
       id: 'metrics-section',
@@ -128,6 +138,22 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/settings/memories',
           type: 'item',
           onClick: () => go('/settings/memories'),
+        },
+        {
+          id: 'customers',
+          label: 'Customers',
+          path: '/settings/customers',
+          isActive: currentPath === '/settings/customers',
+          type: 'item',
+          onClick: () => go('/settings/customers'),
+        },
+        {
+          id: 'system-settings',
+          label: 'System',
+          path: '/settings/system',
+          isActive: currentPath === '/settings/system',
+          type: 'item',
+          onClick: () => go('/settings/system'),
         },
       ],
     },

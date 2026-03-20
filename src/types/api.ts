@@ -227,3 +227,115 @@ export interface MemoryEntry {
   createdAt: string
   active: boolean
 }
+
+// ---- Customer Registry ----
+
+export interface GitConfig {
+  platform: string
+  workspace: string
+  baseUrl?: string
+}
+
+export interface JiraProjectConfig {
+  baseUrl?: string
+  projects?: Record<string, string>
+}
+
+export interface ConfluenceProductConfig {
+  spaceKey?: string
+  rootPageId?: string
+}
+
+export interface AwsConfig {
+  accountId?: string
+  region?: string
+  iamRole?: string
+}
+
+export interface EnvironmentConfig {
+  name: string
+  aws?: AwsConfig
+  deployedRepos?: string[]
+}
+
+export interface TeamMember {
+  name?: string
+  email?: string
+  jiraAccountId?: string
+  slackId?: string
+}
+
+export interface CustomerConfig {
+  customerId: string
+  name: string
+  metadata?: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ProductConfig {
+  productId: string
+  customerId?: string
+  displayName: string
+  git?: GitConfig
+  jira?: JiraProjectConfig
+  confluence?: ConfluenceProductConfig
+  environments?: EnvironmentConfig[]
+  teams?: Record<string, TeamMember[]>
+  metadata?: Record<string, unknown>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UpsertCustomerRequest {
+  name: string
+  metadata?: Record<string, unknown>
+}
+
+export interface UpsertProductRequest {
+  customerId?: string
+  displayName: string
+  git?: GitConfig
+  jira?: JiraProjectConfig
+  confluence?: ConfluenceProductConfig
+  environments?: EnvironmentConfig[]
+  teams?: Record<string, TeamMember[]>
+  metadata?: Record<string, unknown>
+}
+
+// ---- System Settings ----
+
+export interface SystemSetting {
+  key: string
+  value: string
+  isSecret: boolean
+  description?: string
+  updatedAt?: string
+}
+
+export interface UpsertSettingRequest {
+  value: string
+  isSecret: boolean
+  description?: string
+}
+
+// ---- Chat ----
+
+export interface ChatRequest {
+  message: string
+  productId?: string
+  conversationId?: string
+}
+
+export interface ChatEvent {
+  type: 'text' | 'tool_start' | 'tool_end' | 'done' | 'error'
+  text?: string
+  tool?: string
+  error?: string
+}
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+}

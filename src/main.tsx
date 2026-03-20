@@ -27,6 +27,9 @@ import QualityReportsPage from '@/pages/QualityReports'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import AiStatsPage from '@/pages/AiStats'
 import MemoriesPage from '@/pages/Memories'
+import SystemSettingsPage from '@/pages/SystemSettings'
+import CustomerRegistryPage from '@/pages/CustomerRegistry'
+import ChatPage from '@/pages/Chat'
 import AccessDenied from '@/pages/AccessDenied'
 
 import './styles/index.css'
@@ -175,6 +178,24 @@ const memoriesRoute = createRoute({
   component: MemoriesPage,
 })
 
+const systemSettingsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/system',
+  component: SystemSettingsPage,
+})
+
+const customersRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/customers',
+  component: CustomerRegistryPage,
+})
+
+const chatRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/chat',
+  component: ChatPage,
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -197,6 +218,9 @@ const routeTree = rootRoute.addChildren([
     reviewMetricsRoute,
     aiStatsRoute,
     memoriesRoute,
+    systemSettingsRoute,
+    customersRoute,
+    chatRoute,
   ]),
   accessDeniedRoute,
 ])
