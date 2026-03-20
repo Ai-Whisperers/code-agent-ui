@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useParams } from '@tanstack/react-router'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Components } from 'react-markdown'
@@ -22,11 +23,23 @@ import {
   Filler,
 } from 'chart.js'
 import { Bar, Line, Pie, Doughnut, Radar, PolarArea } from 'react-chartjs-2'
-import { Send, Bot, User, AlertTriangle } from 'lucide-react'
-import { PageHeader } from '@/components/layout/PageHeader'
+import {
+  Send,
+  Bot,
+  User,
+  AlertTriangle,
+  Plus,
+  Pencil,
+  Trash2,
+  Check,
+  X,
+  MessageSquare,
+  PanelLeftOpen,
+  PanelLeftClose,
+} from 'lucide-react'
 import api from '@/lib/api'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ProductConfig } from '@/types/api'
+import type { ChatEvent, ChatMessage, ProductConfig, ConversationSummary } from '@/types/api'
 
 ChartJS.register(
   CategoryScale,
@@ -444,19 +457,262 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   )
 }
 
+// ── Conversation helpers ────────────────────────────────────────────────────────
+
+const CONV_LS_KEY = (id: string) => `conv_messages_${id}`
+
+function saveMessagesToStorage(id: string, msgs: ChatMessage[]) {
+  try {
+    localStorage.setItem(CONV_LS_KEY(id), JSON.stringify(msgs))
+  } catch {
+    // storage quota exceeded — silently ignore
+  }
+}
+
+function loadMessagesFromStorage(id: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(CONV_LS_KEY(id))
+    if (!raw) return []
+    return JSON.parse(raw) as ChatMessage[]
+  } catch {
+    return []
+  }
+}
+
+type ConvGroup = { label: string; items: ConversationSummary[] }
+
+function groupConversations(convs: ConversationSummary[]): ConvGroup[] {
+  const now = new Date()
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
+  const sevenDaysAgo = new Date(todayStart.getTime() - 7 * 86_400_000)
+
+  const groups: ConvGroup[] = [
+    { label: 'Today', items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'Previous 7 days', items: [] },
+    { label: 'Older', items: [] },
+  ]
+
+  for (const conv of convs) {
+    const d = new Date(conv.updatedAt)
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+    if (dayStart >= todayStart) groups[0].items.push(conv)
+    else if (dayStart >= yesterdayStart) groups[1].items.push(conv)
+    else if (d >= sevenDaysAgo) groups[2].items.push(conv)
+    else groups[3].items.push(conv)
+  }
+
+  return groups.filter((g) => g.items.length > 0)
+}
+
+// ── ConversationSidebar ────────────────────────────────────────────────────────
+
+function ConversationSidebar({
+  activeId,
+  onSelect,
+  onNewChat,
+}: {
+  activeId: string | null
+  onSelect: (id: string) => void
+  onNewChat: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const { data: conversations = [], isLoading } = useQuery<ConversationSummary[]>({
+    queryKey: ['conversations'],
+    queryFn: () => api.get('/conversations').then((r) => r.data),
+  })
+
+  const groups = groupConversations(conversations)
+
+  const startRename = (conv: ConversationSummary, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setRenamingId(conv.conversationId)
+    setRenameValue(conv.title)
+  }
+
+  const commitRename = async (id: string) => {
+    const title = renameValue.trim()
+    if (!title) {
+      setRenamingId(null)
+      return
+    }
+    try {
+      await api.patch(`/conversations/${id}/title`, { title })
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    } finally {
+      setRenamingId(null)
+    }
+  }
+
+  const handleDelete = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDeletingId(id)
+    try {
+      await api.delete(`/conversations/${id}`)
+      localStorage.removeItem(CONV_LS_KEY(id))
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* New chat */}
+      <div className="shrink-0 p-3 border-b border-[var(--color-cards-card-stroke)]">
+        <button
+          onClick={onNewChat}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] hover:bg-[var(--color-cards-card-background)] text-sm text-[var(--color-fonts-font-color-primary)] transition-colors"
+        >
+          <Plus size={14} />
+          New chat
+        </button>
+      </div>
+
+      {/* List */}
+      <div className="flex-1 overflow-y-auto py-2">
+        {isLoading && (
+          <p className="px-4 py-4 text-xs text-center text-[var(--color-fonts-font-color-support)]">
+            Loading…
+          </p>
+        )}
+        {!isLoading && conversations.length === 0 && (
+          <div className="px-4 py-10 flex flex-col items-center gap-2 text-center">
+            <MessageSquare
+              size={22}
+              className="text-[var(--color-fonts-font-color-support)] opacity-30"
+            />
+            <p className="text-xs text-[var(--color-fonts-font-color-support)]">
+              No conversations yet
+            </p>
+          </div>
+        )}
+        {groups.map((group) => (
+          <div key={group.label}>
+            <p className="px-3 pt-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)] opacity-50 select-none">
+              {group.label}
+            </p>
+            {group.items.map((conv) => {
+              const isActive = activeId === conv.conversationId
+              const isRenaming = renamingId === conv.conversationId
+              const isDeleting = deletingId === conv.conversationId
+
+              return (
+                <div
+                  key={conv.conversationId}
+                  onClick={() => !isRenaming && onSelect(conv.conversationId)}
+                  className={`group relative flex items-center gap-2 mx-1.5 px-2.5 py-2 rounded-[var(--border-radius-button-small)] cursor-pointer transition-colors ${
+                    isActive
+                      ? 'bg-[var(--color-buttons-button-primary)] text-white'
+                      : 'hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)]'
+                  } ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}
+                >
+                  {isRenaming ? (
+                    <div
+                      className="flex-1 flex items-center gap-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') commitRename(conv.conversationId)
+                          if (e.key === 'Escape') setRenamingId(null)
+                        }}
+                        onBlur={() => commitRename(conv.conversationId)}
+                        className="flex-1 min-w-0 bg-transparent border-b border-current text-sm outline-none"
+                      />
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          commitRename(conv.conversationId)
+                        }}
+                        className="shrink-0 opacity-80 hover:opacity-100"
+                      >
+                        <Check size={12} />
+                      </button>
+                      <button
+                        onMouseDown={(e) => {
+                          e.preventDefault()
+                          setRenamingId(null)
+                        }}
+                        className="shrink-0 opacity-80 hover:opacity-100"
+                      >
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="flex-1 min-w-0 text-sm truncate">{conv.title}</span>
+                      <div
+                        className={`shrink-0 hidden group-hover:flex items-center gap-0.5 ${isActive ? 'text-white/70' : 'text-[var(--color-fonts-font-color-support)]'}`}
+                      >
+                        <button
+                          onClick={(e) => startRename(conv, e)}
+                          className="p-0.5 rounded hover:opacity-100 opacity-60 transition-opacity"
+                          title="Rename"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                        <button
+                          onClick={(e) => handleDelete(conv.conversationId, e)}
+                          className={`p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity ${isActive ? 'hover:text-red-300' : 'hover:text-red-500'}`}
+                          title="Delete"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Chat page ──────────────────────────────────────────────────────────────────
 
 export default function Chat() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const params = useParams({ strict: false }) as { conversationId?: string }
+
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingContent, setStreamingContent] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
   const [activeTool, setActiveTool] = useState<string | null>(null)
   const [selectedProductId, setSelectedProductId] = useState('')
   const [input, setInput] = useState('')
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(
+    params.conversationId ?? null,
+  )
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
-  const conversationId = useRef(crypto.randomUUID())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Load messages from localStorage when route param changes (page load / back-forward)
+  useEffect(() => {
+    const id = params.conversationId
+    if (id) {
+      setActiveConversationId(id)
+      setMessages(loadMessagesFromStorage(id))
+    } else {
+      setActiveConversationId(null)
+      setMessages([])
+    }
+  }, [params.conversationId])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -476,8 +732,8 @@ export default function Chat() {
       setIsStreaming(true)
       setStreamingContent('')
       setActiveTool(null)
+      setMobileSidebarOpen(false)
 
-      // Reset textarea height
       if (textareaRef.current) {
         textareaRef.current.style.height = 'auto'
       }
@@ -498,7 +754,7 @@ export default function Chat() {
           body: JSON.stringify({
             message: text.trim(),
             ...(selectedProductId ? { productId: selectedProductId } : {}),
-            conversationId: conversationId.current,
+            ...(activeConversationId ? { conversationId: activeConversationId } : {}),
           }),
         })
 
@@ -541,15 +797,30 @@ export default function Chat() {
               case 'tool_end':
                 setActiveTool(null)
                 break
-              case 'done':
-                setMessages((prev) => [
-                  ...prev,
-                  { id: crypto.randomUUID(), role: 'assistant', content: accumulatedContent },
-                ])
+              case 'done': {
+                const assistantMsg: ChatMessage = {
+                  id: crypto.randomUUID(),
+                  role: 'assistant',
+                  content: accumulatedContent,
+                }
+                setMessages((prev) => {
+                  const next = [...prev, assistantMsg]
+                  // Persist display history to localStorage
+                  const convId = event.conversationId ?? activeConversationId
+                  if (convId) saveMessagesToStorage(convId, next)
+                  return next
+                })
                 setStreamingContent('')
                 setIsStreaming(false)
                 setActiveTool(null)
+                // Navigate to the conversation URL if we just created a new one
+                if (event.conversationId && event.conversationId !== activeConversationId) {
+                  setActiveConversationId(event.conversationId)
+                  navigate({ to: '/chat/$conversationId', params: { conversationId: event.conversationId } })
+                }
+                queryClient.invalidateQueries({ queryKey: ['conversations'] })
                 return
+              }
               case 'error':
                 setMessages((prev) => [
                   ...prev,
@@ -589,8 +860,30 @@ export default function Chat() {
         setActiveTool(null)
       }
     },
-    [isStreaming, selectedProductId],
+    [isStreaming, selectedProductId, activeConversationId, navigate, queryClient],
   )
+
+  const handleSelectConversation = useCallback(
+    (id: string) => {
+      setActiveConversationId(id)
+      setMessages(loadMessagesFromStorage(id))
+      setStreamingContent('')
+      setActiveTool(null)
+      setMobileSidebarOpen(false)
+      navigate({ to: '/chat/$conversationId', params: { conversationId: id } })
+    },
+    [navigate],
+  )
+
+  const handleNewChat = useCallback(() => {
+    setActiveConversationId(null)
+    setMessages([])
+    setStreamingContent('')
+    setActiveTool(null)
+    setInput('')
+    setMobileSidebarOpen(false)
+    navigate({ to: '/chat' })
+  }, [navigate])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -607,107 +900,192 @@ export default function Chat() {
 
   return (
     <div
-      className="-mx-8 -my-6 flex flex-col bg-[var(--color-page-background)]"
+      className="-mx-8 -my-6 flex bg-[var(--color-page-background)]"
       style={{ height: '100dvh' }}
     >
-      {/* Header */}
-      <div className="shrink-0 px-8 pt-6 pb-4 border-b border-[var(--color-cards-card-stroke)]">
-        <PageHeader
-          title="AI Chat"
-          subtitle="Ask anything about your codebase, team, or architecture."
-          actions={<ProductSelector value={selectedProductId} onChange={setSelectedProductId} />}
+      {/* ── Mobile sidebar overlay backdrop ── */}
+      {mobileSidebarOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-black/40 sm:hidden"
+          onClick={() => setMobileSidebarOpen(false)}
         />
-      </div>
+      )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-8 py-6 space-y-6">
-        {messages.length === 0 && !isStreaming && (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
-            <div className="w-14 h-14 rounded-2xl bg-[var(--color-buttons-button-primary)] flex items-center justify-center shadow-lg">
-              <Bot size={28} className="text-white" />
-            </div>
-            <div>
-              <p className="text-[var(--color-fonts-font-color-headings)] font-semibold text-base">
-                How can I help you today?
-              </p>
-              <p className="text-[var(--color-fonts-font-color-support)] text-sm mt-1 max-w-sm">
-                Ask about your codebase, architecture, team members, or anything else. Select a
-                product above to scope the context.
-              </p>
-            </div>
-          </div>
-        )}
-
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
-        ))}
-
-        {/* In-flight assistant message */}
-        {isStreaming && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-full bg-[var(--color-buttons-button-primary)] flex items-center justify-center shrink-0 mt-0.5">
-              <Bot size={15} className="text-white" />
-            </div>
-            <div className="flex-1 min-w-0">
-              {activeTool && <ToolActivityBadge tool={activeTool} />}
-              <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] rounded-tl-sm px-4 py-3">
-                {streamingContent ? (
-                  <MarkdownMessage content={streamingContent} />
-                ) : (
-                  <div className="flex items-center gap-1.5 py-1">
-                    <span
-                      className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                      style={{ animationDelay: '0ms' }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                      style={{ animationDelay: '150ms' }}
-                    />
-                    <span
-                      className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                      style={{ animationDelay: '300ms' }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input bar */}
-      <div className="shrink-0 px-8 py-4 border-t border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
-        <div className="flex gap-3 items-end">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onInput={handleInput}
-            placeholder={
-              isStreaming
-                ? 'Waiting for response…'
-                : 'Ask anything… (Enter to send, Shift+Enter for newline)'
-            }
-            disabled={isStreaming}
-            rows={1}
-            className="flex-1 px-4 py-2.5 rounded-[var(--border-radius-button)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            style={{ maxHeight: '160px', overflowY: 'auto' }}
-          />
+      {/* ── Conversation sidebar (desktop) ── */}
+      <div
+        className={`hidden sm:flex flex-col shrink-0 border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] transition-all duration-200 overflow-hidden ${
+          sidebarOpen ? 'w-64' : 'w-0'
+        }`}
+      >
+        <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2">
+          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+            Conversations
+          </span>
           <button
-            onClick={() => sendMessage(input)}
-            disabled={!input.trim() || isStreaming}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-button)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            onClick={() => setSidebarOpen(false)}
+            className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+            title="Collapse sidebar"
           >
-            <Send size={15} />
-            Send
+            <PanelLeftClose size={15} />
           </button>
         </div>
-        <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-2">
-          Responses may include Markdown, Mermaid diagrams, Chart.js charts, and syntax-highlighted code.
-        </p>
+        <div className="flex-1 overflow-hidden">
+          <ConversationSidebar
+            activeId={activeConversationId}
+            onSelect={handleSelectConversation}
+            onNewChat={handleNewChat}
+          />
+        </div>
+      </div>
+
+      {/* ── Conversation sidebar (mobile drawer) ── */}
+      <div
+        className={`fixed top-0 left-0 bottom-0 z-30 w-72 flex flex-col border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] sm:hidden transition-transform duration-200 ${
+          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2 border-b border-[var(--color-cards-card-stroke)]">
+          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+            Conversations
+          </span>
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <ConversationSidebar
+            activeId={activeConversationId}
+            onSelect={handleSelectConversation}
+            onNewChat={handleNewChat}
+          />
+        </div>
+      </div>
+
+      {/* ── Main chat panel ── */}
+      <div className="flex-1 min-w-0 flex flex-col">
+        {/* Header */}
+        <div className="shrink-0 flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--color-cards-card-stroke)]">
+          {/* Toggle buttons */}
+          <button
+            onClick={() => setMobileSidebarOpen(true)}
+            className="sm:hidden p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+            title="Open conversations"
+          >
+            <PanelLeftOpen size={17} />
+          </button>
+          {!sidebarOpen && (
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="hidden sm:flex p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+              title="Open conversations"
+            >
+              <PanelLeftOpen size={17} />
+            </button>
+          )}
+
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] truncate">
+              AI Chat
+            </p>
+          </div>
+
+          <ProductSelector value={selectedProductId} onChange={setSelectedProductId} />
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
+          {messages.length === 0 && !isStreaming && (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--color-buttons-button-primary)] flex items-center justify-center shadow-lg">
+                <Bot size={28} className="text-white" />
+              </div>
+              <div>
+                <p className="text-[var(--color-fonts-font-color-headings)] font-semibold text-base">
+                  How can I help you today?
+                </p>
+                <p className="text-[var(--color-fonts-font-color-support)] text-sm mt-1 max-w-sm">
+                  Ask about your codebase, architecture, team members, or anything else. Select a
+                  product above to scope the context.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} />
+          ))}
+
+          {/* In-flight assistant message */}
+          {isStreaming && (
+            <div className="flex gap-3">
+              <div className="w-8 h-8 rounded-full bg-[var(--color-buttons-button-primary)] flex items-center justify-center shrink-0 mt-0.5">
+                <Bot size={15} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                {activeTool && <ToolActivityBadge tool={activeTool} />}
+                <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] rounded-tl-sm px-4 py-3">
+                  {streamingContent ? (
+                    <MarkdownMessage content={streamingContent} />
+                  ) : (
+                    <div className="flex items-center gap-1.5 py-1">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      />
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      />
+                      <span
+                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input bar */}
+        <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
+          <div className="flex gap-3 items-end">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onInput={handleInput}
+              placeholder={
+                isStreaming
+                  ? 'Waiting for response…'
+                  : 'Ask anything… (Enter to send, Shift+Enter for newline)'
+              }
+              disabled={isStreaming}
+              rows={1}
+              className="flex-1 px-4 py-2.5 rounded-[var(--border-radius-button)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{ maxHeight: '160px', overflowY: 'auto' }}
+            />
+            <button
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || isStreaming}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-button)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+            >
+              <Send size={15} />
+              Send
+            </button>
+          </div>
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-2">
+            Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
+            syntax-highlighted code.
+          </p>
+        </div>
       </div>
     </div>
   )

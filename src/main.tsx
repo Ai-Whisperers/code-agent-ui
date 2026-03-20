@@ -28,6 +28,7 @@ import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import AiStatsPage from '@/pages/AiStats'
 import MemoriesPage from '@/pages/Memories'
 import SystemSettingsPage from '@/pages/SystemSettings'
+import KnowledgeIndexPage from '@/pages/KnowledgeIndex'
 import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
 import AccessDenied from '@/pages/AccessDenied'
@@ -184,6 +185,12 @@ const systemSettingsRoute = createRoute({
   component: SystemSettingsPage,
 })
 
+const knowledgeIndexRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/knowledge',
+  component: KnowledgeIndexPage,
+})
+
 const customersRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/customers',
@@ -193,6 +200,12 @@ const customersRoute = createRoute({
 const chatRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/chat',
+  component: ChatPage,
+})
+
+const chatConvRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/chat/$conversationId',
   component: ChatPage,
 })
 
@@ -219,8 +232,10 @@ const routeTree = rootRoute.addChildren([
     aiStatsRoute,
     memoriesRoute,
     systemSettingsRoute,
+    knowledgeIndexRoute,
     customersRoute,
     chatRoute,
+    chatConvRoute,
   ]),
   accessDeniedRoute,
 ])

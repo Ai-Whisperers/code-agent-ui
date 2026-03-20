@@ -319,6 +319,40 @@ export interface UpsertSettingRequest {
   description?: string
 }
 
+// ---- Knowledge Index ----
+
+export interface KnowledgeStatEntry {
+  sourceType: string
+  count: number
+  lastIndexed: string | null
+}
+
+export interface KnowledgeStatsResponse {
+  stats: KnowledgeStatEntry[]
+}
+
+export interface KnowledgeIndexJiraRequest {
+  projectKey: string
+}
+
+export interface KnowledgeIndexConfluenceRequest {
+  spaceKey: string
+}
+
+export interface KnowledgeSearchResult {
+  id: string
+  sourceType: string
+  title: string
+  content: string
+  score: number
+  url?: string
+}
+
+export interface KnowledgeSearchResponse {
+  results: KnowledgeSearchResult[]
+  total: number
+}
+
 // ---- Chat ----
 
 export interface ChatRequest {
@@ -332,10 +366,20 @@ export interface ChatEvent {
   text?: string
   tool?: string
   error?: string
+  conversationId?: string
 }
 
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface ConversationSummary {
+  conversationId: string
+  title: string
+  productId?: string
+  createdAt: string
+  updatedAt: string
+  messageCount: number
 }

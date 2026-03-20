@@ -6,6 +6,7 @@ import {
   BarChart3,
   MessageSquare,
   ChevronDown,
+  BookOpen,
 } from 'lucide-react'
 
 export interface NavigationMenuItem {
@@ -146,6 +147,15 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/settings/customers',
           type: 'item',
           onClick: () => go('/settings/customers'),
+        },
+        {
+          id: 'knowledge-index',
+          label: 'Knowledge Index',
+          icon: <BookOpen size={16} />,
+          path: '/settings/knowledge',
+          isActive: currentPath === '/settings/knowledge',
+          type: 'item',
+          onClick: () => go('/settings/knowledge'),
         },
         {
           id: 'system-settings',
