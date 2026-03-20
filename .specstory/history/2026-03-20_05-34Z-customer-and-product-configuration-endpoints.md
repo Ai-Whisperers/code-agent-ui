@@ -1064,7 +1064,204 @@ Now I have a clear picture of the current code. Let me plan the changes needed:
    **`blankProduct()`**: Remove `customers` param and `customerId` field
    
    **`productToForm()`**: Remove `customerId`
-</details></think>
+   
+   **`formToRequest()`**: Remove `customerId` from output
+   
+   **`GeneralTab`**: Remove `customers` prop and customer selector section (keep Product ID, Display Name, Git config)
+   
+   **`ProductModal`**: 
+   - Remove `customers` and `preselectedCustomer` props
+   - Fix `handleSubmit` to not check `form.customerId`
+   - Fix submit disabled condition
+   
+   **`ProductsTab`**: 
+   - Remove `customers`/`customersLoading` props
+   - Load from `GET /customer-registry/products` (no customer filter)
+   - Remove customer filtering logic and simplify the query to always run with just `['products']` as the key
+   
+   **`CustomersTab`**: Now I need to add expandable rows so each customer can show their linked products. When expanded, it'll fetch that customer's products and display them as chips, with inline controls to link new products via a select dropdown and unlink existing ones. The linking and unlinking will hit the appropriate PUT and DELETE endpoints.
+   
+   **`Main page`**: `ProductsTab` no longer needs the customers data passed down, and I'll keep the overall structure of `CustomerRegistryPage` intact.
+
+Now I'm building the `CustomerRow` component with expand/collapse functionality. Setting up the query to fetch linked products only when expanded, and creating mutations for linking and unlinking products... Building the customer row UI... Writing the product list UI...
+
+Now I'm realizing the data flow issue—`allProducts` lives in `ProductsTab` but I need it accessible in `CustomersTab` for the linking dropdown. I should lift that data up to the parent level so both tabs can access it, rather than having each tab load its own copy.
+
+Actually, since both tabs will query the same `['products']` key with react-query, the cache will handle deduplication automatically. So `CustomersTab` can independently load all products for its link dropdowns, and it'll reuse the cached data if `ProductsTab` already fetched it.
+
+Let me restructure: the main page loads customers, `CustomersTab` loads all products for the linking UI, and `ProductsTab` also loads all products for display. The query cache keeps everything in sync. I'll start rewriting `CustomerRegistry.tsx` with these changes, removing `customerId` from the product form since products aren't customer-specific.
+
+Now I'm going through the specific updates needed across the components and API types...
+
+Since products are now independent entities that can link to multiple customers, the `customerId` field in `ProductConfig` doesn't make sense as a single value anymore—I'll make it optional. Same with `UpsertProductRequest`, though ideally it shouldn't be there at all since linking happens separately, but I'll keep it optional for backend compatibility.</details></think>
+
+---
+
+Now I have a clear picture of all the changes needed. Here's my approach:
+
+1. **`api.ts`**: Make `customerId` optional on `ProductConfig` and `UpsertProductRequest`
+2. **`CustomerRegistry.tsx`**:
+   - `ProductFormState` / `blankProduct` / `productToForm` / `formToRequest`: strip `customerId`
+   - `GeneralTab`: remove customer selector
+   - `ProductModal`: remove customer-related props, fix submit guard
+   - `ProductsTab`: load from `GET /customer-registry/products` (always-on, no customer filter)
+   - `CustomersTab` + new `CustomerRow`: expandable rows showing linked products with link/unlink via the two new endpoints
+
+Let me make the changes:
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/gerbert/Documents/workspace_ai/code-agent-ui/src/types/api.ts</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/gerbert/Documents/workspace_ai/code-agent-ui/src/types/api.ts</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+Now rewrite `CustomerRegistry.tsx` with all the changes in one shot:
+
+---
+
+<tool-use data-tool-type="write" data-tool-name="edit_file_v2">
+
+<details><summary>Tool use: **edit_file_v2** • Edit file: /Users/gerbert/Documents/workspace_ai/code-agent-ui/src/pages/CustomerRegistry.tsx</summary>
+
+</details>
+
+</tool-use>
+
+---
+
+<tool-use data-tool-type="unknown" data-tool-name="read_lints">
+<details>
+<summary>Tool use: **read_lints**</summary>
+
+
+Parameters:
+
+```json
+{
+  "paths": [
+    "/Users/gerbert/Documents/workspace_ai/code-agent-ui/src/pages/CustomerRegistry.tsx",
+    "/Users/gerbert/Documents/workspace_ai/code-agent-ui/src/types/api.ts"
+  ]
+}
+```
+Result:
+
+```json
+{
+  "linterErrorsByFile": [
+    {
+      "relativeWorkspacePath": "/Users/gerbert/Documents/workspace_ai/code-agent-ui/src/pages/CustomerRegistry.tsx"
+    },
+    {
+      "relativeWorkspacePath": "/Users/gerbert/Documents/workspace_ai/code-agent-ui/src/types/api.ts"
+    }
+  ]
+}
+```
+Status: **completed**
+
+
+</details>
+</tool-use>
+
+---
+
+Clean. Let me do a quick verification of the key structural changes:
+
+---
+
+<tool-use data-tool-type="shell" data-tool-name="run_terminal_command_v2">
+<details><summary>Tool use: **run_terminal_command_v2** • Run command: cd /Users/gerbert/Documents/workspace_ai/code-agent-ui && grep -n 'customer-registry/products\|customer-registry/customers.*products\|PUT.*products.*\|DELETE.*products' src/pages/CustomerRegistry.tsx</summary>
+
+```bash
+cd /Users/gerbert/Documents/workspace_ai/code-agent-ui && grep -n 'customer-registry/products\|customer-registry/customers.*products\|PUT.*products.*\|DELETE.*products' src/pages/CustomerRegistry.tsx
+```
+
+```
+878:        .get(&#96;/customer-registry/customers/${customer.customerId}/products&#96;)
+886:      api.put(&#96;/customer-registry/customers/${customer.customerId}/products/${pid}&#96;, {}),
+897:      api.delete(&#96;/customer-registry/customers/${customer.customerId}/products/${pid}&#96;),
+1166:      api.get('/customer-registry/products').then((r) =&gt; r.data).catch(() =&gt; []),
+1171:      api.put(&#96;/customer-registry/products/${id}&#96;, req),
+1182:    mutationFn: (id: string) =&gt; api.delete(&#96;/customer-registry/products/${id}&#96;),
+1319:      api.get('/customer-registry/products').then((r) =&gt; r.data).catch(() =&gt; []),
+
+```
+</details>
+</tool-use>
+
+---
+
+All endpoints are wired correctly. Here's a summary of every change made:
+
+---
+
+**`src/types/api.ts`**
+- `ProductConfig.customerId` → now `optional` (products are no longer exclusively owned by one customer)
+- `UpsertProductRequest.customerId` → now `optional` (the backend no longer requires it in the body)
+
+**`src/pages/CustomerRegistry.tsx`** — restructured in three areas:
+
+**Product form (decoupled from customers):**
+- Removed `customerId` from `ProductFormState`, `blankProduct()`, `productToForm()`, and `formToRequest()`
+- `GeneralTab` no longer has a customer selector — just Product ID, Display Name, and Git config
+- `ProductModal` submit guard no longer checks for `customerId`
+
+**Products tab (now global):**
+- Queries `GET /customer-registry/products` — always enabled, no customer filter
+- No customer dropdown or "select a customer" gating — shows all products immediately
+- Toolbar is just search + "Add Product"
+
+**Customers tab (expandable rows with linking):**
+- Each customer row has a chevron toggle; expanding it reveals a "Linked Products" panel
+- Panel fetches `GET /customer-registry/customers/{cid}/products` lazily (only when expanded)
+- Each linked product shows its display name, productId badge, platform badge, and an **Unlink** (×) button → `DELETE /customer-registry/customers/{cid}/products/{pid}`
+- A select dropdown at the bottom of the panel lists all products *not yet linked* to that customer → **Link** button → `PUT /customer-registry/customers/{cid}/products/{pid}`
+- The main page pre-fetches all products at startup (shared `queryKey: ['products']` cache) so the link dropdown is populated immediately without an extra request
+
+---
+
+_**User**_
+
+We should not have to enter a platform and workspace manually for the product repo. We have all the repositories already. I can just select one or more repositories that are part of the product.
+
+---
+
+_**Agent (model claude-4.6-sonnet-medium-thinking, mode Agent)**_
+
+<think><details><summary>Thought Process</summary>
+The user wants to change the product configuration so that instead of manually entering a Git platform and workspace, they can select from existing repositories that are already configured in the system.
+
+Let me look at the existing RepoSettings to understand how repositories are stored and what data they have.
+
+From the types I already read, `RepoSettings` has:
+- `workspace: string`
+- `repoSlug: string`
+- `gitPlatformUrl?: string`
+- etc.
+
+So instead of manually entering `gitPlatform` and `gitWorkspace`, the user should be able to select repositories from the existing repo settings. The product's Git config would then be derived from the selected repositories.
+
+
+Now I'm examining the data model to understand the distinction between the product-level Git configuration and individual repository settings. The `GitConfig` record defines the platform, workspace, and base URL at the product level, while `EnvironmentConfig` tracks individual deployed repositories by their slugs. I need to clarify whether replacing the manual Git configuration fields with a repository selector would affect how the product-level Git settings are determined. So the user wants repositories to be selectable from existing `repo_settings` records, which means the product would reference multiple repos rather than storing manual Git configuration. Since `repo_settings` already has workspace and platform information, I can infer the Git config from the selected repositories instead of requiring manual entry. The challenge is that the current API expects a `GitConfig` object, so I need to figure out whether to store repo references in the product or derive the Git config from the linked repos. Looking at the data model, repos are linked to products through a foreign key on `repo_settings`, not the other way around—so to associate repos with a product, I'd need to update each repo's `product_id` field. The challenge is that the current API endpoint for updating repo settings doesn't have a `productId` parameter, so I need to figure out the simplest approach that works with the existing infrastructure and makes sense from a UI standpoint.
+
+I could store associated repo slugs in the `ProductConfig`'s metadata field rather than modifying the backend, then auto-populate the git platform and workspace from the first selected repo when the user picks repos from a multi-select in the product modal. from the first selected repo. The key decision is whether to store the selected repo slugs in the product's metadata or derive them from the environments—metadata seems cleaner since environments are stage-specific. Ultimately, the user wants a simpler flow: pick repos they already know, and have the platform and workspace auto-populate from those selections, with the repo list stored somewhere accessible. of individual repo slugs. Let me look</details></think>
 
 ---
 

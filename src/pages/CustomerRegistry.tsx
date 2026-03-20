@@ -16,6 +16,7 @@ import api from '@/lib/api'
 import type {
   CustomerConfig,
   ProductConfig,
+  RepoSettings,
   UpsertCustomerRequest,
   UpsertProductRequest,
   EnvironmentConfig,
@@ -37,6 +38,17 @@ const btnPrimary =
 
 const btnSecondary =
   'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors disabled:opacity-40'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function detectPlatform(gitPlatformUrl?: string): string {
+  if (!gitPlatformUrl) return 'bitbucket'
+  const u = gitPlatformUrl.toLowerCase()
+  if (u.includes('github.com')) return 'github'
+  if (u.includes('gitlab.com')) return 'gitlab'
+  if (u.includes('dev.azure.com') || u.includes('visualstudio.com')) return 'azuredevops'
+  return 'bitbucket'
+}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 
@@ -183,11 +195,125 @@ const TEAM_ROLES: Array<{ key: string; label: string }> = [
   { key: 'supportQueue', label: 'Support Queue' },
 ]
 
-const GIT_PLATFORMS = ['bitbucket', 'github', 'gitlab', 'azuredevops']
+// ── Repo selector ─────────────────────────────────────────────────────────────
+
+function RepoSelector({
+  selected,
+  onToggle,
+  repos,
+  isLoading,
+}: {
+  selected: string[]
+  onToggle: (slug: string, repo: RepoSettings) => void
+  repos: RepoSettings[]
+  isLoading: boolean
+}) {
+  const [filter, setFilter] = useState('')
+  const lower = filter.toLowerCase()
+
+  const visible = repos.filter(
+    (r) =>
+      !lower ||
+      r.repoSlug.toLowerCase().includes(lower) ||
+      r.workspace.toLowerCase().includes(lower),
+  )
+
+  const groups: Record<string, RepoSettings[]> = {}
+  visible.forEach((r) => {
+    if (!groups[r.workspace]) groups[r.workspace] = []
+    groups[r.workspace].push(r)
+  })
+
+  return (
+    <div>
+      <input
+        type="text"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filter repositories…"
+        className={inputCls}
+      />
+
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {selected.map((slug) => (
+            <span
+              key={slug}
+              className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]"
+            >
+              {slug}
+              <button
+                type="button"
+                onClick={() => {
+                  const repo = repos.find((r) => r.repoSlug === slug)
+                  if (repo) onToggle(slug, repo)
+                }}
+                className="hover:opacity-70"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isLoading && (
+        <div className="h-28 skeleton-shimmer rounded-[var(--border-radius-card)] mt-2" />
+      )}
+
+      {!isLoading && (
+        <div className="mt-2 border border-[var(--color-inputs-input-border)] rounded-[var(--border-radius-card)] max-h-52 overflow-y-auto">
+          {Object.keys(groups).length === 0 ? (
+            <div className="px-3 py-4 text-center text-xs text-[var(--color-fonts-font-color-support)]">
+              {filter ? `No repositories match "${filter}".` : 'No repositories available.'}
+            </div>
+          ) : (
+            Object.entries(groups).map(([workspace, wsRepos]) => (
+              <div key={workspace}>
+                <div className="px-3 py-1.5 bg-[var(--color-navigation-menu-item-hover-background)] sticky top-0">
+                  <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)]">
+                    {workspace}
+                  </span>
+                </div>
+                {wsRepos.map((repo, idx) => (
+                  <label
+                    key={repo.repoSlug}
+                    className={`flex items-center gap-2.5 px-3 py-2 hover:bg-[var(--color-navigation-menu-item-hover-background)] cursor-pointer ${
+                      idx < wsRepos.length - 1
+                        ? 'border-b border-[var(--color-cards-card-stroke)]'
+                        : ''
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(repo.repoSlug)}
+                      onChange={() => onToggle(repo.repoSlug, repo)}
+                      className="rounded accent-[var(--color-buttons-button-primary)]"
+                    />
+                    <span className="text-sm text-[var(--color-fonts-font-color-primary)]">
+                      {repo.repoSlug}
+                    </span>
+                    {repo.archetype && (
+                      <span className="ml-auto text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                        {repo.archetype}
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface ProductFormState {
   productId: string
   displayName: string
+  selectedRepos: string[]
+  // Derived from selectedRepos — not shown as manual inputs
   gitPlatform: string
   gitWorkspace: string
   gitBaseUrl: string
@@ -203,6 +329,7 @@ function blankProduct(): ProductFormState {
   return {
     productId: '',
     displayName: '',
+    selectedRepos: [],
     gitPlatform: 'bitbucket',
     gitWorkspace: '',
     gitBaseUrl: '',
@@ -216,9 +343,11 @@ function blankProduct(): ProductFormState {
 }
 
 function productToForm(p: ProductConfig): ProductFormState {
+  const savedRepos = Array.isArray(p.metadata?.repos) ? (p.metadata.repos as string[]) : []
   return {
     productId: p.productId,
     displayName: p.displayName,
+    selectedRepos: savedRepos,
     gitPlatform: p.git?.platform ?? 'bitbucket',
     gitWorkspace: p.git?.workspace ?? '',
     gitBaseUrl: p.git?.baseUrl ?? '',
@@ -237,10 +366,13 @@ function formToRequest(f: ProductFormState): UpsertProductRequest {
     if (role.trim() && key.trim()) projects[role.trim()] = key.trim()
   })
 
+  const metadata: Record<string, unknown> =
+    f.selectedRepos.length > 0 ? { repos: f.selectedRepos } : {}
+
   return {
     displayName: f.displayName,
     git:
-      f.gitPlatform || f.gitWorkspace
+      f.gitWorkspace
         ? { platform: f.gitPlatform, workspace: f.gitWorkspace, baseUrl: f.gitBaseUrl || undefined }
         : undefined,
     jira:
@@ -253,6 +385,7 @@ function formToRequest(f: ProductFormState): UpsertProductRequest {
         : undefined,
     environments: f.environments.length > 0 ? f.environments : undefined,
     teams: Object.keys(f.teams).length > 0 ? f.teams : undefined,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   }
 }
 
@@ -267,6 +400,36 @@ function GeneralTab({
   set: <K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) => void
   isEdit: boolean
 }) {
+  const { data: repoData, isLoading: reposLoading } = useQuery<RepoSettings[]>({
+    queryKey: ['repos'],
+    queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
+  })
+
+  const repos = (Array.isArray(repoData) ? repoData : []).filter((r) => !r.archived)
+
+  function handleToggleRepo(slug: string, repo: RepoSettings) {
+    const isSelected = form.selectedRepos.includes(slug)
+    const updated = isSelected
+      ? form.selectedRepos.filter((s) => s !== slug)
+      : [...form.selectedRepos, slug]
+
+    set('selectedRepos', updated)
+
+    // Derive git workspace / platform from the first selected repo
+    const firstSlug = updated[0]
+    const firstRepo = firstSlug ? repos.find((r) => r.repoSlug === firstSlug) : null
+
+    if (firstRepo) {
+      set('gitWorkspace', firstRepo.workspace)
+      set('gitBaseUrl', firstRepo.gitPlatformUrl ?? '')
+      set('gitPlatform', detectPlatform(firstRepo.gitPlatformUrl))
+    } else {
+      set('gitWorkspace', '')
+      set('gitBaseUrl', '')
+      set('gitPlatform', 'bitbucket')
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -298,43 +461,31 @@ function GeneralTab({
       </div>
 
       <div className="pt-2">
-        <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-3 uppercase tracking-wide">
-          Git Configuration
+        <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-1 uppercase tracking-wide">
+          Repositories
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Platform</label>
-            <select
-              className={selectCls}
-              value={form.gitPlatform}
-              onChange={(e) => set('gitPlatform', e.target.value)}
-            >
-              {GIT_PLATFORMS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={labelCls}>Workspace / Org Slug</label>
-            <input
-              className={inputCls}
-              value={form.gitWorkspace}
-              onChange={(e) => set('gitWorkspace', e.target.value)}
-              placeholder="e.g. acme-org"
-            />
-          </div>
-        </div>
-        <div className="mt-4">
-          <label className={labelCls}>Base URL (self-hosted only)</label>
-          <input
-            className={inputCls}
-            value={form.gitBaseUrl}
-            onChange={(e) => set('gitBaseUrl', e.target.value)}
-            placeholder="Leave blank for cloud-hosted"
-          />
-        </div>
+        <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-3">
+          Select the repositories that make up this product. Git platform and workspace are
+          derived automatically.
+        </p>
+        <RepoSelector
+          selected={form.selectedRepos}
+          onToggle={handleToggleRepo}
+          repos={repos}
+          isLoading={reposLoading}
+        />
+        {form.gitWorkspace && (
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-2">
+            Derived:{' '}
+            <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+              {form.gitPlatform}
+            </span>{' '}
+            /{' '}
+            <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+              {form.gitWorkspace}
+            </span>
+          </p>
+        )}
       </div>
     </div>
   )
@@ -984,9 +1135,10 @@ function CustomerRow({
                   <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                     {p.productId}
                   </code>
-                  {p.git?.platform && (
+                  {Array.isArray(p.metadata?.repos) && (p.metadata.repos as string[]).length > 0 && (
                     <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
-                      {p.git.platform}
+                      {(p.metadata.repos as string[]).length} repo
+                      {(p.metadata.repos as string[]).length !== 1 ? 's' : ''}
                     </span>
                   )}
                   <button
@@ -1243,6 +1395,12 @@ function ProductsTab() {
                   <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                     {p.productId}
                   </code>
+                  {Array.isArray(p.metadata?.repos) && (p.metadata.repos as string[]).length > 0 && (
+                    <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                      {(p.metadata.repos as string[]).length} repo
+                      {(p.metadata.repos as string[]).length !== 1 ? 's' : ''}
+                    </span>
+                  )}
                   {p.environments && p.environments.length > 0 && (
                     <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                       {p.environments.length} env{p.environments.length !== 1 ? 's' : ''}
