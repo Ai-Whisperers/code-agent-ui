@@ -56,17 +56,21 @@ function MermaidDiagram({ code }: { code: string }) {
   useEffect(() => {
     const renderId = ++renderIdRef.current
 
-    // Use a fresh UUID each call so mermaid never finds a previously placed SVG
-    // in the DOM and removes it when rendering a new diagram.
-    const uniqueId = `mermaid-${crypto.randomUUID().replace(/-/g, '')}`
+    // Use two distinct UUIDs: one for the mermaid render call, one for the
+    // displayed SVG element. After rendering, replace every occurrence of the
+    // render ID with the display ID throughout the SVG string (the id=""
+    // attribute on <svg> AND all matching #id CSS selectors inside <style>).
+    // This keeps the scoped CSS rules intact (so node fills/colours work) while
+    // ensuring mermaid will never find and remove the displayed element on a
+    // future render() call.
+    const rendererKey = `rnd${crypto.randomUUID().replace(/-/g, '')}`
+    const displayKey = `dsp${crypto.randomUUID().replace(/-/g, '')}`
 
     mermaid
-      .render(uniqueId, code)
+      .render(rendererKey, code)
       .then(({ svg: rawSvg }) => {
         if (renderId !== renderIdRef.current) return
-        // Strip the id attribute so mermaid cannot locate and remove this
-        // SVG on subsequent render() calls with a colliding id.
-        setSvg(rawSvg.replace(/\sid="[^"]*"/, ''))
+        setSvg(rawSvg.replaceAll(rendererKey, displayKey))
         setRenderError(false)
       })
       .catch(() => {
@@ -106,23 +110,37 @@ type ChartConfig = {
   options?: never
 }
 
-function ChartBlock({ code }: { code: string }) {
-  let config: ChartConfig
+function parseChartConfig(code: string): ChartConfig | null {
+  // Try strict JSON first, then fall back to JS object literal evaluation
   try {
-    config = JSON.parse(code) as ChartConfig
+    return JSON.parse(code) as ChartConfig
   } catch {
-    return (
-      <div className="my-3 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] text-sm">
-        <AlertTriangle size={15} />
-        Invalid chart JSON
-      </div>
-    )
+    try {
+      return new Function('return ' + code)() as ChartConfig
+    } catch {
+      return null
+    }
   }
+}
 
-  const opts = (config.options ?? {}) as never
-  const data = config.data
+function ChartBlock({ code }: { code: string }) {
+  const [view, setView] = useState<'chart' | 'source'>('chart')
 
-  const inner = (() => {
+  const config = parseChartConfig(code)
+
+  const renderChart = () => {
+    if (!config) {
+      return (
+        <div className="flex items-center gap-2 text-[var(--color-fonts-font-color-support)] text-sm p-4">
+          <AlertTriangle size={15} />
+          Could not parse chart configuration.
+        </div>
+      )
+    }
+
+    const opts = (config.options ?? {}) as never
+    const data = config.data
+
     switch (config.type?.toLowerCase()) {
       case 'bar':
         return <Bar data={data} options={opts} />
@@ -138,17 +156,68 @@ function ChartBlock({ code }: { code: string }) {
         return <PolarArea data={data} options={opts} />
       default:
         return (
-          <div className="flex items-center gap-2 text-[var(--color-fonts-font-color-support)] text-sm">
+          <div className="flex items-center gap-2 text-[var(--color-fonts-font-color-support)] text-sm p-4">
             <AlertTriangle size={15} />
             Unknown chart type: {config.type}
           </div>
         )
     }
-  })()
+  }
 
   return (
-    <div className="my-4 rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] p-4">
-      {inner}
+    <div className="my-4 rounded-[var(--border-radius-card)] overflow-hidden border border-[var(--color-cards-card-stroke)]">
+      {/* Header bar with toggle */}
+      <div className="flex items-center justify-between px-4 py-1.5 bg-[#282c34] border-b border-white/10">
+        <span className="text-xs font-mono text-[#abb2bf] uppercase tracking-wider">chart</span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setView('chart')}
+            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
+              view === 'chart'
+                ? 'bg-white/15 text-white'
+                : 'text-[#abb2bf] hover:text-white hover:bg-white/10'
+            }`}
+          >
+            Chart
+          </button>
+          <button
+            onClick={() => setView('source')}
+            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
+              view === 'source'
+                ? 'bg-white/15 text-white'
+                : 'text-[#abb2bf] hover:text-white hover:bg-white/10'
+            }`}
+          >
+            Source
+          </button>
+        </div>
+      </div>
+
+      {/* Body */}
+      {view === 'chart' ? (
+        <div className="bg-[var(--color-cards-card-background)] p-4">
+          <div
+            style={{
+              height: '340px',
+              width: '100%',
+              resize: 'both',
+              overflow: 'hidden',
+              minWidth: '240px',
+              minHeight: '180px',
+            }}
+          >
+            {renderChart()}
+          </div>
+        </div>
+      ) : (
+        <SyntaxHighlighter
+          language="javascript"
+          style={oneDark}
+          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      )}
     </div>
   )
 }
@@ -176,8 +245,19 @@ const markdownComponents: Components = {
       return <MermaidDiagram code={code} />
     }
 
-    if (language === 'chart') {
+    if (language === 'chart' || language === 'chartjs') {
       return <ChartBlock code={code} />
+    }
+
+    // Detect Chart.js configs in javascript/json blocks: must have both
+    // a recognised chart type AND a datasets array.
+    if (language === 'javascript' || language === 'js' || language === 'json') {
+      const looksLikeChart =
+        /\btype\s*[:=]\s*['"`]?(bar|line|pie|doughnut|radar|polarArea)\b/i.test(code) &&
+        /\bdatasets\s*[:[]/.test(code)
+      if (looksLikeChart) {
+        return <ChartBlock code={code} />
+      }
     }
 
     return (
