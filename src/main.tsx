@@ -31,6 +31,7 @@ import SystemSettingsPage from '@/pages/SystemSettings'
 import KnowledgeIndexPage from '@/pages/KnowledgeIndex'
 import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
+import McpProfilesPage from '@/pages/McpProfiles'
 import AccessDenied from '@/pages/AccessDenied'
 
 import './styles/index.css'
@@ -209,6 +210,12 @@ const chatConvRoute = createRoute({
   component: ChatPage,
 })
 
+const mcpProfilesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/mcp-profiles',
+  component: McpProfilesPage,
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -236,6 +243,7 @@ const routeTree = rootRoute.addChildren([
     customersRoute,
     chatRoute,
     chatConvRoute,
+    mcpProfilesRoute,
   ]),
   accessDeniedRoute,
 ])

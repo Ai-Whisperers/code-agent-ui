@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   GitPullRequest,
   BotMessageSquare,
+  Plug,
 } from 'lucide-react'
 
 export interface NavigationMenuItem {
@@ -173,6 +174,15 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/settings/knowledge',
           type: 'item',
           onClick: () => go('/settings/knowledge'),
+        },
+        {
+          id: 'mcp-profiles',
+          label: 'MCP Profiles',
+          icon: <Plug size={16} />,
+          path: '/settings/mcp-profiles',
+          isActive: currentPath === '/settings/mcp-profiles',
+          type: 'item',
+          onClick: () => go('/settings/mcp-profiles'),
         },
         {
           id: 'system-settings',
