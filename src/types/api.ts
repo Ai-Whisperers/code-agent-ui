@@ -142,9 +142,14 @@ export interface ExecutionPlan {
 // ---- Quality Reports ----
 
 export interface CoverageSection {
-  lineCoverage?: number
-  branchCoverage?: number
-  methodCoverage?: number
+  lineRate?: number
+  branchRate?: number
+  methodRate?: number
+  classRate?: number
+  linesCovered?: number
+  linesMissed?: number
+  branchesCovered?: number
+  branchesMissed?: number
 }
 
 export interface LinterSection {
@@ -162,7 +167,14 @@ export interface QualityReport {
   score?: number
   coverage?: CoverageSection
   linter?: LinterSection
-  aikido?: { issueCount?: number; criticalCount?: number }
+  aikido?: {
+    totalIssues?: number
+    criticalCount?: number
+    highCount?: number
+    mediumCount?: number
+    lowCount?: number
+    issueCount?: number
+  }
   complexity?: {
     avgComplexity?: number
     maxComplexity?: number

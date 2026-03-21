@@ -44,6 +44,8 @@ const BADGE_BASE = 'text-xs font-semibold px-2 py-0.5 rounded-[var(--border-radi
 const GREEN = `${BADGE_BASE} bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]`
 const ORANGE = `${BADGE_BASE} bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]`
 const RED = `${BADGE_BASE} bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]`
+const YELLOW = `${BADGE_BASE} bg-yellow-100 text-yellow-700`
+const BLUE = `${BADGE_BASE} bg-blue-100 text-blue-600`
 const NONE = 'text-[var(--color-fonts-font-color-support)]'
 
 type RowData = {
@@ -154,7 +156,7 @@ export default function QualityReportsPage() {
                     </td>
                     <td className="px-4 py-3">
                       <SecurityBadge
-                        issueCount={row.report?.aikido?.issueCount}
+                        issueCount={row.report?.aikido?.totalIssues ?? row.report?.aikido?.issueCount}
                         criticalCount={row.report?.aikido?.criticalCount}
                       />
                     </td>
@@ -202,17 +204,13 @@ function LinterErrorsBadge({ count }: { count?: number }) {
   return <span className={cls}>{count}</span>
 }
 
-function LinterWarningsBadge({ count }: { count?: number }) {
-  if (count === undefined || count === null) return <span className={NONE}>—</span>
-  const cls = count === 0 ? GREEN : count < 20 ? ORANGE : RED
-  return <span className={cls}>{count}</span>
-}
 
 function SecurityBadge({ issueCount, criticalCount }: { issueCount?: number; criticalCount?: number }) {
-  if (issueCount === undefined || issueCount === null) return <span className={NONE}>—</span>
+  const total = issueCount
+  if (total === undefined || total === null) return <span className={NONE}>—</span>
   const hasCritical = !!criticalCount
-  const cls = issueCount === 0 ? GREEN : (issueCount < 5 && !hasCritical) ? ORANGE : RED
-  const label = issueCount + (hasCritical ? ` (${criticalCount} critical)` : '')
+  const cls = total === 0 ? GREEN : (total < 5 && !hasCritical) ? ORANGE : RED
+  const label = total + (hasCritical ? ` (${criticalCount} critical)` : '')
   return <span className={cls}>{label}</span>
 }
 
@@ -228,16 +226,62 @@ function MaxComplexityBadge({ value }: { value?: number }) {
   return <span className={cls}>{value}</span>
 }
 
-function CoverageBadge({ value }: { value?: number }) {
-  if (value === undefined || value === null) return <span className={NONE}>—</span>
-  const cls = value >= 80 ? GREEN : value >= 50 ? ORANGE : RED
-  return <span className={cls}>{value.toFixed(1)}%</span>
+function CoverageBadge({ coverage }: { coverage?: import('@/types/api').CoverageSection }) {
+  const lineRate = coverage?.lineRate
+  if (lineRate === undefined || lineRate === null) return <span className={NONE}>—</span>
+  const cls = lineRate >= 80 ? GREEN : lineRate >= 50 ? ORANGE : RED
+  const hasDetails =
+    coverage?.branchRate !== undefined ||
+    coverage?.methodRate !== undefined ||
+    coverage?.classRate !== undefined
+  if (!hasDetails) return <span className={cls}>{lineRate.toFixed(1)}%</span>
+  return (
+    <span className="relative group inline-flex">
+      <span className={`${cls} cursor-help underline decoration-dotted decoration-current`}>
+        {lineRate.toFixed(1)}%
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:flex flex-col gap-0.5 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded p-2 text-xs whitespace-nowrap z-20 shadow-lg text-[var(--color-fonts-font-color-primary)]">
+        {coverage?.branchRate !== undefined && <span>Branch: {coverage.branchRate.toFixed(1)}%</span>}
+        {coverage?.methodRate !== undefined && <span>Method: {coverage.methodRate.toFixed(1)}%</span>}
+        {coverage?.classRate !== undefined && <span>Class: {coverage.classRate.toFixed(1)}%</span>}
+        {coverage?.linesCovered !== undefined && (
+          <span>Lines: {coverage.linesCovered} / {coverage.linesCovered + (coverage.linesMissed ?? 0)}</span>
+        )}
+      </span>
+    </span>
+  )
 }
 
-function CriticalIssuesBadge({ count }: { count?: number }) {
-  if (count === undefined || count === null) return <span className={NONE}>—</span>
-  const cls = count === 0 ? GREEN : count === 1 ? ORANGE : RED
-  return <span className={cls}>{count}</span>
+function AikidoBadge({ aikido }: { aikido?: QualityReport['aikido'] }) {
+  if (!aikido) return <span className={NONE}>—</span>
+  const total = aikido.totalIssues ?? aikido.issueCount
+  if (total === undefined) return <span className={NONE}>—</span>
+  const c = aikido.criticalCount ?? 0
+  const h = aikido.highCount ?? 0
+  const m = aikido.mediumCount ?? 0
+  const l = aikido.lowCount ?? 0
+  return (
+    <div className="flex flex-wrap gap-1">
+      <span className={c > 0 ? RED : GREEN} title="Critical">{c}</span>
+      <span className={ORANGE} title="High">{h}</span>
+      <span className={YELLOW} title="Medium">{m}</span>
+      <span className={BLUE} title="Low">{l}</span>
+    </div>
+  )
+}
+
+function LinterBadge({ linter }: { linter?: import('@/types/api').LinterSection }) {
+  if (!linter) return <span className={NONE}>—</span>
+  const e = linter.errorCount ?? 0
+  const w = linter.warningCount ?? 0
+  const i = linter.infoCount ?? 0
+  return (
+    <div className="flex flex-wrap gap-1">
+      <span className={e > 0 ? RED : GREEN} title="Errors">{e}</span>
+      <span className={w === 0 ? NONE : ORANGE} title="Warnings">{w}</span>
+      <span className={BLUE} title="Info">{i}</span>
+    </div>
+  )
 }
 
 function ScoreGauge({ score }: { score?: number }) {
@@ -278,7 +322,7 @@ function MetricCard({ label, value }: { label: string; value: React.ReactNode })
   return (
     <div className="bg-[var(--color-cards-small-section-background)] rounded-[var(--border-radius-small)] p-3">
       <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-1">{label}</p>
-      <p className="text-lg font-bold text-[var(--color-fonts-font-color-headings)]">{value}</p>
+      <div className="text-lg font-bold text-[var(--color-fonts-font-color-headings)]">{value}</div>
     </div>
   )
 }
@@ -363,7 +407,7 @@ function ReportDialog({
       },
       {
         label: 'Coverage %',
-        data: historyList.map((r) => r.coverage?.lineCoverage ?? 0),
+        data: historyList.map((r) => r.coverage?.lineRate ?? 0),
         borderColor: '#16DB93',
         backgroundColor: 'rgba(22,219,147,0.08)',
         fill: true,
@@ -427,11 +471,9 @@ function ReportDialog({
               <div className="flex flex-wrap">
                 <ScoreGauge score={report.score} />
                 <div className="flex-1 min-w-0 grid grid-cols-2 gap-3 py-4 pr-2">
-                  <MetricCard label="Line Coverage" value={<CoverageBadge value={report.coverage?.lineCoverage} />} />
-                  <MetricCard label="Linter Errors" value={<LinterErrorsBadge count={report.linter?.errorCount} />} />
-                  <MetricCard label="Linter Warnings" value={<LinterWarningsBadge count={report.linter?.warningCount} />} />
-                  <MetricCard label="Security Issues" value={<SecurityBadge issueCount={report.aikido?.issueCount} criticalCount={report.aikido?.criticalCount} />} />
-                  <MetricCard label="Critical Issues" value={<CriticalIssuesBadge count={report.aikido?.criticalCount} />} />
+                  <MetricCard label="Coverage" value={<CoverageBadge coverage={report.coverage} />} />
+                  <MetricCard label="Linter" value={<LinterBadge linter={report.linter} />} />
+                  <MetricCard label="Security (Aikido)" value={<AikidoBadge aikido={report.aikido} />} />
                   <MetricCard label="Avg Complexity" value={<ComplexityBadge value={report.complexity?.avgComplexity} />} />
                   <MetricCard label="Max Complexity" value={<MaxComplexityBadge value={report.complexity?.maxComplexity} />} />
                   <MetricCard
