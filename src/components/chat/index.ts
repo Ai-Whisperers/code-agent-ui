@@ -1,0 +1,21 @@
+// Chat feature components - barrel export
+
+export { ChatInputBar } from './ChatInputBar'
+export type { ChatInputHandle } from './ChatInputBar'
+
+export { MessageBubble } from './MessageBubble'
+export { MarkdownMessage } from './MarkdownMessage'
+export { MermaidDiagram } from './MermaidDiagram'
+export { ChartBlock } from './ChartBlock'
+export { ThinkingPanel } from './ThinkingPanel'
+export { ConversationSidebar } from './ConversationSidebar'
+
+export { markdownComponents } from './markdownComponents'
+export { detectSecrets, redactSecrets, SECRET_PATTERNS } from './SecretScanner'
+export {
+  saveMessagesToStorage,
+  loadMessagesFromStorage,
+  groupConversations,
+  CONV_LS_KEY,
+  type ConvGroup,
+} from './conversationUtils'

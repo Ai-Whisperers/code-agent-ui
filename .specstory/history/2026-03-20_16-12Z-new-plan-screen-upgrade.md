@@ -10,7 +10,7 @@ lets upgrade the new plan screen.
 
 Repository url should be a repository selector like implemented in product config, but you can only select one repo. 
 
-Target branch should be develop or generated, where generated is a auto named by the ai.
+Target branch should be develop or generated, where generated is a auto named by the ai starting with agent/.
 
 For the jira key we should create a component where we can search jira tickets in a smart way, showing some fields to give an idea what the jira ticket is and the status etc. 
 

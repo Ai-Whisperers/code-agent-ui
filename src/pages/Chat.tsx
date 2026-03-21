@@ -1,728 +1,26 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import type { Components } from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import mermaid from 'mermaid'
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  LogarithmicScale,
-  RadialLinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-} from 'chart.js'
-import { Bar, Line, Pie, Doughnut, Radar, PolarArea } from 'react-chartjs-2'
-import {
-  Send,
   Bot,
-  User,
-  AlertTriangle,
-  Plus,
-  Pencil,
-  Trash2,
-  Check,
-  X,
-  MessageSquare,
   PanelLeftOpen,
   PanelLeftClose,
+  X,
   ShieldAlert,
-  ChevronRight,
 } from 'lucide-react'
-import api from '@/lib/api'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ThinkingStep, ConversationSummary } from '@/types/api'
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  LogarithmicScale,
-  RadialLinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-)
-
-mermaid.initialize({ startOnLoad: false, theme: 'neutral', securityLevel: 'loose', suppressErrorRendering: true })
-
-// ── MermaidDiagram ─────────────────────────────────────────────────────────────
-
-function MermaidDiagram({ code }: { code: string }) {
-  const [svg, setSvg] = useState('')
-  const [renderError, setRenderError] = useState(false)
-  // Tracks which render call is the most recent to discard stale results
-  const renderIdRef = useRef(0)
-
-  useEffect(() => {
-    const renderId = ++renderIdRef.current
-
-    // Use two distinct UUIDs: one for the mermaid render call, one for the
-    // displayed SVG element. After rendering, replace every occurrence of the
-    // render ID with the display ID throughout the SVG string (the id=""
-    // attribute on <svg> AND all matching #id CSS selectors inside <style>).
-    // This keeps the scoped CSS rules intact (so node fills/colours work) while
-    // ensuring mermaid will never find and remove the displayed element on a
-    // future render() call.
-    const rendererKey = `rnd${crypto.randomUUID().replace(/-/g, '')}`
-    const displayKey = `dsp${crypto.randomUUID().replace(/-/g, '')}`
-
-    mermaid
-      .render(rendererKey, code)
-      .then(({ svg: rawSvg }) => {
-        if (renderId !== renderIdRef.current) return
-        setSvg(rawSvg.replaceAll(rendererKey, displayKey))
-        setRenderError(false)
-      })
-      .catch(() => {
-        if (renderId !== renderIdRef.current) return
-        setRenderError(true)
-      })
-  }, [code])
-
-  if (renderError) {
-    return (
-      <div className="my-4 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)] text-sm">
-        <AlertTriangle size={15} />
-        Failed to render diagram.
-      </div>
-    )
-  }
-
-  if (!svg) {
-    return (
-      <div className="my-4 h-32 rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] animate-pulse" />
-    )
-  }
-
-  return (
-    <div
-      dangerouslySetInnerHTML={{ __html: svg }}
-      className="my-4 flex justify-center overflow-x-auto rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] p-4"
-    />
-  )
-}
-
-// ── ChartBlock ─────────────────────────────────────────────────────────────────
-
-type ChartConfig = {
-  type: string
-  data: never
-  options?: never
-}
-
-function parseChartConfig(code: string): ChartConfig | null {
-  // Try strict JSON first, then fall back to JS object literal evaluation
-  try {
-    return JSON.parse(code) as ChartConfig
-  } catch {
-    try {
-      return new Function('return ' + code)() as ChartConfig
-    } catch {
-      return null
-    }
-  }
-}
-
-function ChartBlock({ code }: { code: string }) {
-  const [view, setView] = useState<'chart' | 'source'>('chart')
-
-  const config = parseChartConfig(code)
-
-  const renderChart = () => {
-    if (!config) {
-      return (
-        <div className="flex items-center gap-2 text-[var(--color-fonts-font-color-support)] text-sm p-4">
-          <AlertTriangle size={15} />
-          Could not parse chart configuration.
-        </div>
-      )
-    }
-
-    const opts = (config.options ?? {}) as never
-    const data = config.data
-
-    switch (config.type?.toLowerCase()) {
-      case 'bar':
-        return <Bar data={data} options={opts} />
-      case 'line':
-        return <Line data={data} options={opts} />
-      case 'pie':
-        return <Pie data={data} options={opts} />
-      case 'doughnut':
-        return <Doughnut data={data} options={opts} />
-      case 'radar':
-        return <Radar data={data} options={opts} />
-      case 'polararea':
-        return <PolarArea data={data} options={opts} />
-      default:
-        return (
-          <div className="flex items-center gap-2 text-[var(--color-fonts-font-color-support)] text-sm p-4">
-            <AlertTriangle size={15} />
-            Unknown chart type: {config.type}
-          </div>
-        )
-    }
-  }
-
-  return (
-    <div className="my-4 rounded-[var(--border-radius-card)] overflow-hidden border border-[var(--color-cards-card-stroke)]">
-      {/* Header bar with toggle */}
-      <div className="flex items-center justify-between px-4 py-1.5 bg-[#282c34] border-b border-white/10">
-        <span className="text-xs font-mono text-[#abb2bf] uppercase tracking-wider">chart</span>
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => setView('chart')}
-            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
-              view === 'chart'
-                ? 'bg-white/15 text-white'
-                : 'text-[#abb2bf] hover:text-white hover:bg-white/10'
-            }`}
-          >
-            Chart
-          </button>
-          <button
-            onClick={() => setView('source')}
-            className={`px-2.5 py-0.5 rounded text-xs font-medium transition-colors ${
-              view === 'source'
-                ? 'bg-white/15 text-white'
-                : 'text-[#abb2bf] hover:text-white hover:bg-white/10'
-            }`}
-          >
-            Source
-          </button>
-        </div>
-      </div>
-
-      {/* Body */}
-      {view === 'chart' ? (
-        <div className="bg-[var(--color-cards-card-background)] p-4">
-          <div
-            style={{
-              height: '340px',
-              width: '100%',
-              resize: 'both',
-              overflow: 'hidden',
-              minWidth: '240px',
-              minHeight: '180px',
-            }}
-          >
-            {renderChart()}
-          </div>
-        </div>
-      ) : (
-        <SyntaxHighlighter
-          language="javascript"
-          style={oneDark}
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
-        >
-          {code}
-        </SyntaxHighlighter>
-      )}
-    </div>
-  )
-}
-
-// ── Markdown components ────────────────────────────────────────────────────────
-
-const markdownComponents: Components = {
-  pre({ children }) {
-    return <>{children}</>
-  },
-  code({ className, children }) {
-    const match = /language-(\w+)/.exec(className ?? '')
-    const language = match?.[1] ?? ''
-    const code = String(children).replace(/\n$/, '')
-
-    if (!match) {
-      return (
-        <code className="px-1.5 py-0.5 rounded text-[0.8em] font-mono bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] border border-[var(--color-cards-card-stroke)]">
-          {children}
-        </code>
-      )
-    }
-
-    if (language === 'mermaid') {
-      return <MermaidDiagram code={code} />
-    }
-
-    if (language === 'chart' || language === 'chartjs') {
-      return <ChartBlock code={code} />
-    }
-
-    // Detect Chart.js configs in javascript/json blocks: must have both
-    // a recognised chart type AND a datasets array.
-    if (language === 'javascript' || language === 'js' || language === 'json') {
-      const looksLikeChart =
-        /\btype\s*[:=]\s*['"`]?(bar|line|pie|doughnut|radar|polarArea)\b/i.test(code) &&
-        /\bdatasets\s*[:[]/.test(code)
-      if (looksLikeChart) {
-        return <ChartBlock code={code} />
-      }
-    }
-
-    return (
-      <div className="my-3 rounded-[var(--border-radius-card)] overflow-hidden text-sm">
-        <div className="flex items-center px-4 py-1.5 bg-[#282c34] border-b border-white/10">
-          <span className="text-xs font-mono text-[#abb2bf] uppercase tracking-wider">
-            {language}
-          </span>
-        </div>
-        <SyntaxHighlighter
-          language={language}
-          style={oneDark}
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
-        >
-          {code}
-        </SyntaxHighlighter>
-      </div>
-    )
-  },
-  h1: ({ children }) => (
-    <h1 className="text-xl font-bold text-[var(--color-fonts-font-color-headings)] mt-5 mb-2 first:mt-0">
-      {children}
-    </h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="text-lg font-semibold text-[var(--color-fonts-font-color-headings)] mt-4 mb-2 first:mt-0">
-      {children}
-    </h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="text-base font-semibold text-[var(--color-fonts-font-color-headings)] mt-3 mb-1 first:mt-0">
-      {children}
-    </h3>
-  ),
-  p: ({ children }) => (
-    <p className="mb-3 last:mb-0 text-sm leading-relaxed text-[var(--color-fonts-font-color-primary)]">
-      {children}
-    </p>
-  ),
-  ul: ({ children }) => (
-    <ul className="mb-3 ml-5 list-disc space-y-1 text-sm text-[var(--color-fonts-font-color-primary)]">
-      {children}
-    </ul>
-  ),
-  ol: ({ children }) => (
-    <ol className="mb-3 ml-5 list-decimal space-y-1 text-sm text-[var(--color-fonts-font-color-primary)]">
-      {children}
-    </ol>
-  ),
-  li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-  blockquote: ({ children }) => (
-    <blockquote className="my-3 pl-4 border-l-4 border-[var(--color-buttons-button-primary)] italic text-sm text-[var(--color-fonts-font-color-support)]">
-      {children}
-    </blockquote>
-  ),
-  table: ({ children }) => (
-    <div className="my-3 overflow-x-auto rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)]">
-      <table className="w-full text-sm">{children}</table>
-    </div>
-  ),
-  thead: ({ children }) => (
-    <thead className="bg-[var(--color-cards-card-background)]">{children}</thead>
-  ),
-  tr: ({ children }) => (
-    <tr className="border-b border-[var(--color-cards-card-stroke)] last:border-0">{children}</tr>
-  ),
-  th: ({ children }) => (
-    <th className="px-4 py-2 text-left text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide">
-      {children}
-    </th>
-  ),
-  td: ({ children }) => (
-    <td className="px-4 py-2 text-[var(--color-fonts-font-color-primary)]">{children}</td>
-  ),
-  hr: () => <hr className="my-4 border-[var(--color-cards-card-stroke)]" />,
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="text-[var(--color-buttons-button-primary)] underline hover:opacity-80"
-    >
-      {children}
-    </a>
-  ),
-  strong: ({ children }) => (
-    <strong className="font-semibold text-[var(--color-fonts-font-color-headings)]">
-      {children}
-    </strong>
-  ),
-}
-
-function MarkdownMessage({ content }: { content: string }) {
-  return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-      {content}
-    </ReactMarkdown>
-  )
-}
-
-// ── ToolActivityBadge ──────────────────────────────────────────────────────────
-
-const TOOL_LABELS: Record<string, string> = {
-  knowledge_search: 'Searching knowledge base',
-  search_knowledge_base: 'Searching knowledge base',
-  semantic_search: 'Semantic search',
-  customer_lookup: 'Looking up customer context',
-  code_search: 'Searching source code',
-  web_search: 'Searching the web',
-}
-
-// ── ThinkingPanel ──────────────────────────────────────────────────────────────
-
-function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive?: boolean }) {
-  const [expanded, setExpanded] = useState(!!isLive)
-
-  const toolCount = steps.filter((s) => s.kind === 'tool').length
-  const summary = toolCount > 0
-    ? `Used ${toolCount} tool${toolCount !== 1 ? 's' : ''}`
-    : 'Thought through the answer'
-
-  return (
-    <div className="mb-3 pb-3 border-b border-[var(--color-cards-card-stroke)]">
-      <button
-        onClick={() => setExpanded((e) => !e)}
-        className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] opacity-60 hover:opacity-100 transition-opacity w-full text-left"
-      >
-        <ChevronRight
-          size={11}
-          className={`shrink-0 transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
-        />
-        {isLive ? (
-          <span className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-            Thinking…
-          </span>
-        ) : (
-          <span>{summary}</span>
-        )}
-      </button>
-      {expanded && steps.length > 0 && (
-        <div className="mt-2 ml-3 border-l border-[var(--color-cards-card-stroke)] pl-3 flex flex-col gap-2">
-          {steps.map((step, i) =>
-            step.kind === 'thought' ? (
-              <p
-                key={i}
-                className="text-xs italic text-[var(--color-fonts-font-color-support)] opacity-60 leading-relaxed"
-              >
-                {step.text}
-              </p>
-            ) : (
-              <div
-                key={i}
-                className="inline-flex items-center gap-1.5 self-start px-2 py-0.5 rounded text-xs font-mono bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-[var(--color-cards-card-stroke)]"
-              >
-                {TOOL_LABELS[step.name] ?? step.name.replace(/_/g, ' ')}
-              </div>
-            ),
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── MessageBubble ──────────────────────────────────────────────────────────────
-
-function MessageBubble({ message }: { message: ChatMessage }) {
-  if (message.role === 'user') {
-    return (
-      <div className="flex justify-end gap-3">
-        <div className="max-w-[80%] bg-[var(--color-buttons-button-primary)] text-white rounded-[var(--border-radius-card)] rounded-tr-sm px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">
-          {message.content}
-        </div>
-        <div className="w-8 h-8 rounded-full bg-[var(--color-inputs-input-background)] border border-[var(--color-cards-card-stroke)] flex items-center justify-center shrink-0 mt-0.5">
-          <User size={15} className="text-[var(--color-fonts-font-color-support)]" />
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex gap-3">
-      <div className="w-8 h-8 rounded-full bg-[var(--color-buttons-button-primary)] flex items-center justify-center shrink-0 mt-0.5">
-        <Bot size={15} className="text-white" />
-      </div>
-      <div className="flex-1 min-w-0 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] rounded-tl-sm px-4 py-3">
-        {message.thinkingSteps && message.thinkingSteps.length > 0 && (
-          <ThinkingPanel steps={message.thinkingSteps} isLive={false} />
-        )}
-        <MarkdownMessage content={message.content} />
-      </div>
-    </div>
-  )
-}
-
-// ── Secret scanning ────────────────────────────────────────────────────────────
-
-const SECRET_PATTERNS: { type: string; regex: RegExp }[] = [
-  { type: 'AWS Access Key', regex: /AKIA[0-9A-Z]{16}/g },
-  { type: 'GitHub Token', regex: /gh[pousr]_[A-Za-z0-9_]{36,251}/g },
-  { type: 'Anthropic API Key', regex: /sk-ant-[a-zA-Z0-9-]{32,}/g },
-  { type: 'OpenAI API Key', regex: /sk-[A-Za-z0-9T]{20,}/g },
-  { type: 'Private Key', regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g },
-  { type: 'JWT', regex: /eyJ[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+\.[A-Za-z0-9\-_]+/g },
-  { type: 'Database URL', regex: /(?:postgresql|mysql|mongodb):\/\/[^@\s]+:[^@\s]+@/gi },
-]
-
-function detectSecrets(text: string): string[] {
-  const found = new Set<string>()
-  for (const { type, regex } of SECRET_PATTERNS) {
-    regex.lastIndex = 0
-    if (regex.test(text)) found.add(type)
-  }
-  return [...found]
-}
-
-function redactSecrets(text: string): string {
-  let out = text
-  for (const { type, regex } of SECRET_PATTERNS) {
-    regex.lastIndex = 0
-    out = out.replace(regex, `[REDACTED:${type.replace(/ /g, '_').toUpperCase()}]`)
-  }
-  return out
-}
-
-// ── Conversation helpers ────────────────────────────────────────────────────────
-
-const CONV_LS_KEY = (id: string) => `conv_messages_${id}`
-
-function saveMessagesToStorage(id: string, msgs: ChatMessage[]) {
-  try {
-    localStorage.setItem(CONV_LS_KEY(id), JSON.stringify(msgs))
-  } catch {
-    // storage quota exceeded — silently ignore
-  }
-}
-
-function loadMessagesFromStorage(id: string): ChatMessage[] {
-  try {
-    const raw = localStorage.getItem(CONV_LS_KEY(id))
-    if (!raw) return []
-    return JSON.parse(raw) as ChatMessage[]
-  } catch {
-    return []
-  }
-}
-
-type ConvGroup = { label: string; items: ConversationSummary[] }
-
-function groupConversations(convs: ConversationSummary[]): ConvGroup[] {
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const yesterdayStart = new Date(todayStart.getTime() - 86_400_000)
-  const sevenDaysAgo = new Date(todayStart.getTime() - 7 * 86_400_000)
-
-  const groups: ConvGroup[] = [
-    { label: 'Today', items: [] },
-    { label: 'Yesterday', items: [] },
-    { label: 'Previous 7 days', items: [] },
-    { label: 'Older', items: [] },
-  ]
-
-  for (const conv of convs) {
-    const d = new Date(conv.updatedAt)
-    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate())
-    if (dayStart >= todayStart) groups[0].items.push(conv)
-    else if (dayStart >= yesterdayStart) groups[1].items.push(conv)
-    else if (d >= sevenDaysAgo) groups[2].items.push(conv)
-    else groups[3].items.push(conv)
-  }
-
-  return groups.filter((g) => g.items.length > 0)
-}
-
-// ── ConversationSidebar ────────────────────────────────────────────────────────
-
-function ConversationSidebar({
-  activeId,
-  onSelect,
-  onNewChat,
-}: {
-  activeId: string | null
-  onSelect: (id: string) => void
-  onNewChat: () => void
-}) {
-  const queryClient = useQueryClient()
-  const [renamingId, setRenamingId] = useState<string | null>(null)
-  const [renameValue, setRenameValue] = useState('')
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-
-  const { data: conversations = [], isLoading } = useQuery<ConversationSummary[]>({
-    queryKey: ['conversations'],
-    queryFn: () => api.get('/conversations').then((r) => r.data),
-  })
-
-  const groups = groupConversations(conversations)
-
-  const startRename = (conv: ConversationSummary, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setRenamingId(conv.conversationId)
-    setRenameValue(conv.title)
-  }
-
-  const commitRename = async (id: string) => {
-    const title = renameValue.trim()
-    if (!title) {
-      setRenamingId(null)
-      return
-    }
-    try {
-      await api.patch(`/conversations/${id}/title`, { title })
-      queryClient.invalidateQueries({ queryKey: ['conversations'] })
-    } finally {
-      setRenamingId(null)
-    }
-  }
-
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setDeletingId(id)
-    try {
-      await api.delete(`/conversations/${id}`)
-      localStorage.removeItem(CONV_LS_KEY(id))
-      queryClient.invalidateQueries({ queryKey: ['conversations'] })
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* New chat */}
-      <div className="shrink-0 p-3 border-b border-[var(--color-cards-card-stroke)]">
-        <button
-          onClick={onNewChat}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] hover:bg-[var(--color-cards-card-background)] text-sm text-[var(--color-fonts-font-color-primary)] transition-colors"
-        >
-          <Plus size={14} />
-          New chat
-        </button>
-      </div>
-
-      {/* List */}
-      <div className="flex-1 overflow-y-auto py-2">
-        {isLoading && (
-          <p className="px-4 py-4 text-xs text-center text-[var(--color-fonts-font-color-support)]">
-            Loading…
-          </p>
-        )}
-        {!isLoading && conversations.length === 0 && (
-          <div className="px-4 py-10 flex flex-col items-center gap-2 text-center">
-            <MessageSquare
-              size={22}
-              className="text-[var(--color-fonts-font-color-support)] opacity-30"
-            />
-            <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-              No conversations yet
-            </p>
-          </div>
-        )}
-        {groups.map((group) => (
-          <div key={group.label}>
-            <p className="px-3 pt-3 pb-1 text-[0.65rem] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)] opacity-50 select-none">
-              {group.label}
-            </p>
-            {group.items.map((conv) => {
-              const isActive = activeId === conv.conversationId
-              const isRenaming = renamingId === conv.conversationId
-              const isDeleting = deletingId === conv.conversationId
-
-              return (
-                <div
-                  key={conv.conversationId}
-                  onClick={() => !isRenaming && onSelect(conv.conversationId)}
-                  className={`group relative flex items-center gap-2 mx-1.5 px-2.5 py-2 rounded-[var(--border-radius-button-small)] cursor-pointer transition-colors ${
-                    isActive
-                      ? 'bg-[var(--color-buttons-button-primary)] text-white'
-                      : 'hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)]'
-                  } ${isDeleting ? 'opacity-40 pointer-events-none' : ''}`}
-                >
-                  {isRenaming ? (
-                    <div
-                      className="flex-1 flex items-center gap-1"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <input
-                        autoFocus
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') commitRename(conv.conversationId)
-                          if (e.key === 'Escape') setRenamingId(null)
-                        }}
-                        onBlur={() => commitRename(conv.conversationId)}
-                        className="flex-1 min-w-0 bg-transparent border-b border-current text-sm outline-none"
-                      />
-                      <button
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          commitRename(conv.conversationId)
-                        }}
-                        className="shrink-0 opacity-80 hover:opacity-100"
-                      >
-                        <Check size={12} />
-                      </button>
-                      <button
-                        onMouseDown={(e) => {
-                          e.preventDefault()
-                          setRenamingId(null)
-                        }}
-                        className="shrink-0 opacity-80 hover:opacity-100"
-                      >
-                        <X size={12} />
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      <span className="flex-1 min-w-0 text-sm truncate">{conv.title}</span>
-                      <div
-                        className={`shrink-0 hidden group-hover:flex items-center gap-0.5 ${isActive ? 'text-white/70' : 'text-[var(--color-fonts-font-color-support)]'}`}
-                      >
-                        <button
-                          onClick={(e) => startRename(conv, e)}
-                          className="p-0.5 rounded hover:opacity-100 opacity-60 transition-opacity"
-                          title="Rename"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(conv.conversationId, e)}
-                          className={`p-0.5 rounded opacity-60 hover:opacity-100 transition-opacity ${isActive ? 'hover:text-red-300' : 'hover:text-red-500'}`}
-                          title="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Chat page ──────────────────────────────────────────────────────────────────
+import type { ChatEvent, ChatMessage, ThinkingStep } from '@/types/api'
+import {
+  ChatInputBar,
+  MessageBubble,
+  ThinkingPanel,
+  ConversationSidebar,
+  MarkdownMessage,
+  redactSecrets,
+  loadMessagesFromStorage,
+  saveMessagesToStorage,
+  type ChatInputHandle,
+} from '@/components/chat'
 
 export default function Chat() {
   const navigate = useNavigate()
@@ -733,7 +31,6 @@ export default function Chat() {
   const [streamingContent, setStreamingContent] = useState('')
   const [streamingThinkingSteps, setStreamingThinkingSteps] = useState<ThinkingStep[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
-  const [input, setInput] = useState('')
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     params.conversationId ?? null,
   )
@@ -745,9 +42,11 @@ export default function Chat() {
   } | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const chatInputRef = useRef<ChatInputHandle>(null)
+  const streamingContentRef = useRef('')
+  const streamingRafRef = useRef<number | null>(null)
 
-  // Load messages from localStorage when route param changes (page load / back-forward)
+  // Load messages from localStorage when route param changes
   useEffect(() => {
     const id = params.conversationId
     if (id) {
@@ -759,9 +58,14 @@ export default function Chat() {
     }
   }, [params.conversationId])
 
+  // Scroll handling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent, streamingThinkingSteps])
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+  }, [messages])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+  }, [isStreaming])
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -773,18 +77,14 @@ export default function Chat() {
         content: text.trim(),
       }
       setMessages((prev) => [...prev, userMsg])
-      setInput('')
       setIsStreaming(true)
       setStreamingContent('')
       setStreamingThinkingSteps([])
       setMobileSidebarOpen(false)
 
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-      }
-
       let accumulatedContent = ''
       const accumulatedThinkingSteps: ThinkingStep[] = []
+      streamingContentRef.current = ''
 
       try {
         await refreshToken()
@@ -835,7 +135,6 @@ export default function Chat() {
               case 'thinking': {
                 const last = accumulatedThinkingSteps[accumulatedThinkingSteps.length - 1]
                 if (last?.kind === 'thought') {
-                  // Merge streaming tokens into the current thought instead of creating new entries
                   last.text += event.text ?? ''
                 } else {
                   accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
@@ -845,7 +144,13 @@ export default function Chat() {
               }
               case 'text':
                 accumulatedContent += event.text ?? ''
-                setStreamingContent(accumulatedContent)
+                streamingContentRef.current = accumulatedContent
+                if (!streamingRafRef.current) {
+                  streamingRafRef.current = requestAnimationFrame(() => {
+                    setStreamingContent(streamingContentRef.current)
+                    streamingRafRef.current = null
+                  })
+                }
                 break
               case 'tool_start':
                 accumulatedThinkingSteps.push({ kind: 'tool', name: event.tool ?? '' })
@@ -862,15 +167,17 @@ export default function Chat() {
                 }
                 setMessages((prev) => {
                   const next = [...prev, assistantMsg]
-                  // Persist display history to localStorage
                   const convId = event.conversationId ?? activeConversationId
                   if (convId) saveMessagesToStorage(convId, next)
                   return next
                 })
+                if (streamingRafRef.current) {
+                  cancelAnimationFrame(streamingRafRef.current)
+                  streamingRafRef.current = null
+                }
                 setStreamingContent('')
                 setStreamingThinkingSteps([])
                 setIsStreaming(false)
-                // Navigate to the conversation URL if we just created a new one
                 if (event.conversationId && event.conversationId !== activeConversationId) {
                   setActiveConversationId(event.conversationId)
                   navigate({ to: '/chat/$conversationId', params: { conversationId: event.conversationId } })
@@ -887,6 +194,10 @@ export default function Chat() {
                     content: `**Error:** ${event.error ?? 'Something went wrong.'}`,
                   },
                 ])
+                if (streamingRafRef.current) {
+                  cancelAnimationFrame(streamingRafRef.current)
+                  streamingRafRef.current = null
+                }
                 setStreamingContent('')
                 setStreamingThinkingSteps([])
                 setIsStreaming(false)
@@ -895,7 +206,7 @@ export default function Chat() {
           }
         }
 
-        // Stream ended without a 'done' event — commit what we have
+        // Stream ended without 'done' event
         if (accumulatedContent) {
           setMessages((prev) => [
             ...prev,
@@ -917,6 +228,10 @@ export default function Chat() {
           },
         ])
       } finally {
+        if (streamingRafRef.current) {
+          cancelAnimationFrame(streamingRafRef.current)
+          streamingRafRef.current = null
+        }
         setIsStreaming(false)
         setStreamingContent('')
         setStreamingThinkingSteps([])
@@ -940,43 +255,21 @@ export default function Chat() {
     setActiveConversationId(null)
     setMessages([])
     setStreamingContent('')
-    setInput('')
+    chatInputRef.current?.clear()
     setMobileSidebarOpen(false)
     navigate({ to: '/chat' })
   }, [navigate])
 
-  const handleSend = useCallback(
-    (text: string) => {
-      if (!text.trim() || isStreaming) return
-      const findings = detectSecrets(text)
-      if (findings.length > 0) {
-        setSecretWarning({ findings, pendingText: text })
-        return
-      }
-      sendMessage(text)
-    },
-    [isStreaming, sendMessage],
-  )
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleSend(input)
-    }
-  }
-
-  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
-    const el = e.currentTarget
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
-  }
+  const handleSecretWarning = useCallback((findings: string[], pendingText: string) => {
+    setSecretWarning({ findings, pendingText })
+  }, [])
 
   return (
     <div
       className="-mx-8 -my-6 flex bg-[var(--color-page-background)]"
       style={{ height: '100dvh' }}
     >
-      {/* ── Mobile sidebar overlay backdrop ── */}
+      {/* Mobile sidebar overlay backdrop */}
       {mobileSidebarOpen && (
         <div
           className="fixed inset-0 z-20 bg-black/40 sm:hidden"
@@ -984,7 +277,7 @@ export default function Chat() {
         />
       )}
 
-      {/* ── Conversation sidebar (desktop) ── */}
+      {/* Conversation sidebar (desktop) */}
       <div
         className={`hidden sm:flex flex-col shrink-0 border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] transition-all duration-200 overflow-hidden ${
           sidebarOpen ? 'w-64' : 'w-0'
@@ -1011,7 +304,7 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* ── Conversation sidebar (mobile drawer) ── */}
+      {/* Conversation sidebar (mobile drawer) */}
       <div
         className={`fixed top-0 left-0 bottom-0 z-30 w-72 flex flex-col border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] sm:hidden transition-transform duration-200 ${
           mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -1037,11 +330,10 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* ── Main chat panel ── */}
+      {/* Main chat panel */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Header */}
         <div className="shrink-0 flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--color-cards-card-stroke)]">
-          {/* Toggle buttons */}
           <button
             onClick={() => setMobileSidebarOpen(true)}
             className="sm:hidden p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
@@ -1151,6 +443,7 @@ export default function Chat() {
                   <button
                     onClick={() => {
                       sendMessage(redactSecrets(secretWarning.pendingText))
+                      chatInputRef.current?.clear()
                       setSecretWarning(null)
                     }}
                     className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium transition-colors"
@@ -1160,6 +453,7 @@ export default function Chat() {
                   <button
                     onClick={() => {
                       sendMessage(secretWarning.pendingText)
+                      chatInputRef.current?.clear()
                       setSecretWarning(null)
                     }}
                     className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-amber-400/60 bg-transparent hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-800 dark:text-amber-300 text-xs font-medium transition-colors"
@@ -1169,7 +463,7 @@ export default function Chat() {
                   <button
                     onClick={() => {
                       setSecretWarning(null)
-                      setTimeout(() => textareaRef.current?.focus(), 0)
+                      setTimeout(() => chatInputRef.current?.focus(), 0)
                     }}
                     className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-transparent hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] text-xs font-medium transition-colors"
                   >
@@ -1182,38 +476,12 @@ export default function Chat() {
         )}
 
         {/* Input bar */}
-        <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
-          <div className="flex gap-3 items-end">
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onInput={handleInput}
-              placeholder={
-                isStreaming
-                  ? 'Waiting for response…'
-                  : 'Ask anything… (Enter to send, Shift+Enter for newline)'
-              }
-              disabled={isStreaming}
-              rows={1}
-              className="flex-1 px-4 py-2.5 rounded-[var(--border-radius-button)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              style={{ maxHeight: '160px', overflowY: 'auto' }}
-            />
-            <button
-              onClick={() => handleSend(input)}
-              disabled={!input.trim() || isStreaming}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-button)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
-            >
-              <Send size={15} />
-              Send
-            </button>
-          </div>
-          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-2">
-            Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
-            syntax-highlighted code.
-          </p>
-        </div>
+        <ChatInputBar
+          ref={chatInputRef}
+          isStreaming={isStreaming}
+          onSend={sendMessage}
+          onSecretWarning={handleSecretWarning}
+        />
       </div>
     </div>
   )
