@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Wrench, CheckCircle2, Clock, ListOrdered, TrendingUp } from 'lucide-react'
+import { Wrench, CheckCircle2, Clock, ListOrdered, TrendingUp, MessageCircle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
 import api from '@/lib/api'
-import type { AiCallSummary } from '@/types/api'
+import type { AiCallSummary, AiCallSummaryByJobType, JobTypeSummary } from '@/types/api'
 
 function StatCard({
   label,
@@ -31,6 +31,41 @@ function StatCard({
   )
 }
 
+function JobTypeCard({ jobType }: { jobType: JobTypeSummary }) {
+  return (
+    <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-sm font-medium text-[var(--color-fonts-font-color-headings)]">
+          {jobType.jobType.replace(/_/g, ' ')}
+        </h4>
+        <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+          {jobType.uniqueJobs} {jobType.uniqueJobs === 1 ? 'job' : 'jobs'}
+        </span>
+      </div>
+      <div className="space-y-1">
+        <div className="flex justify-between text-sm">
+          <span className="text-[var(--color-fonts-font-color-support)]">Total Tokens</span>
+          <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+            {jobType.totalTokens.toLocaleString()}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-[var(--color-fonts-font-color-support)]">Cost</span>
+          <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+            ${jobType.estimatedCostUsd.toFixed(3)}
+          </span>
+        </div>
+        <div className="flex justify-between text-sm">
+          <span className="text-[var(--color-fonts-font-color-support)]">Calls</span>
+          <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+            {jobType.callCount}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const user = useStore(authStore, (s) => s.user)!
   const navigate = useNavigate()
@@ -38,6 +73,12 @@ export default function Dashboard() {
   const { data: summary } = useQuery<AiCallSummary>({
     queryKey: ['ai-calls-summary'],
     queryFn: () => api.get('/stats/ai-calls/summary').then((r) => r.data),
+    refetchInterval: 30_000,
+  })
+
+  const { data: summaryByJobType } = useQuery<AiCallSummaryByJobType>({
+    queryKey: ['ai-calls-summary-by-job-type'],
+    queryFn: () => api.get('/stats/ai-calls/summary-by-job-type').then((r) => r.data),
     refetchInterval: 30_000,
   })
 
@@ -51,7 +92,7 @@ export default function Dashboard() {
       />
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
         <StatCard
           label="Total AI Calls"
           value={summary?.totalCalls ?? '—'}
@@ -65,9 +106,15 @@ export default function Dashboard() {
         />
         <StatCard
           label="Avg Cost / Job"
-          value={summary?.avgCostPerJob != null ? `$${summary.avgCostPerJob.toFixed(3)}` : '—'}
+          value={summaryByJobType?.overallStats?.avgCostPerJobExcludingChat != null ? `$${summaryByJobType.overallStats.avgCostPerJobExcludingChat.toFixed(3)}` : (summary?.avgCostPerJob != null ? `$${summary.avgCostPerJob.toFixed(3)}` : '—')}
           icon={<CheckCircle2 size={18} />}
           accent="text-[var(--color-status-border-success)]"
+        />
+        <StatCard
+          label="Chat Calls"
+          value={summaryByJobType?.chatStats?.chatCalls ?? '—'}
+          icon={<MessageCircle size={18} />}
+          accent="text-[var(--color-status-border-info)]"
         />
         <StatCard
           label="Input Tokens"
@@ -75,6 +122,20 @@ export default function Dashboard() {
           icon={<ListOrdered size={18} />}
         />
       </div>
+
+      {/* Token Usage by Job Type */}
+      {summaryByJobType?.jobTypeBreakdown && summaryByJobType.jobTypeBreakdown.length > 0 && (
+        <div className="mb-8">
+          <h3 className="mb-4">Token Usage by Job Type</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {summaryByJobType.jobTypeBreakdown
+              .filter(item => item.jobType !== 'CHAT')
+              .map((item) => (
+                <JobTypeCard key={item.jobType} jobType={item} />
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Quick actions */}
       <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">

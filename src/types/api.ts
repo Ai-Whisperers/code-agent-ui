@@ -193,6 +193,36 @@ export interface AiCallSummary {
   totalOutputTokens: number | null
   totalCostUsd: number | null
   avgCostPerJob: number | null
+  avgCostPerJobExcludingChat?: number | null
+  chatCalls?: number | null
+}
+
+export interface JobTypeSummary {
+  jobType: string
+  callCount: number
+  totalTokens: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  uniqueJobs: number
+  estimatedCostUsd: number
+}
+
+export interface AiCallSummaryByJobType {
+  jobTypeBreakdown: JobTypeSummary[]
+  overallStats: {
+    totalCalls: number
+    totalInputTokens: number
+    totalOutputTokens: number
+    totalCostUsd: number
+    uniqueJobsExcludingChat: number
+    avgCostPerJobExcludingChat: number
+  }
+  chatStats: {
+    chatCalls: number
+    totalInputTokens: number
+    totalOutputTokens: number
+    estimatedCostUsd: number
+  }
 }
 
 export interface AiCallDailyStat {
