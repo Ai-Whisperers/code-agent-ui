@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronRight, Loader2, CheckCircle2, XCircle, Wrench } from 'lucide-react'
+import { ChevronRight, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import type { ThinkingStep } from '@/types/api'
 
 const TOOL_LABELS: Record<string, string> = {
@@ -53,10 +53,8 @@ export function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive
   }, [isLive])
 
   const toolSteps = steps.filter((s): s is ThinkingStep & { kind: 'tool' } => s.kind === 'tool')
-  const thoughtSteps = steps.filter((s): s is ThinkingStep & { kind: 'thought' } => s.kind === 'thought')
   
   const hasTools = toolSteps.length > 0
-  const hasThoughts = thoughtSteps.length > 0
   const runningCount = toolSteps.filter(t => t.status === 'running').length
   const completedCount = toolSteps.filter(t => t.status === 'completed').length
   const errorCount = toolSteps.filter(t => t.status === 'error').length
@@ -98,60 +96,51 @@ export function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive
       </button>
       
       {expanded && steps.length > 0 && (
-        <div className="mt-2 ml-3 border-l border-[var(--color-cards-card-stroke)] pl-3 flex flex-col gap-3">
-          {/* Thoughts section */}
-          {hasThoughts && (
-            <div className="flex flex-col gap-2">
-              {thoughtSteps.map((step, i) => (
+        <div className="mt-2 ml-3 border-l border-[var(--color-cards-card-stroke)] pl-3 flex flex-col gap-2">
+          {steps.map((step, i) => {
+            if (step.kind === 'thought') {
+              return (
                 <p
-                  key={`thought-${i}`}
+                  key={`step-${i}`}
                   className="text-xs italic text-[var(--color-fonts-font-color-support)] opacity-60 leading-relaxed"
                 >
                   {step.text}
                 </p>
-              ))}
-            </div>
-          )}
-          
-          {/* Tools section */}
-          {hasTools && (
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--color-fonts-font-color-support)] opacity-70 mb-1">
-                <Wrench size={11} />
-                <span>Tools</span>
-              </div>
+              )
+            } else {
+              // This is a tool step - need to find its index in toolSteps array for expansion state
+              const toolIndex = toolSteps.findIndex(tool => tool === step)
+              const isExpanded = expandedTools.has(toolIndex)
+              const duration = step.endTime && step.startTime 
+                ? formatDuration(step.endTime - step.startTime)
+                : step.startTime && isLive
+                  ? formatDuration(now - step.startTime)
+                  : null
               
-              {toolSteps.map((tool, i) => {
-                const isExpanded = expandedTools.has(i)
-                const duration = tool.endTime && tool.startTime 
-                  ? formatDuration(tool.endTime - tool.startTime)
-                  : tool.startTime && isLive
-                    ? formatDuration(now - tool.startTime)
-                    : null
-                
-                const keyParam = getKeyParamDisplay(tool.name, tool.input)
-                
-                return (
-                  <div key={`tool-${i}`} className="flex flex-col">
+              const keyParam = getKeyParamDisplay(step.name, step.input)
+              
+              return (
+                <div key={`step-${i}`} className="flex flex-col">
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => tool.result && toggleTool(i)}
-                      className={`flex items-center gap-2 text-left group ${tool.result ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+                      onClick={() => step.result && toggleTool(toolIndex)}
+                      className={`flex items-center gap-2 text-left group ${step.result ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
                     >
                       {/* Status icon */}
-                      {tool.status === 'running' && (
+                      {step.status === 'running' && (
                         <Loader2 size={12} className="text-blue-500 animate-spin" />
                       )}
-                      {tool.status === 'completed' && (
+                      {step.status === 'completed' && (
                         <CheckCircle2 size={12} className="text-green-500" />
                       )}
-                      {tool.status === 'error' && (
+                      {step.status === 'error' && (
                         <XCircle size={12} className="text-red-500" />
                       )}
                       
                       {/* Tool name, key param, duration, and toggle grouped together */}
                       <span className="text-xs text-[var(--color-fonts-font-color-support)] flex items-center gap-2">
                         <span>
-                          {TOOL_LABELS[tool.name] ?? tool.name.replace(/_/g, ' ')}
+                          {TOOL_LABELS[step.name] ?? step.name.replace(/_/g, ' ')}
                           {keyParam && (
                             <span className="opacity-70 ml-1">— {keyParam}</span>
                           )}
@@ -163,7 +152,7 @@ export function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive
                           </span>
                         )}
                         
-                        {tool.result && (
+                        {step.result && (
                           <ChevronRight
                             size={11}
                             className={`opacity-40 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
@@ -171,18 +160,18 @@ export function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive
                         )}
                       </span>
                     </button>
-                    
-                    {/* Expanded result */}
-                    {isExpanded && tool.result && (
-                      <div className="mt-1.5 ml-5 p-2 rounded bg-[var(--color-tags-neutral-background)] border border-[var(--color-cards-card-stroke)] text-xs font-mono text-[var(--color-fonts-font-color-support)] opacity-80 max-h-32 overflow-y-auto">
-                        <pre className="whitespace-pre-wrap break-all">{tool.result}</pre>
-                      </div>
-                    )}
                   </div>
-                )
-              })}
-            </div>
-          )}
+                  
+                  {/* Expanded result */}
+                  {isExpanded && step.result && (
+                    <div className="mt-1.5 ml-5 p-2 rounded bg-[var(--color-tags-neutral-background)] border border-[var(--color-cards-card-stroke)] text-xs font-mono text-[var(--color-fonts-font-color-support)] opacity-80 max-h-32 overflow-y-auto">
+                      <pre className="whitespace-pre-wrap break-all">{step.result}</pre>
+                    </div>
+                  )}
+                </div>
+              )
+            }
+          })}
         </div>
       )}
     </div>
