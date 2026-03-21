@@ -367,13 +367,16 @@ export interface ChatEvent {
   type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'done' | 'error'
   text?: string
   tool?: string
+  input?: Record<string, unknown>
+  result?: string
+  timestamp?: number
   error?: string
   conversationId?: string
 }
 
 export type ThinkingStep =
-  | { kind: 'thought'; text: string }
-  | { kind: 'tool'; name: string }
+  | { kind: 'thought'; text: string; timestamp?: number }
+  | { kind: 'tool'; name: string; input?: Record<string, unknown>; result?: string; status: 'running' | 'completed' | 'error'; startTime: number; endTime?: number }
 
 export interface ChatMessage {
   id: string

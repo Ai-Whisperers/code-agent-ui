@@ -67,6 +67,13 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
   }, [isStreaming])
 
+  // Scroll when new tool logs are added
+  useEffect(() => {
+    if (streamingThinkingSteps.length > 0 && isStreaming) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [streamingThinkingSteps, isStreaming])
+
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isStreaming) return
@@ -153,11 +160,25 @@ export default function Chat() {
                 }
                 break
               case 'tool_start':
-                accumulatedThinkingSteps.push({ kind: 'tool', name: event.tool ?? '' })
+                accumulatedThinkingSteps.push({ 
+                  kind: 'tool', 
+                  name: event.tool ?? '', 
+                  input: event.input,
+                  status: 'running',
+                  startTime: event.timestamp ?? Date.now()
+                })
                 setStreamingThinkingSteps([...accumulatedThinkingSteps])
                 break
-              case 'tool_end':
+              case 'tool_end': {
+                const lastTool = [...accumulatedThinkingSteps].reverse().find(s => s.kind === 'tool' && s.name === event.tool && s.status === 'running')
+                if (lastTool && lastTool.kind === 'tool') {
+                  lastTool.status = event.result?.startsWith('ERROR:') ? 'error' : 'completed'
+                  lastTool.result = event.result
+                  lastTool.endTime = event.timestamp ?? Date.now()
+                }
+                setStreamingThinkingSteps([...accumulatedThinkingSteps])
                 break
+              }
               case 'done': {
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
