@@ -3,6 +3,8 @@ import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Send } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { RepoCombobox } from '@/components/plan/RepoCombobox'
+import { JiraCombobox } from '@/components/plan/JiraCombobox'
 import api from '@/lib/api'
 
 type PlanSource = 'custom' | 'jira' | 'quality'
@@ -10,13 +12,13 @@ type PlanSource = 'custom' | 'jira' | 'quality'
 export default function NewPlan() {
   const navigate = useNavigate()
   const [source, setSource] = useState<PlanSource>('custom')
-  const [form, setForm] = useState({ title: '', repoUrl: '', targetBranch: '', jiraKey: '' })
+  const [form, setForm] = useState({ title: '', repoUrl: '', targetBranch: 'develop', jiraKey: '' })
   const [error, setError] = useState<string | null>(null)
 
   const mutation = useMutation({
     mutationFn: () => {
       if (source === 'jira') {
-        return api.post(`/plans/from-jira/${form.jiraKey}`).then((r) => r.data)
+        return api.post(`/plans/from-jira/${form.jiraKey}`, {}).then((r) => r.data)
       }
       if (source === 'quality') {
         return api.post('/plans/improve-quality', form).then((r) => r.data)
@@ -37,6 +39,9 @@ export default function NewPlan() {
 
   const field = (name: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((p) => ({ ...p, [name]: e.target.value }))
+
+  const set = (name: keyof typeof form) => (value: string) =>
+    setForm((p) => ({ ...p, [name]: value }))
 
   return (
     <main>
@@ -79,13 +84,18 @@ export default function NewPlan() {
           className="space-y-4"
         >
           {source === 'jira' ? (
-            <Field label="JIRA Key" value={form.jiraKey} onChange={field('jiraKey')} required />
+            <JiraCombobox value={form.jiraKey} onChange={set('jiraKey')} required />
           ) : (
             <>
               {source === 'custom' && (
                 <Field label="Title" value={form.title} onChange={field('title')} required />
               )}
-              <Field label="Repository URL" value={form.repoUrl} onChange={field('repoUrl')} required />
+              <RepoCombobox 
+                value={form.repoUrl} 
+                onChange={set('repoUrl')} 
+                required 
+                filterQualityEnabled={source === 'quality'}
+              />
               <Field label="Target Branch" value={form.targetBranch} onChange={field('targetBranch')} />
             </>
           )}

@@ -1,4 +1,4 @@
-import { useQuery, useQueries, useMutation } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -337,6 +337,7 @@ function ReportDialog({
   onClose: () => void
 }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { repo, report } = row
 
   const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
@@ -380,10 +381,13 @@ function ReportDialog({
         .post(`/upgrades/check/${repo.workspace}/${repo.repoSlug}`)
         .then((r) => r.data as { jobId?: string; planId?: string }),
     onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['plans'] })
       if (data?.planId) {
         navigate({ to: '/plans/$id', params: { id: data.planId } })
       } else if (data?.jobId) {
         navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+      } else {
+        navigate({ to: '/plans' })
       }
     },
   })
@@ -518,11 +522,11 @@ function ReportDialog({
             {versionOutdated && (
               <button
                 onClick={() => {
-                  if (!upgradeJobMutation.isPending && !hasActivePlan) {
+                  if (!upgradeJobMutation.isPending && !upgradeJobMutation.isSuccess && !hasActivePlan) {
                     upgradeJobMutation.mutate()
                   }
                 }}
-                disabled={upgradeJobMutation.isPending || hasActivePlan}
+                disabled={upgradeJobMutation.isPending || upgradeJobMutation.isSuccess || hasActivePlan}
                 className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm font-medium hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
               >
                 {upgradeJobMutation.isPending ? (
