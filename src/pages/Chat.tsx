@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus } from '@/types/api'
+import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment } from '@/types/api'
 import {
   ChatInputBar,
   MessageBubble,
@@ -46,6 +46,7 @@ export default function Chat() {
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false)
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
   const [generatingPlanTitle, setGeneratingPlanTitle] = useState<string>('')
+  const [existingAttachments, setExistingAttachments] = useState<ChatAttachment[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
@@ -63,6 +64,38 @@ export default function Chat() {
       setMessages([])
       setActivePlans([])
     }
+  }, [params.conversationId])
+
+  // Fetch existing attachments when loading a conversation
+  useEffect(() => {
+    const id = params.conversationId
+    if (!id) {
+      setExistingAttachments([])
+      return
+    }
+
+    const fetchAttachments = async () => {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}/attachments/conversation/${id}`, {
+          headers: {
+            'Authorization': `Bearer ${getToken()}`,
+          },
+        })
+        
+        if (response.ok) {
+          const attachments = await response.json()
+          setExistingAttachments(attachments)
+        } else {
+          console.error('Failed to fetch attachments:', response.statusText)
+          setExistingAttachments([])
+        }
+      } catch (error) {
+        console.error('Error fetching attachments:', error)
+        setExistingAttachments([])
+      }
+    }
+
+    fetchAttachments()
   }, [params.conversationId])
 
   // Fetch linked plans when navigating to an existing conversation
@@ -845,6 +878,7 @@ export default function Chat() {
           onSend={sendMessage}
           onSecretWarning={handleSecretWarning}
           onConversationCreate={handleConversationCreate}
+          existingAttachments={existingAttachments}
           activePlans={activePlans}
           isGeneratingPlan={isGeneratingPlan}
           generatingPlanTitle={generatingPlanTitle}

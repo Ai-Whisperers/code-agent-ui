@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
-import { AttachmentUpload } from './AttachmentUpload'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan } from '@/types/api'
 
@@ -19,6 +18,7 @@ type ChatInputBarProps = {
   onSend: (text: string, attachmentIds?: string[], mode?: ChatMode) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
   onConversationCreate?: (conversationId: string) => void
+  existingAttachments?: ChatAttachment[]
   activePlans?: ExecutionPlan[]
   isGeneratingPlan?: boolean
   generatingPlanTitle?: string
@@ -35,11 +35,12 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
+  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
   ref,
 ) {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [mode, setMode] = useState<ChatMode>('ask')
@@ -48,6 +49,25 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const secretDebounceRef = useRef<number | null>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
+
+  // Initialize attachments with existing attachments when they change
+  useEffect(() => {
+    setAttachments(existingAttachments)
+    // Fetch presigned URLs for existing image attachments
+    existingAttachments.forEach(async (attachment) => {
+      if (attachment.contentType.startsWith('image/')) {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/attachments/${attachment.attachmentId}/download`, {
+            headers: { 'Authorization': `Bearer ${getToken()}` },
+          })
+          if (res.ok) {
+            const data = await res.json()
+            setPreviewUrls(prev => ({ ...prev, [attachment.attachmentId]: data.downloadUrl }))
+          }
+        } catch { /* silent */ }
+      }
+    })
+  }, [existingAttachments])
 
   useImperativeHandle(ref, () => ({
     clear: () => {
@@ -147,8 +167,14 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     setAttachments(prev => [...prev, attachment])
   }
 
-  const handleRemoveAttachment = (attachmentId: string) => {
+  const removeAttachment = (attachmentId: string) => {
     setAttachments(prev => prev.filter(a => a.attachmentId !== attachmentId))
+    setPreviewUrls(prev => {
+      const next = { ...prev }
+      if (next[attachmentId]?.startsWith('blob:')) URL.revokeObjectURL(next[attachmentId])
+      delete next[attachmentId]
+      return next
+    })
     setUploadError(null)
   }
 
@@ -205,6 +231,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
         const attachment: ChatAttachment = await response.json()
         handleAttachmentUploaded(attachment)
+        // Create object URL preview for image attachments
+        if (file.type.startsWith('image/')) {
+          const objectUrl = URL.createObjectURL(file)
+          setPreviewUrls(prev => ({ ...prev, [attachment.attachmentId]: objectUrl }))
+        }
       }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Upload failed')
@@ -228,19 +259,6 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
   return (
     <div className="shrink-0 px-4 sm:px-8 py-4 bg-[var(--color-page-background)]">
-      {/* Attachment upload section - show above input when active */}
-      {conversationId && attachments.length > 0 && (
-        <div className="mb-3">
-          <AttachmentUpload
-            conversationId={conversationId}
-            onAttachmentUploaded={handleAttachmentUploaded}
-            onRemoveAttachment={handleRemoveAttachment}
-            attachments={attachments}
-            disabled={isStreaming}
-          />
-        </div>
-      )}
-      
       {/* Modern pill-shaped input container */}
       <div className="max-w-2xl mx-auto">
 
@@ -303,15 +321,50 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           </div>
         )}
 
-        <div className={`flex items-center gap-2 p-3 transition-colors ${
+        <div className={`flex flex-col transition-colors ${
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
               : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
             : mode === 'plan'
-              ? 'rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400'
-              : 'rounded-full bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+              ? `${attachments.length > 0 ? 'rounded-2xl' : 'rounded-full'} bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400`
+              : `${attachments.length > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
         }`}>
+
+        {/* Inline attachments - shown at top of input container */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 p-3 pb-1">
+            {attachments.map((attachment) => (
+              <div
+                key={attachment.attachmentId}
+                className="inline-flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-2 py-1.5 max-w-[280px]"
+              >
+                {previewUrls[attachment.attachmentId] ? (
+                  <img
+                    src={previewUrls[attachment.attachmentId]}
+                    alt={attachment.filename}
+                    className="w-8 h-8 rounded object-cover shrink-0"
+                  />
+                ) : (
+                  <FileText size={13} className="text-gray-400 shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <div className="text-xs text-gray-500 truncate">{attachment.filename}</div>
+                  <div className="text-xs text-gray-400">{formatFileSize(attachment.fileSize)}</div>
+                </div>
+                <button
+                  onClick={() => removeAttachment(attachment.attachmentId)}
+                  className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors shrink-0"
+                  title="Remove attachment"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 p-3">
         {/* Plus icon for attachments/options */}
         <button
           onClick={() => {
@@ -407,6 +460,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         >
           <Send size={16} />
         </button>
+        </div>
         </div>
       </div>
       
