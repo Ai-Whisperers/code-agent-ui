@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { FileText, Eye, Zap, ExternalLink, X, Loader2 } from 'lucide-react'
+import { getToken } from '@/lib/keycloak'
 import type { ExecutionPlan } from '@/types/api'
 
 export interface PlanIndicatorProps {
@@ -28,7 +29,7 @@ export function PlanIndicator({
       const approveResponse = await fetch(`${import.meta.env.VITE_API_URL}/plans/${plan.planId}/approve`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
       })
@@ -41,7 +42,7 @@ export function PlanIndicator({
       const executeResponse = await fetch(`${import.meta.env.VITE_API_URL}/plans/${plan.planId}/execute`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Authorization': `Bearer ${getToken()}`,
           'Content-Type': 'application/json',
         },
       })

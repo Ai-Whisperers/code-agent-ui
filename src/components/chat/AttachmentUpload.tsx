@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import { Upload, X, FileIcon, ImageIcon, AlertCircle } from 'lucide-react'
+import { Upload, X, FileIcon as File, ImageIcon, AlertCircle } from 'lucide-react'
+import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment } from '@/types/api'
 
 export interface AttachmentUploadProps {
@@ -65,7 +66,7 @@ export function AttachmentUpload({
           method: 'POST',
           body: formData,
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${getToken()}`,
           },
         })
 

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 're
 import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { AttachmentUpload } from './AttachmentUpload'
+import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan } from '@/types/api'
 
 export type ChatInputHandle = {
@@ -193,7 +194,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           method: 'POST',
           body: formData,
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+            'Authorization': `Bearer ${getToken()}`,
           },
         })
 
