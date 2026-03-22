@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb } from 'lucide-react'
+import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { AttachmentUpload } from './AttachmentUpload'
-import type { ChatAttachment } from '@/types/api'
+import type { ChatAttachment, ExecutionPlan } from '@/types/api'
 
 export type ChatInputHandle = {
   clear: () => void
   focus: () => void
+  setMode: (mode: ChatMode) => void
 }
 
 type ChatMode = 'ask' | 'plan'
@@ -16,6 +17,12 @@ type ChatInputBarProps = {
   conversationId?: string
   onSend: (text: string, attachmentIds?: string[], mode?: ChatMode) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
+  activePlans?: ExecutionPlan[]
+  isGeneratingPlan?: boolean
+  generatingPlanTitle?: string
+  onViewPlan?: (plan: ExecutionPlan) => void
+  onImplementPlan?: (plan: ExecutionPlan) => void
+  onDismissPlan?: (planId: string) => void
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 10MB
@@ -26,7 +33,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning },
+  { isStreaming, conversationId, onSend, onSecretWarning, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -49,6 +56,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
     },
     focus: () => textareaRef.current?.focus(),
+    setMode: (m: ChatMode) => setMode(m),
   }))
 
   useEffect(() => {
@@ -230,10 +238,74 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       
       {/* Modern pill-shaped input container */}
       <div className="max-w-2xl mx-auto">
-        <div className={`flex items-center gap-2 p-3 rounded-full transition-colors ${
-          mode === 'plan'
-            ? 'bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400'
-            : 'bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+
+        {/* Plan attachment row - shown when plan is generating or active */}
+        {(isGeneratingPlan || activePlans.length > 0) && (
+          <div className="border border-b-0 border-[var(--color-cards-card-stroke)] rounded-t-xl bg-[var(--color-cards-card-background)] overflow-hidden">
+            {isGeneratingPlan && (
+              <div className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                <FileText size={14} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
+                <span className="flex-1 truncate text-[var(--color-fonts-font-color-primary)] font-medium">
+                  {generatingPlanTitle || 'Generating plan...'}
+                </span>
+                <div className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] shrink-0">
+                  <Loader2 size={12} className="animate-spin" />
+                  <span>Building...</span>
+                </div>
+              </div>
+            )}
+            {activePlans.map((plan) => (
+              <div
+                key={plan.planId}
+                className="flex items-center gap-3 px-4 py-2.5 text-sm border-t border-[var(--color-cards-card-stroke)] first:border-t-0"
+              >
+                <FileText size={14} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
+                <span className="flex-1 truncate text-[var(--color-fonts-font-color-primary)] font-medium">
+                  {plan.title}
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    onClick={() => onViewPlan?.(plan)}
+                    className="px-2.5 py-1 rounded-md border border-[var(--color-cards-card-stroke)] text-xs font-medium text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-stroke)] transition-colors"
+                  >
+                    <Eye size={12} className="inline mr-1" />
+                    View
+                  </button>
+                  {plan.status === 'DRAFT' && (
+                    <button
+                      onClick={() => onImplementPlan?.(plan)}
+                      className="px-2.5 py-1 rounded-md bg-[var(--color-buttons-button-primary)] text-white text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1"
+                    >
+                      <Zap size={12} />
+                      Implement ⌘↵
+                    </button>
+                  )}
+                  {(plan.status === 'RUNNING' || plan.status === 'APPROVED') && (
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[var(--color-fonts-font-color-support)]">
+                      <Loader2 size={12} className="animate-spin" />
+                      Executing...
+                    </div>
+                  )}
+                  <button
+                    onClick={() => onDismissPlan?.(plan.planId)}
+                    className="p-1 rounded hover:bg-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)] transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className={`flex items-center gap-2 p-3 transition-colors ${
+          isGeneratingPlan || activePlans.length > 0
+            ? mode === 'plan'
+              ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
+              : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
+            : mode === 'plan'
+              ? 'rounded-full bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400'
+              : 'rounded-full bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
         }`}>
         {/* Plus icon for attachments/options */}
         <button

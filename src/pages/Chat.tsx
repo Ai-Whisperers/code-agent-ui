@@ -22,7 +22,6 @@ import {
   type ChatInputHandle,
   PlanDialog,
 } from '@/components/chat'
-import { PlanIndicator } from '@/components/chat/PlanIndicator'
 
 export default function Chat() {
   const navigate = useNavigate()
@@ -62,7 +61,36 @@ export default function Chat() {
     } else {
       setActiveConversationId(null)
       setMessages([])
+      setActivePlans([])
     }
+  }, [params.conversationId])
+
+  // Fetch linked plans when navigating to an existing conversation
+  useEffect(() => {
+    const id = params.conversationId
+    if (!id) return
+
+    const fetchLinkedPlans = async () => {
+      try {
+        const token = getToken()
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL}/plans?conversationId=${id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (response.ok) {
+          const plans: ExecutionPlan[] = await response.json()
+          const linked = plans.filter((p) => p.conversationId === id)
+          if (linked.length > 0) {
+            setActivePlans(linked)
+            chatInputRef.current?.setMode('plan')
+          }
+        }
+      } catch {
+        // silently ignore - conversation may have no linked plans
+      }
+    }
+
+    fetchLinkedPlans()
   }, [params.conversationId])
 
   // Scroll handling
@@ -358,13 +386,10 @@ export default function Chat() {
   }, [])
 
   const handleViewPlan = useCallback((plan: ExecutionPlan) => {
-    navigate({ to: `/plans/${plan.planId}` })
-  }, [navigate])
-
-  const handleClickPlan = useCallback((plan: ExecutionPlan) => {
     setSelectedPlan(plan)
     setIsPlanDialogOpen(true)
   }, [])
+
 
   const handleClosePlanDialog = useCallback(() => {
     setIsPlanDialogOpen(false)
@@ -374,8 +399,8 @@ export default function Chat() {
   const handleSavePlan = useCallback(async (planId: string, content: string) => {
     try {
       const token = getToken()
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}`, {
-        method: 'PUT',
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}/markdown`, {
+        method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -556,35 +581,6 @@ export default function Chat() {
             <MessageBubble key={msg.id} message={msg} />
           ))}
 
-          {/* Active plan indicators */}
-          {isGeneratingPlan && (
-            <div className="mb-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
-                  <div>
-                    <h3 className="font-medium text-blue-900 dark:text-blue-100">
-                      Generating plan...
-                    </h3>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      {generatingPlanTitle || 'AI is creating an execution plan for your request'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {activePlans.map((plan) => (
-            <PlanIndicator
-              key={plan.planId}
-              plan={plan}
-              onViewPlan={handleViewPlan}
-              onImplementPlan={handleImplementPlan}
-              onClick={handleClickPlan}
-              onDismiss={() => handleDismissPlan(plan.planId)}
-            />
-          ))}
 
           {/* In-flight assistant message */}
           {isStreaming && (
@@ -688,6 +684,12 @@ export default function Chat() {
           conversationId={activeConversationId || undefined}
           onSend={sendMessage}
           onSecretWarning={handleSecretWarning}
+          activePlans={activePlans}
+          isGeneratingPlan={isGeneratingPlan}
+          generatingPlanTitle={generatingPlanTitle}
+          onViewPlan={handleViewPlan}
+          onImplementPlan={(plan) => handleImplementPlan(plan.planId)}
+          onDismissPlan={handleDismissPlan}
         />
       </div>
 
