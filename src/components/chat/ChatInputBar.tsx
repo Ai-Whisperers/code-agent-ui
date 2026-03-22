@@ -280,7 +280,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
                       Implement ⌘↵
                     </button>
                   )}
-                  {(plan.status === 'RUNNING' || plan.status === 'APPROVED') && (
+                  {(plan.status === 'RUNNING' || plan.status === 'EXECUTING' || plan.status === 'APPROVED') && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-[var(--color-fonts-font-color-support)]">
                       <Loader2 size={12} className="animate-spin" />
                       Executing...

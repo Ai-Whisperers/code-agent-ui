@@ -104,7 +104,7 @@ export interface PromptTemplate {
 
 // ---- Execution Plans ----
 
-export type PlanStatus = 'DRAFT' | 'APPROVED' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+export type PlanStatus = 'DRAFT' | 'APPROVED' | 'RUNNING' | 'EXECUTING' | 'COMPLETED' | 'FAILED'
 
 export interface PlanStep {
   stepId: string

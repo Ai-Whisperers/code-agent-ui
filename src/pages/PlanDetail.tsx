@@ -139,6 +139,18 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
             </div>
           )}
 
+          {/* Markdown content — shown when no structured phases exist */}
+          {(!plan.planData?.phases || plan.planData.phases.length === 0) && plan.markdownContent && (
+            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+              <div className="px-5 py-3 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
+                <h3>Plan</h3>
+              </div>
+              <pre className="px-5 py-4 text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-mono overflow-x-auto">
+                {plan.markdownContent}
+              </pre>
+            </div>
+          )}
+
           {/* Phases & Steps */}
           {plan.planData?.phases && plan.planData.phases.length > 0 && (
             <div className="space-y-4">

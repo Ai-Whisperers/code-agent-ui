@@ -10,6 +10,7 @@ function PlanStatusBadge({ status }: { status: PlanStatus }) {
     DRAFT: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
     APPROVED: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
     RUNNING: 'bg-[var(--color-status-neutral-background)] text-[var(--color-fonts-font-color-brand)]',
+    EXECUTING: 'bg-[var(--color-status-neutral-background)] text-[var(--color-fonts-font-color-brand)]',
     COMPLETED: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
     FAILED: 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]',
   }
@@ -126,7 +127,7 @@ export default function PlansPage() {
                         Execute
                       </button>
                     )}
-                    {plan.status === 'RUNNING' && (
+                    {(plan.status === 'RUNNING' || plan.status === 'EXECUTING') && (
                       <RefreshCw size={16} className="animate-spin text-[var(--color-fonts-font-color-brand)]" />
                     )}
                     <button

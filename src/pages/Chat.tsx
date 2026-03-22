@@ -428,11 +428,163 @@ export default function Chat() {
     }
   }, [selectedPlan])
 
-  const handleImplementPlan = useCallback((planId: string) => {
-    // Plan implementation is handled by the PlanIndicator component
-    // We can optionally navigate to the plan page after implementation
-    navigate({ to: `/plans/${planId}` })
-  }, [navigate])
+  const handleImplementPlan = useCallback(async (planId: string) => {
+    if (isStreaming) return
+    setIsStreaming(true)
+    setStreamingContent('')
+    setStreamingThinkingSteps([])
+
+    // Mark plan as executing in local state
+    setActivePlans(prev => prev.map(p =>
+      p.planId === planId ? { ...p, status: 'EXECUTING' as PlanStatus } : p
+    ))
+
+    let accumulatedContent = ''
+    const accumulatedThinkingSteps: ThinkingStep[] = []
+
+    try {
+      const token = getToken()
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}/implement`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data:')) continue
+          const raw = line.slice(5).trim()
+          if (!raw) continue
+
+          let event: ChatEvent
+          try {
+            event = JSON.parse(raw)
+          } catch {
+            continue
+          }
+
+          switch (event.type) {
+            case 'text':
+              accumulatedContent += event.text ?? ''
+              streamingContentRef.current = accumulatedContent
+              if (!streamingRafRef.current) {
+                streamingRafRef.current = requestAnimationFrame(() => {
+                  setStreamingContent(streamingContentRef.current)
+                  streamingRafRef.current = null
+                })
+              }
+              break
+            case 'thinking': {
+              const last = accumulatedThinkingSteps[accumulatedThinkingSteps.length - 1]
+              if (last?.kind === 'thought') {
+                last.text += event.text ?? ''
+              } else {
+                accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
+              }
+              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              break
+            }
+            case 'tool_start':
+              accumulatedThinkingSteps.push({
+                kind: 'tool',
+                name: event.tool ?? '',
+                input: event.input,
+                status: 'running',
+                startTime: event.timestamp ?? Date.now(),
+              })
+              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              break
+            case 'tool_end': {
+              const lastTool = [...accumulatedThinkingSteps].reverse().find(
+                s => s.kind === 'tool' && s.name === event.tool && s.status === 'running'
+              )
+              if (lastTool && lastTool.kind === 'tool') {
+                lastTool.status = event.result?.startsWith('ERROR:') ? 'error' : 'completed'
+                lastTool.result = event.result
+                lastTool.endTime = event.timestamp ?? Date.now()
+              }
+              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              break
+            }
+            case 'done':
+              setActivePlans(prev => prev.map(p =>
+                p.planId === planId ? { ...p, status: 'COMPLETED' as PlanStatus } : p
+              ))
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  role: 'assistant' as const,
+                  content: accumulatedContent || `Plan **${planId}** implemented successfully.`,
+                  thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                },
+              ])
+              if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
+              setStreamingContent('')
+              setStreamingThinkingSteps([])
+              setIsStreaming(false)
+              return
+            case 'error':
+              setActivePlans(prev => prev.map(p =>
+                p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
+              ))
+              setMessages(prev => [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  role: 'assistant' as const,
+                  content: `**Implementation error:** ${event.error ?? 'Something went wrong.'}`,
+                },
+              ])
+              if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
+              setStreamingContent('')
+              setStreamingThinkingSteps([])
+              setIsStreaming(false)
+              return
+          }
+        }
+      }
+
+      if (accumulatedContent) {
+        setMessages(prev => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            role: 'assistant' as const,
+            content: accumulatedContent,
+            thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+          },
+        ])
+      }
+    } catch {
+      setActivePlans(prev => prev.map(p =>
+        p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
+      ))
+      setMessages(prev => [
+        ...prev,
+        { id: crypto.randomUUID(), role: 'assistant' as const, content: '**Error:** Could not reach the implementation service. Please try again.' },
+      ])
+    } finally {
+      if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
+      setIsStreaming(false)
+      setStreamingContent('')
+      setStreamingThinkingSteps([])
+    }
+  }, [isStreaming])
 
   const handleDismissPlan = useCallback((planId: string) => {
     setActivePlans(prev => prev.filter(p => p.planId !== planId))
