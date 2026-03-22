@@ -17,6 +17,7 @@ type ChatInputBarProps = {
   conversationId?: string
   onSend: (text: string, attachmentIds?: string[], mode?: ChatMode) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
+  onConversationCreate?: (conversationId: string) => void
   activePlans?: ExecutionPlan[]
   isGeneratingPlan?: boolean
   generatingPlanTitle?: string
@@ -33,7 +34,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
+  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -157,9 +158,12 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   }
 
   const handleFileUpload = async (files: FileList) => {
-    if (!conversationId) {
-      setUploadError('No conversation available for file upload')
-      return
+    let currentConversationId = conversationId
+
+    // Create conversation if one doesn't exist
+    if (!currentConversationId) {
+      currentConversationId = crypto.randomUUID()
+      onConversationCreate?.(currentConversationId)
     }
 
     setUploadError(null)
@@ -180,7 +184,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         // Upload file
         const formData = new FormData()
         formData.append('file', file)
-        formData.append('conversationId', conversationId)
+        formData.append('conversationId', currentConversationId)
         formData.append('filename', file.name)
         formData.append('contentType', file.type)
         formData.append('fileSize', file.size.toString())

@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { AlertCircle, ArrowLeft, CheckCircle, Play, RefreshCw, ExternalLink, XCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowLeft, CheckCircle, Play, RefreshCw, ExternalLink, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import ProgressTimeline from '@/components/plans/ProgressTimeline'
+import ExecutionControls from '@/components/plans/ExecutionControls'
 import api from '@/lib/api'
-import type { ExecutionPlan, PlanPhase } from '@/types/api'
+import type { ExecutionPlan } from '@/types/api'
 
 interface PlanDetailProps {
   planId: string
@@ -12,6 +15,8 @@ interface PlanDetailProps {
 export default function PlanDetail({ planId }: PlanDetailProps) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [isLiveUpdating, setIsLiveUpdating] = useState(false)
+  const eventSourceRef = useRef<EventSource | null>(null)
 
   const { data: plan, isLoading } = useQuery<ExecutionPlan>({
     queryKey: ['plan', planId],
@@ -38,6 +43,72 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
     mutationFn: () => api.post(`/plans/${planId}/reject-pr`, { reason: 'Rejected via UI' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
   })
+
+  // Handle execution control actions
+  const handleExecutionAction = (_action: 'pause' | 'resume' | 'cancel', success: boolean) => {
+    if (success) {
+      // Invalidate queries to refresh plan status
+      qc.invalidateQueries({ queryKey: ['plan', planId] })
+    }
+  }
+
+  // SSE connection for real-time updates
+  useEffect(() => {
+    const isExecuting = plan?.status === 'RUNNING' || plan?.status === 'EXECUTING'
+    
+    if (!plan || !isExecuting) {
+      // Clean up existing connection if plan is not executing
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+      return
+    }
+
+    // Only create SSE connection for executing plans
+    if (!eventSourceRef.current) {
+      const eventSource = new EventSource(`/api/plans/${planId}/events`)
+      eventSourceRef.current = eventSource
+
+      eventSource.onopen = () => {
+        console.log('SSE connection opened for plan:', planId)
+        setIsLiveUpdating(true)
+      }
+
+      eventSource.onmessage = (event) => {
+        try {
+          const progressEvent = JSON.parse(event.data)
+          console.log('Plan progress event:', progressEvent)
+          
+          // Invalidate queries to refresh the plan data
+          qc.invalidateQueries({ queryKey: ['plan', planId] })
+        } catch (error) {
+          console.error('Failed to parse SSE event:', error)
+        }
+      }
+
+      eventSource.onerror = (error) => {
+        console.error('SSE connection error:', error)
+        eventSource.close()
+        eventSourceRef.current = null
+        setIsLiveUpdating(false)
+      }
+    }
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+    }
+  }, [plan, planId, qc])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      setIsLiveUpdating(false)
+    }
+  }, [])
 
   return (
     <main>
@@ -151,50 +222,73 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
             </div>
           )}
 
-          {/* Phases & Steps */}
-          {plan.planData?.phases && plan.planData.phases.length > 0 && (
-            <div className="space-y-4">
-              <h3>Phases</h3>
-              {plan.planData.phases.map((phase: PlanPhase) => (
-                <div
-                  key={phase.phaseOrder}
-                  className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]"
-                >
-                  <div className="px-5 py-3 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
-                    <h3>
-                      Phase {phase.phaseOrder}: {phase.title}
-                    </h3>
-                  </div>
-                  <div className="divide-y divide-[var(--color-tables-table-cell-stroke)]">
-                    {phase.steps.map((step) => (
-                      <div key={step.stepId} className="px-5 py-3 flex items-start gap-3">
-                        <span className="w-6 h-6 mt-0.5 shrink-0 rounded-full bg-[var(--color-filters-filter-background)] text-[var(--color-fonts-font-color-buttons)] text-xs flex items-center justify-center font-semibold">
-                          {step.order}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
-                            {step.title}
-                          </p>
-                          {step.description && (
-                            <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
-                              {step.description}
-                            </p>
-                          )}
-                          {step.status === 'FAILED' && step.errorMessage && (
-                            <div className="mt-2 flex items-start gap-1.5 text-xs text-[var(--color-tags-font-critical)]">
-                              <AlertCircle size={13} className="mt-0.5 shrink-0" />
-                              <span>{step.errorMessage}</span>
-                            </div>
-                          )}
-                        </div>
-                        <span className={`text-xs shrink-0 ${step.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
-                          {step.status}
+          {/* Enhanced Progress Timeline */}
+          {plan.planData?.phases && plan.planData.phases.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2">
+                <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+                  <ProgressTimeline plan={plan} isLive={isLiveUpdating} />
+                </div>
+              </div>
+              <div className="lg:col-span-1 space-y-4">
+                {/* Execution Controls */}
+                <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+                  <ExecutionControls 
+                    planId={planId} 
+                    status={plan.status} 
+                    onAction={handleExecutionAction}
+                  />
+                </div>
+                
+                {/* Plan Status Info */}
+                <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+                  <h4 className="text-sm font-medium text-[var(--color-fonts-font-color-primary)] mb-3">
+                    Status Information
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-[var(--color-fonts-font-color-support)]">Current Status:</span>
+                      <span className={`font-medium ${
+                        plan.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
+                        plan.status === 'RUNNING' || plan.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
+                        plan.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
+                        'text-[var(--color-fonts-font-color-support)]'
+                      }`}>
+                        {plan.status}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--color-fonts-font-color-support)]">Total Phases:</span>
+                      <span className="text-[var(--color-fonts-font-color-primary)]">
+                        {plan.planData?.phases?.length || 0}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[var(--color-fonts-font-color-support)]">Total Steps:</span>
+                      <span className="text-[var(--color-fonts-font-color-primary)]">
+                        {plan.planData?.phases?.reduce((total, phase) => total + (phase.steps?.length || 0), 0) || 0}
+                      </span>
+                    </div>
+                    {isLiveUpdating && (
+                      <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--color-cards-card-stroke)]">
+                        <RefreshCw size={12} className="text-[var(--color-buttons-button-primary)] animate-spin" />
+                        <span className="text-[var(--color-buttons-button-primary)]">
+                          Live updates active
                         </span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
-              ))}
+              </div>
+            </div>
+          ) : (
+            /* Fallback for plans without structured phases */
+            <div className="space-y-4">
+              <ExecutionControls 
+                planId={planId} 
+                status={plan.status} 
+                onAction={handleExecutionAction}
+              />
             </div>
           )}
 

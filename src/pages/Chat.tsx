@@ -590,6 +590,14 @@ export default function Chat() {
     setActivePlans(prev => prev.filter(p => p.planId !== planId))
   }, [])
 
+  const handleConversationCreate = useCallback((conversationId: string) => {
+    // Navigate to the new conversation
+    navigate({ to: `/chat/${conversationId}` })
+    setActiveConversationId(conversationId)
+    setMessages([])
+    setActivePlans([])
+  }, [navigate])
+
   return (
     <div
       className="-mx-8 -my-6 flex bg-[var(--color-page-background)]"
@@ -836,6 +844,7 @@ export default function Chat() {
           conversationId={activeConversationId || undefined}
           onSend={sendMessage}
           onSecretWarning={handleSecretWarning}
+          onConversationCreate={handleConversationCreate}
           activePlans={activePlans}
           isGeneratingPlan={isGeneratingPlan}
           generatingPlanTitle={generatingPlanTitle}
