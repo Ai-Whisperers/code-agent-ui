@@ -619,8 +619,28 @@ export default function Chat() {
     }
   }, [isStreaming])
 
-  const handleDismissPlan = useCallback((planId: string) => {
-    setActivePlans(prev => prev.filter(p => p.planId !== planId))
+  const handleDismissPlan = useCallback(async (planId: string) => {
+    try {
+      const token = getToken()
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      if (!response.ok) {
+        console.error('Failed to delete plan:', response.statusText)
+        // Still remove from UI even if API call fails
+      }
+
+      // Remove from local state (UI)
+      setActivePlans(prev => prev.filter(p => p.planId !== planId))
+      
+      // If all plans are dismissed and we're in plan mode, user can continue sending messages to create new plans
+    } catch (error) {
+      console.error('Error deleting plan:', error)
+      // Still remove from UI even if API call fails
+      setActivePlans(prev => prev.filter(p => p.planId !== planId))
+    }
   }, [])
 
   const handleConversationCreate = useCallback((conversationId: string) => {

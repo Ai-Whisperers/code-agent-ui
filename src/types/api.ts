@@ -90,8 +90,18 @@ export interface AutomationHook {
   name: string
   enabled: boolean
   description?: string
-  trigger?: string
+  triggerType?: string
+  prEvent?: string
+  branchPattern?: string
+  cronExpr?: string
+  actionType?: string
   prompt?: string
+  ruleNames?: string[]
+  extraRules?: string
+  targetBranch?: string
+  commitDirect?: boolean
+  repoUrl?: string
+  triggerFilter?: Record<string, string>
 }
 
 // ---- Prompt Templates ----

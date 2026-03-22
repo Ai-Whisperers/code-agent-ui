@@ -43,8 +43,10 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const [mode, setMode] = useState<ChatMode>('ask')
   const [showModeMenu, setShowModeMenu] = useState(false)
+  const dragCounterRef = useRef(0)
   const pendingFindingsRef = useRef<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const secretDebounceRef = useRef<number | null>(null)
@@ -244,6 +246,40 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
   }
 
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes('Files')) {
+      setIsDragging(true)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current = 0
+    setIsDragging(false)
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      handleFileUpload(files)
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -321,7 +357,12 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           </div>
         )}
 
-        <div className={`flex flex-col transition-colors ${
+        <div
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          className={`flex flex-col transition-colors ${isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''} ${
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
