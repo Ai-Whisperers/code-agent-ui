@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { AlertCircle, ArrowLeft, CheckCircle, Play, RefreshCw } from 'lucide-react'
+import { AlertCircle, ArrowLeft, CheckCircle, Play, RefreshCw, ExternalLink, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { ExecutionPlan, PlanPhase } from '@/types/api'
@@ -26,6 +26,16 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
 
   const executeMutation = useMutation({
     mutationFn: () => api.post(`/plans/${planId}/execute`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
+  })
+
+  const approvePrMutation = useMutation({
+    mutationFn: () => api.post(`/plans/${planId}/approve-pr`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
+  })
+
+  const rejectPrMutation = useMutation({
+    mutationFn: () => api.post(`/plans/${planId}/reject-pr`, { reason: 'Rejected via UI' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
   })
 
@@ -62,6 +72,25 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
               <Play size={15} />
               Execute Plan
             </button>
+          ) : plan?.status === 'COMPLETED' && plan?.prUrl ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => approvePrMutation.mutate()}
+                disabled={approvePrMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-status-border-success)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <CheckCircle size={15} />
+                Approve & Merge PR
+              </button>
+              <button
+                onClick={() => rejectPrMutation.mutate()}
+                disabled={rejectPrMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm font-medium hover:opacity-90 transition-opacity"
+              >
+                <XCircle size={15} />
+                Reject PR
+              </button>
+            </div>
           ) : undefined
         }
       />
@@ -94,6 +123,21 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
               </div>
             )}
           </div>
+
+          {/* PR link */}
+          {plan.prUrl && (
+            <div className="bg-[var(--color-status-neutral-background)] border border-[var(--color-status-border-neutral)] rounded-[var(--border-radius-card)] p-4">
+              <a
+                href={plan.prUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 text-sm font-medium text-[var(--color-fonts-font-color-brand)] hover:underline"
+              >
+                <ExternalLink size={15} />
+                View Pull Request
+              </a>
+            </div>
+          )}
 
           {/* Phases & Steps */}
           {plan.planData?.phases && plan.planData.phases.length > 0 && (

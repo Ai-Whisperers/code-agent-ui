@@ -134,6 +134,7 @@ export interface ExecutionPlan {
   updatedAt?: string
   approvedAt?: string
   errorMessage?: string
+  prUrl?: string
   planData?: {
     phases?: PlanPhase[]
   }

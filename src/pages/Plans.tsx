@@ -78,6 +78,11 @@ export default function PlansPage() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <PlanStatusBadge status={plan.status} />
+                      {plan.status === 'COMPLETED' && plan.prUrl && (
+                        <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+                          PR PENDING
+                        </span>
+                      )}
                       {plan.sourceRef && (
                         <span className="text-xs text-[var(--color-fonts-font-color-support)]">
                           {plan.sourceRef}
