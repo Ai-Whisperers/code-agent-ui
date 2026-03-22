@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Send } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
+import { AttachmentUpload } from './AttachmentUpload'
+import type { ChatAttachment } from '@/types/api'
 
 export type ChatInputHandle = {
   clear: () => void
@@ -9,15 +11,17 @@ export type ChatInputHandle = {
 
 type ChatInputBarProps = {
   isStreaming: boolean
-  onSend: (text: string) => void
+  conversationId?: string
+  onSend: (text: string, attachmentIds?: string[]) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
 }
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, onSend, onSecretWarning },
+  { isStreaming, conversationId, onSend, onSecretWarning },
   ref,
 ) {
   const [input, setInput] = useState('')
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const pendingFindingsRef = useRef<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const secretDebounceRef = useRef<number | null>(null)
@@ -25,6 +29,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   useImperativeHandle(ref, () => ({
     clear: () => {
       setInput('')
+      setAttachments([])
       pendingFindingsRef.current = []
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
     },
@@ -52,10 +57,21 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       onSecretWarning(findings, text)
       return
     }
-    onSend(text)
+    
+    const attachmentIds = attachments.length > 0 ? attachments.map(a => a.attachmentId) : undefined
+    onSend(text, attachmentIds)
     setInput('')
+    setAttachments([])
     pendingFindingsRef.current = []
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
+  }
+
+  const handleAttachmentUploaded = (attachment: ChatAttachment) => {
+    setAttachments(prev => [...prev, attachment])
+  }
+
+  const handleRemoveAttachment = (attachmentId: string) => {
+    setAttachments(prev => prev.filter(a => a.attachmentId !== attachmentId))
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -73,6 +89,19 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
   return (
     <div className="shrink-0 px-4 sm:px-8 py-4 border-t border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
+      {/* Attachment upload section */}
+      {conversationId && (
+        <div className="mb-3">
+          <AttachmentUpload
+            conversationId={conversationId}
+            onAttachmentUploaded={handleAttachmentUploaded}
+            onRemoveAttachment={handleRemoveAttachment}
+            attachments={attachments}
+            disabled={isStreaming}
+          />
+        </div>
+      )}
+      
       <div className="flex gap-3 items-end">
         <textarea
           ref={textareaRef}

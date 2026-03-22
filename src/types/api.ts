@@ -135,6 +135,9 @@ export interface ExecutionPlan {
   approvedAt?: string
   errorMessage?: string
   prUrl?: string
+  conversationId?: string
+  markdownContent?: string
+  workspacePath?: string
   planData?: {
     phases?: PlanPhase[]
   }
@@ -400,14 +403,28 @@ export interface KnowledgeSearchResponse {
 
 // ---- Chat ----
 
+export interface ChatAttachment {
+  id?: number
+  attachmentId: string
+  conversationId: string
+  messageId?: number
+  filename: string
+  contentType: string
+  fileSize: number
+  s3Bucket: string
+  s3Key: string
+  uploadedAt: string
+}
+
 export interface ChatRequest {
   message: string
   productId?: string
   conversationId?: string
+  attachmentIds?: string[]
 }
 
 export interface ChatEvent {
-  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'done' | 'error'
+  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_created' | 'plan_updated' | 'done' | 'error'
   text?: string
   tool?: string
   input?: Record<string, unknown>
@@ -415,6 +432,9 @@ export interface ChatEvent {
   timestamp?: number
   error?: string
   conversationId?: string
+  planId?: string
+  title?: string
+  status?: string
 }
 
 export type ThinkingStep =

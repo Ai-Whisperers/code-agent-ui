@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ThinkingStep } from '@/types/api'
+import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus } from '@/types/api'
 import {
   ChatInputBar,
   MessageBubble,
@@ -21,6 +21,7 @@ import {
   saveMessagesToStorage,
   type ChatInputHandle,
 } from '@/components/chat'
+import { PlanIndicator } from '@/components/chat/PlanIndicator'
 
 export default function Chat() {
   const navigate = useNavigate()
@@ -40,6 +41,7 @@ export default function Chat() {
     findings: string[]
     pendingText: string
   } | null>(null)
+  const [activePlans, setActivePlans] = useState<ExecutionPlan[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
@@ -75,7 +77,7 @@ export default function Chat() {
   }, [streamingThinkingSteps, isStreaming])
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, attachmentIds?: string[]) => {
       if (!text.trim() || isStreaming) return
 
       const userMsg: ChatMessage = {
@@ -107,6 +109,7 @@ export default function Chat() {
           body: JSON.stringify({
             message: text.trim(),
             ...(activeConversationId ? { conversationId: activeConversationId } : {}),
+            ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
           }),
         })
 
@@ -177,6 +180,41 @@ export default function Chat() {
                   lastTool.endTime = event.timestamp ?? Date.now()
                 }
                 setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                break
+              }
+              case 'plan_created': {
+                if (event.planId && event.title && event.status) {
+                  // Fetch full plan details from the API
+                  const fetchPlan = async () => {
+                    try {
+                      const token = getToken()
+                      const planResponse = await fetch(`${import.meta.env.VITE_API_URL}/plans/${event.planId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                      })
+                      if (planResponse.ok) {
+                        const plan: ExecutionPlan = await planResponse.json()
+                        setActivePlans(prev => {
+                          // Remove any existing plan with same ID and add the new one
+                          const filtered = prev.filter(p => p.planId !== plan.planId)
+                          return [...filtered, plan]
+                        })
+                      }
+                    } catch (error) {
+                      console.error('Failed to fetch plan details:', error)
+                    }
+                  }
+                  fetchPlan()
+                }
+                break
+              }
+              case 'plan_updated': {
+                if (event.planId && event.status) {
+                  setActivePlans(prev => prev.map(plan => 
+                    plan.planId === event.planId 
+                      ? { ...plan, status: event.status as PlanStatus }
+                      : plan
+                  ))
+                }
                 break
               }
               case 'done': {
@@ -285,6 +323,20 @@ export default function Chat() {
     setSecretWarning({ findings, pendingText })
   }, [])
 
+  const handleViewPlan = useCallback((plan: ExecutionPlan) => {
+    navigate({ to: `/plans/${plan.planId}` })
+  }, [navigate])
+
+  const handleImplementPlan = useCallback((planId: string) => {
+    // Plan implementation is handled by the PlanIndicator component
+    // We can optionally navigate to the plan page after implementation
+    navigate({ to: `/plans/${planId}` })
+  }, [navigate])
+
+  const handleDismissPlan = useCallback((planId: string) => {
+    setActivePlans(prev => prev.filter(p => p.planId !== planId))
+  }, [])
+
   return (
     <div
       className="-mx-8 -my-6 flex bg-[var(--color-page-background)]"
@@ -298,71 +350,98 @@ export default function Chat() {
         />
       )}
 
-      {/* Conversation sidebar (desktop) */}
-      <div
-        className={`hidden sm:flex flex-col shrink-0 border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] transition-all duration-200 overflow-hidden ${
-          sidebarOpen ? 'w-64' : 'w-0'
-        }`}
-      >
-        <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2">
-          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
-            Conversations
-          </span>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
-            title="Collapse sidebar"
-          >
-            <PanelLeftClose size={15} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <ConversationSidebar
-            activeId={activeConversationId}
-            onSelect={handleSelectConversation}
-            onNewChat={handleNewChat}
-          />
-        </div>
+    {/* Conversation sidebar (desktop) */}
+    <div
+      className={`hidden sm:flex flex-col shrink-0 border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] transition-all duration-200 overflow-hidden ${
+        sidebarOpen ? 'w-64' : 'w-0'
+      }`}
+      style={{ height: '100dvh' }}
+    >
+      <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2">
+        <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+          Conversations
+        </span>
+        <button
+          onClick={() => setSidebarOpen(false)}
+          className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+          title="Collapse sidebar"
+        >
+          <PanelLeftClose size={15} />
+        </button>
       </div>
-
-      {/* Conversation sidebar (mobile drawer) */}
-      <div
-        className={`fixed top-0 left-0 bottom-0 z-30 w-72 flex flex-col border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] sm:hidden transition-transform duration-200 ${
-          mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2 border-b border-[var(--color-cards-card-stroke)]">
-          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
-            Conversations
-          </span>
-          <button
-            onClick={() => setMobileSidebarOpen(false)}
-            className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
-          >
-            <X size={15} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-hidden">
-          <ConversationSidebar
-            activeId={activeConversationId}
-            onSelect={handleSelectConversation}
-            onNewChat={handleNewChat}
-          />
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <ConversationSidebar
+          activeId={activeConversationId}
+          onSelect={handleSelectConversation}
+          onNewChat={handleNewChat}
+        />
       </div>
+    </div>
 
-      {/* Main chat panel */}
-      <div className="flex-1 min-w-0 flex flex-col">
-        {/* Header */}
-        <div className="shrink-0 flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--color-cards-card-stroke)]">
-          <button
-            onClick={() => setMobileSidebarOpen(true)}
-            className="sm:hidden p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
-            title="Open conversations"
-          >
-            <PanelLeftOpen size={17} />
-          </button>
-          {!sidebarOpen && (
+    {/* Conversation sidebar (mobile drawer) */}
+    <div
+      className={`fixed top-0 left-0 bottom-0 z-30 w-72 flex flex-col border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] sm:hidden transition-transform duration-200 ${
+        mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2 border-b border-[var(--color-cards-card-stroke)]">
+        <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+          Conversations
+        </span>
+        <button
+          onClick={() => setMobileSidebarOpen(false)}
+          className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+        >
+          <X size={15} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <ConversationSidebar
+          activeId={activeConversationId}
+          onSelect={handleSelectConversation}
+          onNewChat={handleNewChat}
+        />
+      </div>
+    </div>
+
+    {/* Conversation sidebar (mobile drawer) */}
+    <div
+      className={`fixed top-0 left-0 bottom-0 z-30 w-72 flex flex-col border-r border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)] sm:hidden transition-transform duration-200 ${
+        mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}
+    >
+      <div className="shrink-0 flex items-center justify-between px-3 pt-4 pb-2 border-b border-[var(--color-cards-card-stroke)]">
+        <span className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+          Conversations
+        </span>
+        <button
+          onClick={() => setMobileSidebarOpen(false)}
+          className="p-1 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+        >
+          <X size={15} />
+        </button>
+      </div>
+      <div className="flex-1 overflow-hidden">
+        <ConversationSidebar
+          activeId={activeConversationId}
+          onSelect={handleSelectConversation}
+          onNewChat={handleNewChat}
+        />
+      </div>
+    </div>
+
+    {/* Main chat panel */}
+    <div className="flex-1 min-w-0 flex flex-col">
+      {/* Header */}
+      <div className="shrink-0 flex items-center gap-3 px-4 sm:px-6 py-3 border-b border-[var(--color-cards-card-stroke)]">
+        <button
+          onClick={() => setMobileSidebarOpen(true)}
+          className="sm:hidden p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
+          title="Open conversations"
+        >
+          <PanelLeftOpen size={17} />
+        </button>
+        {!sidebarOpen && (
             <button
               onClick={() => setSidebarOpen(true)}
               className="hidden sm:flex p-1.5 rounded hover:bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-support)] transition-colors"
@@ -399,6 +478,17 @@ export default function Chat() {
 
           {messages.map((msg) => (
             <MessageBubble key={msg.id} message={msg} />
+          ))}
+
+          {/* Active plan indicators */}
+          {activePlans.map((plan) => (
+            <PlanIndicator
+              key={plan.planId}
+              plan={plan}
+              onViewPlan={handleViewPlan}
+              onImplementPlan={handleImplementPlan}
+              onDismiss={() => handleDismissPlan(plan.planId)}
+            />
           ))}
 
           {/* In-flight assistant message */}
@@ -500,6 +590,7 @@ export default function Chat() {
         <ChatInputBar
           ref={chatInputRef}
           isStreaming={isStreaming}
+          conversationId={activeConversationId || undefined}
           onSend={sendMessage}
           onSecretWarning={handleSecretWarning}
         />
