@@ -77,7 +77,7 @@ export default function Chat() {
   }, [streamingThinkingSteps, isStreaming])
 
   const sendMessage = useCallback(
-    async (text: string, attachmentIds?: string[]) => {
+    async (text: string, attachmentIds?: string[], mode?: 'ask' | 'plan') => {
       if (!text.trim() || isStreaming) return
 
       const userMsg: ChatMessage = {
@@ -110,6 +110,7 @@ export default function Chat() {
             message: text.trim(),
             ...(activeConversationId ? { conversationId: activeConversationId } : {}),
             ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
+            ...(mode ? { mode } : {}),
           }),
         })
 
