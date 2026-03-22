@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Plus, AlertCircle, X } from 'lucide-react'
+import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { AttachmentUpload } from './AttachmentUpload'
 import type { ChatAttachment } from '@/types/api'
@@ -9,10 +9,12 @@ export type ChatInputHandle = {
   focus: () => void
 }
 
+type ChatMode = 'ask' | 'plan'
+
 type ChatInputBarProps = {
   isStreaming: boolean
   conversationId?: string
-  onSend: (text: string, attachmentIds?: string[]) => void
+  onSend: (text: string, attachmentIds?: string[], mode?: ChatMode) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
 }
 
@@ -31,9 +33,12 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [mode, setMode] = useState<ChatMode>('ask')
+  const [showModeMenu, setShowModeMenu] = useState(false)
   const pendingFindingsRef = useRef<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const secretDebounceRef = useRef<number | null>(null)
+  const modeMenuRef = useRef<HTMLDivElement>(null)
 
   useImperativeHandle(ref, () => ({
     clear: () => {
@@ -60,6 +65,23 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
   }, [input])
 
+  // Close mode menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
+        setShowModeMenu(false)
+      }
+    }
+
+    if (showModeMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showModeMenu])
+
   const handleSend = (text: string) => {
     if (!text.trim() || isStreaming) return
     const findings = pendingFindingsRef.current.length > 0 ? pendingFindingsRef.current : detectSecrets(text)
@@ -69,7 +91,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
     
     const attachmentIds = attachments.length > 0 ? attachments.map(a => a.attachmentId) : undefined
-    onSend(text, attachmentIds)
+    onSend(text, attachmentIds, mode)
     setInput('')
     setAttachments([])
     setUploadError(null)
@@ -174,7 +196,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       
       {/* Modern pill-shaped input container */}
       <div className="max-w-2xl mx-auto">
-        <div className="flex items-center gap-2 p-3 rounded-full bg-gray-100 hover:bg-gray-50 transition-colors border border-gray-200 hover:border-gray-300 focus-within:border-blue-500">
+        <div className={`flex items-center gap-2 p-3 rounded-full transition-colors ${
+          mode === 'plan'
+            ? 'bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400'
+            : 'bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500'
+        }`}>
         {/* Plus icon for attachments/options */}
         <button
           onClick={() => {
@@ -197,6 +223,52 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           <Plus size={18} />
         </button>
 
+        {/* Mode switcher button */}
+        <div className="relative" ref={modeMenuRef}>
+          <button
+            onClick={() => setShowModeMenu(!showModeMenu)}
+            disabled={isStreaming}
+            className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+              mode === 'plan'
+                ? 'hover:bg-orange-200 text-orange-600'
+                : 'hover:bg-gray-200 text-gray-600'
+            }`}
+            title={`Current mode: ${mode === 'ask' ? 'Ask' : 'Plan'}`}
+          >
+            {mode === 'ask' ? <MessageSquare size={16} /> : <Lightbulb size={16} />}
+          </button>
+
+          {/* Mode selection menu */}
+          {showModeMenu && (
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[100px] z-10">
+              <button
+                onClick={() => {
+                  setMode('ask')
+                  setShowModeMenu(false)
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                  mode === 'ask' ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                }`}
+              >
+                <MessageSquare size={14} />
+                Ask
+              </button>
+              <button
+                onClick={() => {
+                  setMode('plan')
+                  setShowModeMenu(false)
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                  mode === 'plan' ? 'bg-orange-50 text-orange-700' : 'text-gray-700'
+                }`}
+              >
+                <Lightbulb size={14} />
+                Plan
+              </button>
+            </div>
+          )}
+        </div>
+
         {/* Input field */}
         <textarea
           ref={textareaRef}
@@ -207,7 +279,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           placeholder={
             isStreaming
               ? 'Waiting for response…'
-              : 'Ask anything… (Enter to send, Shift+Enter for newline)'
+              : mode === 'ask' ? 'Ask anything… (Enter to send, Shift+Enter for newline)' : 'Describe what you want to plan (Enter to send, Shift+Enter for newline)'
           }
           disabled={isStreaming}
           rows={1}
