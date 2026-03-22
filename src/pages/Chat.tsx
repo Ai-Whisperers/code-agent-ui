@@ -45,6 +45,8 @@ export default function Chat() {
   const [activePlans, setActivePlans] = useState<ExecutionPlan[]>([])
   const [selectedPlan, setSelectedPlan] = useState<ExecutionPlan | null>(null)
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false)
+  const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
+  const [generatingPlanTitle, setGeneratingPlanTitle] = useState<string>('')
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
@@ -141,7 +143,9 @@ export default function Chat() {
             let event: ChatEvent
             try {
               event = JSON.parse(raw)
-            } catch {
+              console.log('🔍 Parsed SSE event:', event.type, event)
+            } catch (parseError) {
+              console.error('❌ Failed to parse SSE event:', raw, parseError)
               continue
             }
 
@@ -186,28 +190,54 @@ export default function Chat() {
                 setStreamingThinkingSteps([...accumulatedThinkingSteps])
                 break
               }
+              case 'plan_start': {
+                console.log('🎯 Received plan_start event:', event)
+                // Set loading state to show spinner immediately with plan title
+                setIsGeneratingPlan(true)
+                setGeneratingPlanTitle(event.title || 'Generating plan...')
+                break
+              }
               case 'plan_created': {
+                console.log('🎯 Received plan_created event:', event)
                 if (event.planId && event.title && event.status) {
                   // Fetch full plan details from the API
                   const fetchPlan = async () => {
                     try {
                       const token = getToken()
-                      const planResponse = await fetch(`${import.meta.env.VITE_API_URL}/plans/${event.planId}`, {
+                      const url = `${import.meta.env.VITE_API_URL}/plans/${event.planId}`
+                      console.log('📡 Fetching plan details from:', url)
+                      
+                      const planResponse = await fetch(url, {
                         headers: { Authorization: `Bearer ${token}` }
                       })
+                      
+                      console.log('📥 Plan API response:', planResponse.status, planResponse.ok)
+                      
                       if (planResponse.ok) {
                         const plan: ExecutionPlan = await planResponse.json()
+                        console.log('✅ Plan fetched successfully:', plan)
+                        
+                        // Clear loading state now that plan is ready
+                        setIsGeneratingPlan(false)
+                        setGeneratingPlanTitle('')
+                        
                         setActivePlans(prev => {
                           // Remove any existing plan with same ID and add the new one
                           const filtered = prev.filter(p => p.planId !== plan.planId)
+                          console.log('🔄 Updating activePlans, new count:', filtered.length + 1)
                           return [...filtered, plan]
                         })
+                      } else {
+                        const errorText = await planResponse.text()
+                        console.error('❌ Plan API failed:', planResponse.status, errorText)
                       }
                     } catch (error) {
-                      console.error('Failed to fetch plan details:', error)
+                      console.error('❌ Failed to fetch plan details:', error)
                     }
                   }
                   fetchPlan()
+                } else {
+                  console.warn('⚠️ Invalid plan_created event data:', event)
                 }
                 break
               }
@@ -527,6 +557,24 @@ export default function Chat() {
           ))}
 
           {/* Active plan indicators */}
+          {isGeneratingPlan && (
+            <div className="mb-3 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                  <div>
+                    <h3 className="font-medium text-blue-900 dark:text-blue-100">
+                      Generating plan...
+                    </h3>
+                    <p className="text-sm text-blue-700 dark:text-blue-300">
+                      {generatingPlanTitle || 'AI is creating an execution plan for your request'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
           {activePlans.map((plan) => (
             <PlanIndicator
               key={plan.planId}

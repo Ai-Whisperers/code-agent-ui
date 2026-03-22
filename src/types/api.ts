@@ -424,7 +424,7 @@ export interface ChatRequest {
 }
 
 export interface ChatEvent {
-  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_created' | 'plan_updated' | 'done' | 'error'
+  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_start' | 'plan_created' | 'plan_updated' | 'done' | 'error'
   text?: string
   tool?: string
   input?: Record<string, unknown>
