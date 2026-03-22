@@ -20,6 +20,7 @@ import {
   loadMessagesFromStorage,
   saveMessagesToStorage,
   type ChatInputHandle,
+  PlanDialog,
 } from '@/components/chat'
 import { PlanIndicator } from '@/components/chat/PlanIndicator'
 
@@ -42,6 +43,8 @@ export default function Chat() {
     pendingText: string
   } | null>(null)
   const [activePlans, setActivePlans] = useState<ExecutionPlan[]>([])
+  const [selectedPlan, setSelectedPlan] = useState<ExecutionPlan | null>(null)
+  const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
@@ -328,6 +331,48 @@ export default function Chat() {
     navigate({ to: `/plans/${plan.planId}` })
   }, [navigate])
 
+  const handleClickPlan = useCallback((plan: ExecutionPlan) => {
+    setSelectedPlan(plan)
+    setIsPlanDialogOpen(true)
+  }, [])
+
+  const handleClosePlanDialog = useCallback(() => {
+    setIsPlanDialogOpen(false)
+    setSelectedPlan(null)
+  }, [])
+
+  const handleSavePlan = useCallback(async (planId: string, content: string) => {
+    try {
+      const token = getToken()
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ markdownContent: content }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to save plan')
+      }
+
+      // Update the plan in local state
+      setActivePlans(prev => prev.map(plan => 
+        plan.planId === planId 
+          ? { ...plan, markdownContent: content }
+          : plan
+      ))
+
+      if (selectedPlan && selectedPlan.planId === planId) {
+        setSelectedPlan({ ...selectedPlan, markdownContent: content })
+      }
+    } catch (error) {
+      console.error('Failed to save plan:', error)
+      throw error
+    }
+  }, [selectedPlan])
+
   const handleImplementPlan = useCallback((planId: string) => {
     // Plan implementation is handled by the PlanIndicator component
     // We can optionally navigate to the plan page after implementation
@@ -488,6 +533,7 @@ export default function Chat() {
               plan={plan}
               onViewPlan={handleViewPlan}
               onImplementPlan={handleImplementPlan}
+              onClick={handleClickPlan}
               onDismiss={() => handleDismissPlan(plan.planId)}
             />
           ))}
@@ -596,6 +642,16 @@ export default function Chat() {
           onSecretWarning={handleSecretWarning}
         />
       </div>
+
+      {/* Plan Dialog */}
+      {selectedPlan && (
+        <PlanDialog
+          plan={selectedPlan}
+          isOpen={isPlanDialogOpen}
+          onClose={handleClosePlanDialog}
+          onSave={handleSavePlan}
+        />
+      )}
     </div>
   )
 }

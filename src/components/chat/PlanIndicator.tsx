@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { FileText, Eye, Zap, ExternalLink, X } from 'lucide-react'
+import { FileText, Eye, Zap, ExternalLink, X, Loader2 } from 'lucide-react'
 import type { ExecutionPlan } from '@/types/api'
 
 export interface PlanIndicatorProps {
@@ -7,13 +7,15 @@ export interface PlanIndicatorProps {
   onViewPlan?: (plan: ExecutionPlan) => void
   onImplementPlan?: (planId: string) => void
   onDismiss?: () => void
+  onClick?: (plan: ExecutionPlan) => void
 }
 
 export function PlanIndicator({
   plan,
   onViewPlan,
   onImplementPlan,
-  onDismiss
+  onDismiss,
+  onClick
 }: PlanIndicatorProps) {
   const [isImplementing, setIsImplementing] = useState(false)
 
@@ -92,7 +94,12 @@ export function PlanIndicator({
   }
 
   return (
-    <div className="mx-4 sm:mx-8 mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-card)] p-4 shadow-sm">
+    <div 
+      className={`mx-4 sm:mx-8 mb-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-card)] p-4 shadow-sm transition-all duration-200 ${
+        onClick ? 'cursor-pointer hover:shadow-md hover:border-blue-300 dark:hover:border-blue-700' : ''
+      }`}
+      onClick={onClick ? () => onClick(plan) : undefined}
+    >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 flex-1 min-w-0">
           <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0 mt-0.5">
@@ -116,33 +123,50 @@ export function PlanIndicator({
             )}
 
             <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => onViewPlan?.(plan)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
-              >
-                <Eye size={12} />
-                View Plan
-              </button>
-
-              {plan.status === 'DRAFT' && (
+              {!onClick && (
                 <button
-                  onClick={handleImplement}
-                  disabled={isImplementing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onViewPlan?.(plan)
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 text-xs font-medium hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors"
                 >
-                  <Zap size={12} />
-                  {isImplementing ? 'Starting...' : 'Implement ⚡️'}
+                  <Eye size={12} />
+                  View Plan
                 </button>
               )}
 
-              {plan.status === 'RUNNING' && (
-                <a
-                  href={`/plans/${plan.planId}`}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-xs font-medium hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors"
+              {plan.status === 'DRAFT' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleImplement()
+                  }}
+                  disabled={isImplementing}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium transition-colors"
                 >
-                  <ExternalLink size={12} />
-                  View Progress
-                </a>
+                  {isImplementing ? (
+                    <>
+                      <Loader2 size={12} className="animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={12} />
+                      Implement ⚡️
+                    </>
+                  )}
+                </button>
+              )}
+
+              {(plan.status === 'RUNNING' || plan.status === 'APPROVED') && (
+                <button
+                  disabled
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-xs font-medium opacity-75 cursor-not-allowed"
+                >
+                  <Loader2 size={12} className="animate-spin" />
+                  Executing...
+                </button>
               )}
 
               {plan.status === 'COMPLETED' && plan.prUrl && (
@@ -162,7 +186,10 @@ export function PlanIndicator({
 
         {onDismiss && (
           <button
-            onClick={onDismiss}
+            onClick={(e) => {
+              e.stopPropagation()
+              onDismiss()
+            }}
             className="p-1 rounded hover:bg-white/50 dark:hover:bg-gray-800/50 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
             title="Dismiss"
           >

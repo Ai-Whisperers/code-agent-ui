@@ -82,15 +82,49 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
   }, [showModeMenu])
 
+  // Handle keyboard shortcut for mode switching (Cmd/Ctrl + .)
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === '.') {
+        event.preventDefault()
+        setMode(prevMode => prevMode === 'ask' ? 'plan' : 'ask')
+      }
+    }
+
+    document.addEventListener('keydown', handleKeydown)
+
+    return () => {
+      document.removeEventListener('keydown', handleKeydown)
+    }
+  }, [])
+
   const handleSend = (text: string) => {
     if (!text.trim() || isStreaming) return
+    
+    // Check for mode switching commands
+    const trimmedText = text.trim().toLowerCase()
+    if (trimmedText === '.plan') {
+      setMode('plan')
+      setInput('')
+      return
+    }
+    if (trimmedText === '.ask') {
+      setMode('ask')
+      setInput('')
+      return
+    }
+    
+    // Check for secrets before sending
     const findings = pendingFindingsRef.current.length > 0 ? pendingFindingsRef.current : detectSecrets(text)
     if (findings.length > 0) {
       onSecretWarning(findings, text)
       return
     }
-    
-    const attachmentIds = attachments.length > 0 ? attachments.map(a => a.attachmentId) : undefined
+
+    const attachmentIds = attachments.length > 0 
+      ? attachments.map(a => a.attachmentId) 
+      : undefined
+
     onSend(text, attachmentIds, mode)
     setInput('')
     setAttachments([])

@@ -1,5 +1,7 @@
 // Chat feature components - barrel export
 
+export { PlanIndicator } from './PlanIndicator'
+export { default as PlanDialog } from './PlanDialog'
 export { ChatInputBar } from './ChatInputBar'
 export type { ChatInputHandle } from './ChatInputBar'
 
