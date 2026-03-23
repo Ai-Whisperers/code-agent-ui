@@ -1,9 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Plus, Save, X, Power, Search, Trash2, Sparkles, Copy, RotateCcw, Send, MessageCircle } from 'lucide-react'
+import { Plus, Save, X, Power, Search, Trash2, Sparkles, Copy, RotateCcw, Send, MessageCircle, ChevronDown, Filter } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { AutomationHook } from '@/types/api'
+import { RepositorySelect } from '@/components/ui/RepositorySelect'
 
 // ── Trigger category helpers ──────────────────────────────────────────────────
 
@@ -378,6 +379,25 @@ function HookCard({
               {subLabel}
             </p>
           )}
+          {hook.triggerFilter && Object.keys(hook.triggerFilter).length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-1">
+              {hook.triggerFilter.repoSlug && hook.triggerFilter.repoSlug.split(',').map(r => r.trim()).filter(Boolean).map(r => (
+                <span key={r} className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                  repo:{r}
+                </span>
+              ))}
+              {hook.triggerFilter.severity && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+                  sev:{hook.triggerFilter.severity}
+                </span>
+              )}
+              {hook.triggerFilter.issueType && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-red-50 text-red-600 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800">
+                  type:{hook.triggerFilter.issueType}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -484,6 +504,10 @@ function HookEditor({
   const needsRepoUrl = form.triggerTypes?.some(t => ['scm.pr_created', 'scm.pr_updated', 'scm.pr_merged', 'pr_event'].includes(t)) || false
   const needsCronExpr = form.triggerTypes?.includes('cron') || false
   const needsPrEvent = form.triggerTypes?.includes('pr_event') || false
+  const hasScmTriggers = form.triggerTypes?.some(t => t.startsWith('scm.') || t === 'pr_event') || false
+  const hasAikidoTriggers = form.triggerTypes?.some(t => t.startsWith('aikido.')) || false
+  const showAdvancedFilters = hasScmTriggers || hasAikidoTriggers
+  const [filtersExpanded, setFiltersExpanded] = useState(false)
 
   const generateTemplate = () => {
     const primaryTrigger = form.triggerTypes?.[0] || ''
@@ -739,6 +763,111 @@ Does this look good, or would you like me to adjust anything? You can copy this 
             />
           </div>
         </div>
+
+        {/* Advanced Filters */}
+        {showAdvancedFilters && (
+          <div className="space-y-4">
+            <button
+              type="button"
+              onClick={() => setFiltersExpanded(p => !p)}
+              className="flex items-center gap-2 w-full text-sm font-semibold text-[var(--color-fonts-font-color-headings)] border-b border-[var(--color-cards-card-stroke)] pb-2 hover:text-[var(--color-buttons-button-primary)] transition-colors"
+            >
+              <Filter size={14} />
+              Advanced Filters
+              <span className="text-xs font-normal text-[var(--color-fonts-font-color-support)] ml-1">(optional)</span>
+              {form.triggerFilter && Object.keys(form.triggerFilter).length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 rounded-full">
+                  {Object.keys(form.triggerFilter).length} active
+                </span>
+              )}
+              <ChevronDown size={14} className={`ml-auto transition-transform ${filtersExpanded ? 'rotate-180' : ''}`} />
+            </button>
+
+            {filtersExpanded && (
+              <div className="space-y-4">
+                {/* Repository filter — SCM and Aikido */}
+                {(hasScmTriggers || hasAikidoTriggers) && (
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                      Restrict to Repositories
+                    </label>
+                    <RepositorySelect
+                      value={form.triggerFilter?.repoSlug ? form.triggerFilter.repoSlug.split(',').map(s => s.trim()).filter(Boolean) : []}
+                      onChange={(repos) => setForm(p => {
+                        const f = { ...(p.triggerFilter || {}) }
+                        if (repos.length > 0) f.repoSlug = repos.join(',')
+                        else delete f.repoSlug
+                        return { ...p, triggerFilter: f }
+                      })}
+                    />
+                    <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                      Leave empty to trigger for all repositories.
+                    </p>
+                  </div>
+                )}
+
+                {/* Aikido-specific filters */}
+                {hasAikidoTriggers && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                        Severity
+                      </label>
+                      <select
+                        value={form.triggerFilter?.severity ?? ''}
+                        onChange={(e) => setForm(p => {
+                          const f = { ...(p.triggerFilter || {}) }
+                          if (e.target.value) f.severity = e.target.value
+                          else delete f.severity
+                          return { ...p, triggerFilter: f }
+                        })}
+                        className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+                      >
+                        <option value="">All severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="high">High</option>
+                        <option value="medium">Medium</option>
+                        <option value="low">Low</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                        Issue Type
+                      </label>
+                      <select
+                        value={form.triggerFilter?.issueType ?? ''}
+                        onChange={(e) => setForm(p => {
+                          const f = { ...(p.triggerFilter || {}) }
+                          if (e.target.value) f.issueType = e.target.value
+                          else delete f.issueType
+                          return { ...p, triggerFilter: f }
+                        })}
+                        className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+                      >
+                        <option value="">All issue types</option>
+                        <option value="sca">Open-source Dependencies</option>
+                        <option value="sast">SAST</option>
+                        <option value="iac">Infrastructure As Code</option>
+                        <option value="secrets">Exposed Secrets</option>
+                        <option value="dast">DAST / Surface Monitoring</option>
+                        <option value="ai_pentest">AI Pentest Issues</option>
+                        <option value="cloud">Cloud Configurations</option>
+                        <option value="kubernetes">Kubernetes Configurations</option>
+                        <option value="container">Container Images</option>
+                        <option value="vm">Virtual Machines</option>
+                        <option value="mobile">Mobile Issues</option>
+                        <option value="malware">Malware Issues</option>
+                        <option value="eol">End-of-life Runtimes</option>
+                        <option value="license">License Issues</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Action Configuration */}
         <div className="space-y-4">

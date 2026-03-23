@@ -104,6 +104,15 @@ export interface AutomationHook {
   triggerFilter?: Record<string, string>
 }
 
+// ---- Hook Filter Autocomplete ----
+
+export interface RepoOption {
+  value: string
+  workspace: string
+  repoSlug: string
+  displayName: string
+}
+
 // ---- Prompt Templates ----
 
 export interface PromptTemplate {
