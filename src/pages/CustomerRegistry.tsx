@@ -407,7 +407,7 @@ function GeneralTab({
 
   const repos = (Array.isArray(repoData) ? repoData : []).filter((r) => !r.archived)
 
-  function handleToggleRepo(slug: string, repo: RepoSettings) {
+  function handleToggleRepo(slug: string) {
     const isSelected = form.selectedRepos.includes(slug)
     const updated = isSelected
       ? form.selectedRepos.filter((s) => s !== slug)

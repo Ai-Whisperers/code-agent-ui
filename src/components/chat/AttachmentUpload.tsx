@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { Upload, X, FileIcon as File, ImageIcon, AlertCircle } from 'lucide-react'
+import { Upload, X, FileIcon, ImageIcon, AlertCircle } from 'lucide-react'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment } from '@/types/api'
 
