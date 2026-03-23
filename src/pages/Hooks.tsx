@@ -22,6 +22,12 @@ function getCategory(triggerType?: string): Exclude<TriggerCategory, 'ALL'> {
   return 'Other'
 }
 
+function getCategories(triggerTypes?: string[]): Exclude<TriggerCategory, 'ALL'>[] {
+  if (!triggerTypes || triggerTypes.length === 0) return ['Other']
+  const categories = triggerTypes.map(getCategory)
+  return [...new Set(categories)]
+}
+
 const CATEGORY_COLORS: Record<Exclude<TriggerCategory, 'ALL'>, string> = {
   SCM:        'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
   Jira:       'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
@@ -144,8 +150,11 @@ function subTriggerLabel(hook: AutomationHook): string | null {
     const branch = hook.branchPattern ? ` · ${hook.branchPattern}` : ''
     return `${hook.prEvent}${branch}`
   }
-  if (hook.triggerType && hook.triggerType !== 'pr_event') {
-    return hook.triggerType
+  if (hook.triggerTypes && hook.triggerTypes.length > 0) {
+    const nonPrTriggers = hook.triggerTypes.filter(t => t !== 'pr_event')
+    if (nonPrTriggers.length > 0) {
+      return nonPrTriggers.join(', ')
+    }
   }
   return null
 }
@@ -158,7 +167,6 @@ export default function HooksPage() {
   const [showHookDialog, setShowHookDialog] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<TriggerCategory>('ALL')
-  const [deleteState, setDeleteState] = useState<{hook: string; confirming: boolean} | null>(null)
 
   const { data: hooks, isLoading } = useQuery<AutomationHook[]>({
     queryKey: ['hooks'],
@@ -194,7 +202,7 @@ export default function HooksPage() {
       h.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (h.description ?? '').toLowerCase().includes(searchTerm.toLowerCase())
     const matchesCategory =
-      categoryFilter === 'ALL' || getCategory(h.triggerType) === categoryFilter
+      categoryFilter === 'ALL' || getCategories(h.triggerTypes).includes(categoryFilter)
     return matchesSearch && matchesCategory
   })
 
@@ -329,7 +337,7 @@ function HookCard({
   isDeleting: boolean
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const category = getCategory(hook.triggerType)
+  const categories = getCategories(hook.triggerTypes)
   const subLabel = subTriggerLabel(hook)
 
   function handleDeleteClick() {
@@ -344,12 +352,17 @@ function HookCard({
   return (
     <div className="flex items-center justify-between bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] px-5 py-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
       <div className="flex items-start gap-3 min-w-0">
-        {/* Trigger category badge */}
-        <span
-          className={`mt-0.5 shrink-0 inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-tag)] text-xs font-semibold ${CATEGORY_COLORS[category]}`}
-        >
-          {category}
-        </span>
+        {/* Trigger category badges */}
+        <div className="flex flex-wrap gap-1 mt-0.5 shrink-0">
+          {categories.map((category) => (
+            <span
+              key={category}
+              className={`inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-tag)] text-xs font-semibold ${CATEGORY_COLORS[category]}`}
+            >
+              {category}
+            </span>
+          ))}
+        </div>
 
         <div className="min-w-0">
           <p className="text-sm font-semibold text-[var(--color-fonts-font-color-primary)] truncate">
@@ -452,10 +465,13 @@ function HookEditor({
 }) {
   const [form, setForm] = useState<AutomationHook>(hook)
   const [selectedCategory, setSelectedCategory] = useState(() => {
-    const option = TRIGGER_OPTIONS.find(opt => 
-      opt.triggers.some(t => t.value === form.triggerType)
-    )
-    return option?.category || 'SCM'
+    if (form.triggerTypes && form.triggerTypes.length > 0) {
+      const option = TRIGGER_OPTIONS.find(opt => 
+        opt.triggers.some(t => form.triggerTypes?.includes(t.value))
+      )
+      return option?.category || 'SCM'
+    }
+    return 'SCM'
   })
   const [showPromptTemplate, setShowPromptTemplate] = useState(false)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -465,12 +481,13 @@ function HookEditor({
   const [isGenerating, setIsGenerating] = useState(false)
 
   const currentCategoryTriggers = TRIGGER_OPTIONS.find(opt => opt.category === selectedCategory)?.triggers || []
-  const needsRepoUrl = ['scm.pr_created', 'scm.pr_updated', 'scm.pr_merged', 'pr_event'].includes(form.triggerType || '')
-  const needsCronExpr = form.triggerType === 'cron'
-  const needsPrEvent = form.triggerType === 'pr_event'
+  const needsRepoUrl = form.triggerTypes?.some(t => ['scm.pr_created', 'scm.pr_updated', 'scm.pr_merged', 'pr_event'].includes(t)) || false
+  const needsCronExpr = form.triggerTypes?.includes('cron') || false
+  const needsPrEvent = form.triggerTypes?.includes('pr_event') || false
 
   const generateTemplate = () => {
-    const template = generatePromptTemplate(form.triggerType)
+    const primaryTrigger = form.triggerTypes?.[0] || ''
+    const template = generatePromptTemplate(primaryTrigger)
     setCustomPrompt(template)
     setShowPromptTemplate(true)
     setChatMode('template')
@@ -482,7 +499,7 @@ function HookEditor({
     setConversation([
       {
         role: 'assistant',
-        content: `Hi! I'm here to help you create a great automation prompt for your ${form.triggerType || 'hook'}. Tell me what you'd like this hook to do when it triggers. For example:
+        content: `Hi! I'm here to help you create a great automation prompt for your ${form.triggerTypes?.join(', ') || 'hook'}. Tell me what you'd like this hook to do when it triggers. For example:
 
 • "Update the README when code changes"
 • "Fix security vulnerabilities automatically" 
@@ -504,17 +521,18 @@ What would you like your hook to accomplish?`
 
     // Simulate AI response generation
     setTimeout(() => {
-      const aiResponse = generateAIResponse(userMessage, form.triggerType)
+      const aiResponse = generateAIResponse(userMessage, form.triggerTypes)
       setConversation(prev => [...prev, { role: 'assistant', content: aiResponse }])
       setIsGenerating(false)
     }, 1500)
   }
 
-  const generateAIResponse = (userMessage: string, triggerType?: string) => {
+  const generateAIResponse = (userMessage: string, triggerTypes?: string[]) => {
     // Simple AI response simulation - in real implementation this would call your AI service
-    const baseTemplate = generatePromptTemplate(triggerType)
+    const primaryTrigger = triggerTypes?.[0] || ''
+    const baseTemplate = generatePromptTemplate(primaryTrigger)
     
-    return `Based on what you described, here's a customized prompt for your ${triggerType || 'automation hook'}:
+    return `Based on what you described, here's a customized prompt for your ${triggerTypes?.join(', ') || 'automation hook'}:
 
 ---
 
@@ -620,8 +638,8 @@ Does this look good, or would you like me to adjust anything? You can copy this 
                   type="button"
                   onClick={() => {
                     setSelectedCategory(opt.category)
-                    // Clear trigger type when switching categories
-                    setForm(p => ({ ...p, triggerType: undefined }))
+                    // Clear trigger types when switching categories
+                    setForm(p => ({ ...p, triggerTypes: [] }))
                   }}
                   className={`px-3 py-2 rounded-[var(--border-radius-button-small)] text-sm font-medium transition-colors ${
                     selectedCategory === opt.category
@@ -644,11 +662,18 @@ Does this look good, or would you like me to adjust anything? You can copy this 
               {currentCategoryTriggers.map((trigger) => (
                 <label key={trigger.value} className="flex items-start gap-3 p-3 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] hover:bg-[var(--color-cards-card-background)] cursor-pointer">
                   <input
-                    type="radio"
-                    name="triggerType"
+                    type="checkbox"
                     value={trigger.value}
-                    checked={form.triggerType === trigger.value}
-                    onChange={(e) => setForm(p => ({ ...p, triggerType: e.target.value }))}
+                    checked={form.triggerTypes?.includes(trigger.value) || false}
+                    onChange={(e) => {
+                      const { value, checked } = e.target
+                      setForm(p => ({
+                        ...p,
+                        triggerTypes: checked
+                          ? [...(p.triggerTypes || []), value]
+                          : (p.triggerTypes || []).filter(t => t !== value)
+                      }))
+                    }}
                     className="mt-1"
                   />
                   <div className="flex-1 min-w-0">
@@ -758,7 +783,7 @@ Does this look good, or would you like me to adjust anything? You can copy this 
                 <button
                   type="button"
                   onClick={generateTemplate}
-                  disabled={!form.triggerType}
+                  disabled={!form.triggerTypes?.length}
                   className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <Sparkles size={12} />
@@ -767,7 +792,7 @@ Does this look good, or would you like me to adjust anything? You can copy this 
                 <button
                   type="button"
                   onClick={startChat}
-                  disabled={!form.triggerType}
+                  disabled={!form.triggerTypes?.length}
                   className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   <MessageCircle size={12} />
@@ -971,7 +996,7 @@ Does this look good, or would you like me to adjust anything? You can copy this 
       <div className="flex gap-2 mt-6 pt-4 border-t border-[var(--color-cards-card-stroke)]">
         <button
           onClick={() => onSave(form)}
-          disabled={isSaving || !form.name || !form.triggerType || !form.prompt}
+          disabled={isSaving || !form.name || !form.triggerTypes?.length || !form.prompt}
           className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-60 transition-colors"
         >
           <Save size={14} />

@@ -90,7 +90,7 @@ export interface AutomationHook {
   name: string
   enabled: boolean
   description?: string
-  triggerType?: string
+  triggerTypes?: string[]
   prEvent?: string
   branchPattern?: string
   cronExpr?: string
