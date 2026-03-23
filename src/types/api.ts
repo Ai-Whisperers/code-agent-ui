@@ -327,12 +327,12 @@ export interface TeamMember {
   name?: string
   email?: string
   jiraAccountId?: string
-  slackId?: string
 }
 
 export interface CustomerConfig {
   customerId: string
   name: string
+  environments?: EnvironmentConfig[]
   metadata?: Record<string, unknown>
   createdAt?: string
   updatedAt?: string
@@ -345,7 +345,6 @@ export interface ProductConfig {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  environments?: EnvironmentConfig[]
   teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
   createdAt?: string
@@ -354,6 +353,7 @@ export interface ProductConfig {
 
 export interface UpsertCustomerRequest {
   name: string
+  environments?: EnvironmentConfig[]
   metadata?: Record<string, unknown>
 }
 
@@ -363,7 +363,6 @@ export interface UpsertProductRequest {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  environments?: EnvironmentConfig[]
   teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
 }

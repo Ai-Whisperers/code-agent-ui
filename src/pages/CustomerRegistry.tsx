@@ -92,6 +92,8 @@ function useToast() {
 
 // ── Customer Modal ────────────────────────────────────────────────────────────
 
+type CustomerModalTab = 'general' | 'environments'
+
 function CustomerModal({
   initial,
   onSave,
@@ -104,13 +106,26 @@ function CustomerModal({
   isSaving: boolean
 }) {
   const isEdit = !!initial
+  const [tab, setTab] = useState<CustomerModalTab>('general')
   const [customerId, setCustomerId] = useState(initial?.customerId ?? '')
   const [name, setName] = useState(initial?.name ?? '')
+  const [environments, setEnvironments] = useState<EnvironmentConfig[]>(initial?.environments ?? [])
 
   function handleSubmit() {
     if (!customerId.trim() || !name.trim()) return
-    onSave(customerId.trim(), { name: name.trim() })
+    onSave(customerId.trim(), {
+      name: name.trim(),
+      environments: environments.length > 0 ? environments : undefined,
+    })
   }
+
+  const MODAL_TABS: Array<{ id: CustomerModalTab; label: string }> = [
+    { id: 'general', label: 'General' },
+    {
+      id: 'environments',
+      label: environments.length > 0 ? `Environments (${environments.length})` : 'Environments',
+    },
+  ]
 
   return (
     <div
@@ -119,12 +134,12 @@ function CustomerModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-2xl"
+        className="w-full max-w-2xl bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-2xl flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)] shrink-0">
           <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
-            {isEdit ? 'Edit Customer' : 'Add Customer'}
+            {isEdit ? `Edit Customer — ${initial.customerId}` : 'Add Customer'}
           </h2>
           <button
             onClick={onClose}
@@ -134,39 +149,62 @@ function CustomerModal({
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
-          <div>
-            <label className={labelCls}>Customer ID *</label>
-            <input
-              className={inputCls}
-              value={customerId}
-              onChange={(e) => setCustomerId(e.target.value)}
-              disabled={isEdit}
-              placeholder="e.g. acme-corp"
-              autoFocus={!isEdit}
-            />
-            {!isEdit && (
-              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
-                Unique slug — cannot be changed after creation.
-              </p>
-            )}
-          </div>
-          <div>
-            <label className={labelCls}>Display Name *</label>
-            <input
-              className={inputCls}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Acme Corporation"
-              autoFocus={isEdit}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSubmit()
-              }}
-            />
-          </div>
+        <div className="flex gap-1 px-5 border-b border-[var(--color-cards-card-stroke)] shrink-0">
+          {MODAL_TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+                tab === t.id
+                  ? 'border-[var(--color-buttons-button-primary)] text-[var(--color-fonts-font-color-headings)]'
+                  : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)]">
+        <div className="overflow-y-auto flex-1 px-5 py-4">
+          {tab === 'general' && (
+            <div className="space-y-4">
+              <div>
+                <label className={labelCls}>Customer ID *</label>
+                <input
+                  className={inputCls}
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  disabled={isEdit}
+                  placeholder="e.g. acme-corp"
+                  autoFocus={!isEdit}
+                />
+                {!isEdit && (
+                  <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                    Unique slug — cannot be changed after creation.
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className={labelCls}>Display Name *</label>
+                <input
+                  className={inputCls}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Acme Corporation"
+                  autoFocus={isEdit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSubmit()
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {tab === 'environments' && (
+            <EnvironmentsTab environments={environments} onChange={setEnvironments} />
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
           <button className={btnSecondary} onClick={onClose}>
             Cancel
           </button>
@@ -321,7 +359,6 @@ interface ProductFormState {
   jiraProjects: Array<{ role: string; key: string }>
   confluenceSpaceKey: string
   confluenceRootPageId: string
-  environments: EnvironmentConfig[]
   teams: Record<string, TeamMember[]>
 }
 
@@ -337,7 +374,6 @@ function blankProduct(): ProductFormState {
     jiraProjects: [],
     confluenceSpaceKey: '',
     confluenceRootPageId: '',
-    environments: [],
     teams: {},
   }
 }
@@ -355,7 +391,6 @@ function productToForm(p: ProductConfig): ProductFormState {
     jiraProjects: Object.entries(p.jira?.projects ?? {}).map(([role, key]) => ({ role, key })),
     confluenceSpaceKey: p.confluence?.spaceKey ?? '',
     confluenceRootPageId: p.confluence?.rootPageId ?? '',
-    environments: p.environments ?? [],
     teams: p.teams ?? {},
   }
 }
@@ -383,7 +418,6 @@ function formToRequest(f: ProductFormState): UpsertProductRequest {
       f.confluenceSpaceKey || f.confluenceRootPageId
         ? { spaceKey: f.confluenceSpaceKey || undefined, rootPageId: f.confluenceRootPageId || undefined }
         : undefined,
-    environments: f.environments.length > 0 ? f.environments : undefined,
     teams: Object.keys(f.teams).length > 0 ? f.teams : undefined,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   }
@@ -705,31 +739,25 @@ function EnvironmentEditor({
 }
 
 function EnvironmentsTab({
-  form,
-  set,
+  environments,
+  onChange,
 }: {
-  form: ProductFormState
-  set: <K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) => void
+  environments: EnvironmentConfig[]
+  onChange: (envs: EnvironmentConfig[]) => void
 }) {
   function addEnvironment() {
-    set('environments', [
-      ...form.environments,
+    onChange([
+      ...environments,
       { name: '', aws: { accountId: '', region: '', iamRole: '' }, deployedRepos: [] },
     ])
   }
 
   function updateEnv(idx: number, updated: EnvironmentConfig) {
-    set(
-      'environments',
-      form.environments.map((e, i) => (i === idx ? updated : e)),
-    )
+    onChange(environments.map((e, i) => (i === idx ? updated : e)))
   }
 
   function removeEnv(idx: number) {
-    set(
-      'environments',
-      form.environments.filter((_, i) => i !== idx),
-    )
+    onChange(environments.filter((_, i) => i !== idx))
   }
 
   return (
@@ -743,13 +771,13 @@ function EnvironmentsTab({
         </button>
       </div>
 
-      {form.environments.length === 0 && (
+      {environments.length === 0 && (
         <div className="text-center py-8 text-sm text-[var(--color-fonts-font-color-support)]">
           No environments configured. Click "Add Environment" to add one.
         </div>
       )}
 
-      {form.environments.map((env, idx) => (
+      {environments.map((env, idx) => (
         <EnvironmentEditor
           key={idx}
           env={env}
@@ -773,7 +801,7 @@ function RoleEditor({
   const [open, setOpen] = useState(members.length > 0)
 
   function addMember() {
-    onChange([...members, { name: '', email: '', jiraAccountId: '', slackId: '' }])
+    onChange([...members, { name: '', email: '', jiraAccountId: '' }])
     setOpen(true)
   }
 
@@ -830,16 +858,10 @@ function RoleEditor({
                 onChange={(e) => updateMember(idx, 'jiraAccountId', e.target.value)}
               />
               <div className="flex items-center gap-1">
-                <input
-                  className={inputCls}
-                  placeholder="Slack ID"
-                  value={m.slackId ?? ''}
-                  onChange={(e) => updateMember(idx, 'slackId', e.target.value)}
-                />
                 <button
                   type="button"
                   onClick={() => removeMember(idx)}
-                  className="p-1 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors shrink-0"
+                  className="ml-auto p-1 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors shrink-0"
                 >
                   <Trash2 size={13} />
                 </button>
@@ -896,7 +918,7 @@ function TeamsTab({
 
 // ── Product Modal ─────────────────────────────────────────────────────────────
 
-type ProductModalTab = 'general' | 'integrations' | 'environments' | 'teams'
+type ProductModalTab = 'general' | 'integrations' | 'teams'
 
 function ProductModal({
   initial,
@@ -927,13 +949,6 @@ function ProductModal({
   const MODAL_TABS: Array<{ id: ProductModalTab; label: string }> = [
     { id: 'general', label: 'General' },
     { id: 'integrations', label: 'Integrations' },
-    {
-      id: 'environments',
-      label:
-        form.environments.length > 0
-          ? `Environments (${form.environments.length})`
-          : 'Environments',
-    },
     { id: 'teams', label: 'Teams' },
   ]
 
@@ -978,7 +993,6 @@ function ProductModal({
         <div className="overflow-y-auto flex-1 px-5 py-4">
           {tab === 'general' && <GeneralTab form={form} set={set} isEdit={isEdit} />}
           {tab === 'integrations' && <IntegrationsTab form={form} set={set} />}
-          {tab === 'environments' && <EnvironmentsTab form={form} set={set} />}
           {tab === 'teams' && <TeamsTab form={form} set={set} />}
         </div>
 
@@ -1401,11 +1415,6 @@ function ProductsTab() {
                       {(p.metadata.repos as string[]).length !== 1 ? 's' : ''}
                     </span>
                   )}
-                  {p.environments && p.environments.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
-                      {p.environments.length} env{p.environments.length !== 1 ? 's' : ''}
-                    </span>
-                  )}
                   {p.git?.platform && (
                     <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                       {p.git.platform}
@@ -1497,7 +1506,7 @@ export default function CustomerRegistryPage() {
     <main>
       <PageHeader
         title="Customer Registry"
-        subtitle="Manage customers and their linked products. Configure each product's Git, Jira, Confluence, environments and teams independently."
+        subtitle="Manage customers and their linked products. Configure customer environments, and each product's Git, Jira, Confluence and teams independently."
       />
 
       <div className="flex gap-1 mb-4 border-b border-[var(--color-cards-card-stroke)]">
