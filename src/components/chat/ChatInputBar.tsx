@@ -233,6 +233,33 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     updateConversationContext({ confluenceDocIds })
   }
 
+  const persistContext = async (context: ConversationContext) => {
+    if (!context.conversationId) return
+    try {
+      await fetch(`${import.meta.env.VITE_API_URL}/conversation-context/${context.conversationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getToken()}` },
+        body: JSON.stringify({
+          customerIds: context.customerIds,
+          productIds: context.productIds,
+          aikidoIssueIds: context.aikidoIssueIds,
+          jiraIssueKeys: context.jiraIssueKeys,
+          confluenceDocIds: context.confluenceDocIds,
+        }),
+      })
+    } catch { /* silent — UI state is source of truth */ }
+  }
+
+  const deleteContext = async (id: string) => {
+    if (!id) return
+    try {
+      await fetch(`${import.meta.env.VITE_API_URL}/conversation-context/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+      })
+    } catch { /* silent */ }
+  }
+
   const updateConversationContext = (updates: Partial<ConversationContext>) => {
     setConversationContext(prev => {
       const newContext = {
@@ -245,6 +272,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         createdAt: prev?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
+      if (newContext.conversationId) persistContext(newContext)
       return newContext
     })
   }
@@ -272,15 +300,18 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           break
       }
       
-      return {
+      const newContext = {
         ...prev,
         ...updates,
         updatedAt: new Date().toISOString()
       }
+      if (newContext.conversationId) persistContext(newContext)
+      return newContext
     })
   }
 
   const clearAllContext = () => {
+    if (conversationId) deleteContext(conversationId)
     setConversationContext(null)
   }
 
