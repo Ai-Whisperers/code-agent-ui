@@ -715,23 +715,6 @@ function EnvironmentEditor({
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Deployed Repositories (comma-separated slugs)</label>
-            <input
-              className={inputCls}
-              value={(env.deployedRepos ?? []).join(', ')}
-              onChange={(e) =>
-                onChange({
-                  ...env,
-                  deployedRepos: e.target.value
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
-              }
-              placeholder="repo-slug-1, repo-slug-2"
-            />
-          </div>
         </div>
       )}
     </div>
@@ -748,7 +731,7 @@ function EnvironmentsTab({
   function addEnvironment() {
     onChange([
       ...environments,
-      { name: '', aws: { accountId: '', region: '', iamRole: '' }, deployedRepos: [] },
+      { name: '', aws: { accountId: '', region: '', iamRole: '' } },
     ])
   }
 

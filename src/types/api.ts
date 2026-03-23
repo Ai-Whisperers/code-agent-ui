@@ -320,7 +320,6 @@ export interface AwsConfig {
 export interface EnvironmentConfig {
   name: string
   aws?: AwsConfig
-  deployedRepos?: string[]
 }
 
 export interface TeamMember {
