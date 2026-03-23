@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug } from 'lucide-react'
+import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -280,6 +280,10 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     })
   }
 
+  const clearAllContext = () => {
+    setConversationContext(null)
+  }
+
   const getContextItemCount = () => {
     if (!conversationContext) return 0
     return (
@@ -289,6 +293,129 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       conversationContext.jiraIssueKeys.length +
       conversationContext.confluenceDocIds.length
     )
+  }
+
+  const renderContextChips = () => {
+    if (!conversationContext) return null
+    
+    const chips: React.ReactElement[] = []
+    
+    // Customer chips
+    conversationContext.customerIds.forEach(id => {
+      chips.push(
+        <div
+          key={`customer-${id}`}
+          className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+        >
+          <Building2 size={12} className="text-purple-600 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs text-purple-700 truncate font-medium">{id}</div>
+            <div className="text-xs text-purple-500">Customer</div>
+          </div>
+          <button
+            onClick={() => removeContextItem('customer', id)}
+            className="p-0.5 rounded hover:bg-purple-100 text-purple-400 hover:text-purple-600 transition-colors shrink-0"
+            title="Remove customer context"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )
+    })
+    
+    // Product chips
+    conversationContext.productIds.forEach(id => {
+      chips.push(
+        <div
+          key={`product-${id}`}
+          className="inline-flex items-center gap-1.5 bg-green-50 border border-green-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+        >
+          <Package size={12} className="text-green-600 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs text-green-700 truncate font-medium">{id}</div>
+            <div className="text-xs text-green-500">Product</div>
+          </div>
+          <button
+            onClick={() => removeContextItem('product', id)}
+            className="p-0.5 rounded hover:bg-green-100 text-green-400 hover:text-green-600 transition-colors shrink-0"
+            title="Remove product context"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )
+    })
+    
+    // Aikido issue chips
+    conversationContext.aikidoIssueIds.forEach(id => {
+      chips.push(
+        <div
+          key={`aikido-${id}`}
+          className="inline-flex items-center gap-1.5 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+        >
+          <Shield size={12} className="text-orange-600 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs text-orange-700 truncate font-medium">#{id}</div>
+            <div className="text-xs text-orange-500">Aikido Issue</div>
+          </div>
+          <button
+            onClick={() => removeContextItem('aikido', id)}
+            className="p-0.5 rounded hover:bg-orange-100 text-orange-400 hover:text-orange-600 transition-colors shrink-0"
+            title="Remove Aikido issue context"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )
+    })
+    
+    // Jira issue chips
+    conversationContext.jiraIssueKeys.forEach(key => {
+      chips.push(
+        <div
+          key={`jira-${key}`}
+          className="inline-flex items-center gap-1.5 bg-blue-50 border border-blue-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+        >
+          <Bug size={12} className="text-blue-600 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs text-blue-700 truncate font-medium">{key}</div>
+            <div className="text-xs text-blue-500">Jira Issue</div>
+          </div>
+          <button
+            onClick={() => removeContextItem('jira', key)}
+            className="p-0.5 rounded hover:bg-blue-100 text-blue-400 hover:text-blue-600 transition-colors shrink-0"
+            title="Remove Jira issue context"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )
+    })
+    
+    // Confluence doc chips
+    conversationContext.confluenceDocIds.forEach(id => {
+      chips.push(
+        <div
+          key={`confluence-${id}`}
+          className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-200 rounded-lg px-2 py-1.5 max-w-[200px]"
+        >
+          <FileText size={12} className="text-indigo-600 shrink-0" />
+          <div className="min-w-0">
+            <div className="text-xs text-indigo-700 truncate font-medium">{id}</div>
+            <div className="text-xs text-indigo-500">Confluence Doc</div>
+          </div>
+          <button
+            onClick={() => removeContextItem('confluence', id)}
+            className="p-0.5 rounded hover:bg-indigo-100 text-indigo-400 hover:text-indigo-600 transition-colors shrink-0"
+            title="Remove Confluence doc context"
+          >
+            <X size={10} />
+          </button>
+        </div>
+      )
+    })
+    
+    return chips
   }
 
   const handleFileUpload = async (files: FileList) => {
@@ -467,18 +594,18 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          className={`flex flex-col transition-colors ${isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''} ${
+          className={`relative flex flex-col transition-colors ${isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''} ${
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
               : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
             : mode === 'plan'
-              ? `${attachments.length > 0 ? 'rounded-2xl' : 'rounded-full'} bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400`
-              : `${attachments.length > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
+              ? `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400`
+              : `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
         }`}>
 
-        {/* Inline attachments - shown at top of input container */}
-        {attachments.length > 0 && (
+        {/* Inline attachments and context - shown at top of input container */}
+        {(attachments.length > 0 || getContextItemCount() > 0) && (
           <div className="flex flex-wrap gap-2 p-3 pb-1">
             {attachments.map((attachment) => (
               <div
@@ -507,10 +634,24 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
                 </button>
               </div>
             ))}
+            {renderContextChips()}
           </div>
         )}
 
-        <div className="flex items-center gap-2 p-3">
+        {/* Clear context button - positioned top-right */}
+        {getContextItemCount() > 0 && (
+          <div className="absolute top-2 right-2 z-10">
+            <button
+              onClick={clearAllContext}
+              className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-red-100 bg-white border border-red-200 hover:border-red-300 text-red-600 hover:text-red-700 transition-colors shadow-sm"
+              title="Clear all context items"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex items-center gap-2 p-3">        
         {/* Context and attachment menu */}
         <div className="relative" ref={contextMenuRef}>
           <button
@@ -705,106 +846,6 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         syntax-highlighted code.
       </p>
 
-      {/* Context Display */}
-      {conversationContext && getContextItemCount() > 0 && (
-        <div className="max-w-2xl mx-auto mt-3 px-4 sm:px-0">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="text-sm font-medium text-blue-900">Conversation Context</h4>
-              <span className="text-xs text-blue-700">
-                {getContextItemCount()} item{getContextItemCount() !== 1 ? 's' : ''}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {conversationContext.customerIds.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  <Building2 size={12} className="text-blue-600" />
-                  <span className="text-xs text-blue-800 font-medium">Customers:</span>
-                  {conversationContext.customerIds.map(id => (
-                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                      {id}
-                      <button
-                        onClick={() => removeContextItem('customer', id)}
-                        className="hover:bg-blue-200 rounded"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {conversationContext.productIds.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  <Package size={12} className="text-blue-600" />
-                  <span className="text-xs text-blue-800 font-medium">Products:</span>
-                  {conversationContext.productIds.map(id => (
-                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                      {id}
-                      <button
-                        onClick={() => removeContextItem('product', id)}
-                        className="hover:bg-blue-200 rounded"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {conversationContext.aikidoIssueIds.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  <Shield size={12} className="text-blue-600" />
-                  <span className="text-xs text-blue-800 font-medium">Aikido Issues:</span>
-                  {conversationContext.aikidoIssueIds.map(id => (
-                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                      #{id}
-                      <button
-                        onClick={() => removeContextItem('aikido', id)}
-                        className="hover:bg-blue-200 rounded"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {conversationContext.jiraIssueKeys.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  <Bug size={12} className="text-blue-600" />
-                  <span className="text-xs text-blue-800 font-medium">Jira Issues:</span>
-                  {conversationContext.jiraIssueKeys.map(key => (
-                    <span key={key} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                      {key}
-                      <button
-                        onClick={() => removeContextItem('jira', key)}
-                        className="hover:bg-blue-200 rounded"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {conversationContext.confluenceDocIds.length > 0 && (
-                <div className="flex items-center gap-1 flex-wrap">
-                  <FileText size={12} className="text-blue-600" />
-                  <span className="text-xs text-blue-800 font-medium">Confluence Docs:</span>
-                  {conversationContext.confluenceDocIds.map(id => (
-                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                      {id}
-                      <button
-                        onClick={() => removeContextItem('confluence', id)}
-                        className="hover:bg-blue-200 rounded"
-                      >
-                        <X size={10} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Context Selection Dialogs */}
       <CustomerContextDialog
