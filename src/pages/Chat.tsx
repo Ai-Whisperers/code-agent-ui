@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment } from '@/types/api'
+import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext } from '@/types/api'
 import {
   ChatInputBar,
   MessageBubble,
@@ -47,11 +47,58 @@ export default function Chat() {
   const [isGeneratingPlan, setIsGeneratingPlan] = useState(false)
   const [generatingPlanTitle, setGeneratingPlanTitle] = useState<string>('')
   const [existingAttachments, setExistingAttachments] = useState<ChatAttachment[]>([])
+  const [existingContext, setExistingContext] = useState<ConversationContext | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
+
+  // Function to load existing attachments
+  const loadExistingAttachments = useCallback(async (conversationId: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/attachments/conversation/${conversationId}`, {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+        },
+      })
+      
+      if (response.ok) {
+        const attachments = await response.json()
+        setExistingAttachments(attachments)
+      } else {
+        console.error('Failed to fetch attachments:', response.statusText)
+        setExistingAttachments([])
+      }
+    } catch (error) {
+      console.error('Error fetching attachments:', error)
+      setExistingAttachments([])
+    }
+  }, [])
+
+  // Function to load existing conversation context
+  const loadExistingContext = useCallback(async (conversationId: string) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL}/conversation-context/${conversationId}`, {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+        },
+      })
+      
+      if (response.ok) {
+        const context = await response.json()
+        setExistingContext(context)
+      } else {
+        if (response.status !== 404) {
+          console.error('Failed to fetch conversation context:', response.statusText)
+        }
+        setExistingContext(null)
+      }
+    } catch (error) {
+      console.error('Error fetching conversation context:', error)
+      setExistingContext(null)
+    }
+  }, [])
 
   // Load messages from localStorage when route param changes
   useEffect(() => {
@@ -59,44 +106,28 @@ export default function Chat() {
     if (id) {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
+      
+      // Reset other state when switching conversations
+      setStreamingContent('')
+      setStreamingThinkingSteps([])
+      setIsStreaming(false)
+      setSecretWarning(null)
+      setActivePlans([])
+      
+      chatInputRef.current?.clear()
+      
+      loadExistingAttachments(id)
+      loadExistingContext(id)
     } else {
       setActiveConversationId(null)
       setMessages([])
-      setActivePlans([])
-    }
-  }, [params.conversationId])
-
-  // Fetch existing attachments when loading a conversation
-  useEffect(() => {
-    const id = params.conversationId
-    if (!id) {
       setExistingAttachments([])
-      return
+      setExistingContext(null)
+      chatInputRef.current?.clear()
     }
+  }, [params.conversationId, loadExistingAttachments, loadExistingContext])
 
-    const fetchAttachments = async () => {
-      try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/attachments/conversation/${id}`, {
-          headers: {
-            'Authorization': `Bearer ${getToken()}`,
-          },
-        })
-        
-        if (response.ok) {
-          const attachments = await response.json()
-          setExistingAttachments(attachments)
-        } else {
-          console.error('Failed to fetch attachments:', response.statusText)
-          setExistingAttachments([])
-        }
-      } catch (error) {
-        console.error('Error fetching attachments:', error)
-        setExistingAttachments([])
-      }
-    }
-
-    fetchAttachments()
-  }, [params.conversationId])
+  // Remove the old attachment fetching useEffect since it's now handled in the main useEffect
 
   // Fetch linked plans when navigating to an existing conversation
   useEffect(() => {
@@ -143,7 +174,7 @@ export default function Chat() {
   }, [streamingThinkingSteps, isStreaming])
 
   const sendMessage = useCallback(
-    async (text: string, attachmentIds?: string[], mode?: 'ask' | 'plan') => {
+    async (text: string, attachmentIds?: string[], mode?: 'ask' | 'plan', conversationContext?: ConversationContext) => {
       if (!text.trim() || isStreaming) return
 
       const userMsg: ChatMessage = {
@@ -177,6 +208,7 @@ export default function Chat() {
             ...(activeConversationId ? { conversationId: activeConversationId } : {}),
             ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
             ...(mode ? { mode } : {}),
+            ...(conversationContext ? { conversationContext } : {}),
           }),
         })
 
@@ -899,6 +931,7 @@ export default function Chat() {
           onSecretWarning={handleSecretWarning}
           onConversationCreate={handleConversationCreate}
           existingAttachments={existingAttachments}
+          existingContext={existingContext || undefined}
           activePlans={activePlans}
           isGeneratingPlan={isGeneratingPlan}
           generatingPlanTitle={generatingPlanTitle}

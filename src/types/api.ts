@@ -466,3 +466,63 @@ export interface ConversationSummary {
   updatedAt: string
   messageCount: number
 }
+
+// ---- Conversation Context ----
+
+export interface ConversationContext {
+  conversationId: string
+  customerIds: string[]
+  productIds: string[]
+  aikidoIssueIds: number[]
+  jiraIssueKeys: string[]
+  confluenceDocIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpdateContextRequest {
+  customerIds?: string[]
+  productIds?: string[]
+  aikidoIssueIds?: number[]
+  jiraIssueKeys?: string[]
+  confluenceDocIds?: string[]
+}
+
+// Context Items for Selection Dialogs
+export interface CustomerContextItem {
+  customerId: string
+  name: string
+  metadataSummary: string
+}
+
+export interface ProductContextItem {
+  productId: string
+  displayName: string
+  customerId?: string
+  customerName?: string
+}
+
+export interface AikidoIssueContextItem {
+  issueGroupId: number
+  issueType: string
+  severity: string
+  packageName?: string
+  cveId?: string
+  repoName?: string
+}
+
+export interface JiraIssueContextItem {
+  issueKey: string
+  summary: string
+  status?: string
+  issueType?: string
+  assignee?: string
+}
+
+export interface ConfluenceDocContextItem {
+  pageId: string
+  title: string
+  spaceKey?: string
+  spaceName?: string
+  contentPreview?: string
+}

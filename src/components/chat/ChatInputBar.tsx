@@ -1,13 +1,19 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2 } from 'lucide-react'
+import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
-import type { ChatAttachment, ExecutionPlan } from '@/types/api'
+import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
+import { CustomerContextDialog } from './context/CustomerContextDialog'
+import { ProductContextDialog } from './context/ProductContextDialog'
+import { AikidoIssueContextDialog } from './context/AikidoIssueContextDialog'
+import { JiraIssueContextDialog } from './context/JiraIssueContextDialog'
+import { ConfluenceDocContextDialog } from './context/ConfluenceDocContextDialog'
 
 export type ChatInputHandle = {
   clear: () => void
   focus: () => void
   setMode: (mode: ChatMode) => void
+  clearContext: () => void
 }
 
 type ChatMode = 'ask' | 'plan'
@@ -15,10 +21,11 @@ type ChatMode = 'ask' | 'plan'
 type ChatInputBarProps = {
   isStreaming: boolean
   conversationId?: string
-  onSend: (text: string, attachmentIds?: string[], mode?: ChatMode) => void
+  onSend: (text: string, attachmentIds?: string[], mode?: ChatMode, conversationContext?: ConversationContext) => void
   onSecretWarning: (findings: string[], pendingText: string) => void
   onConversationCreate?: (conversationId: string) => void
   existingAttachments?: ChatAttachment[]
+  existingContext?: ConversationContext
   activePlans?: ExecutionPlan[]
   isGeneratingPlan?: boolean
   generatingPlanTitle?: string
@@ -35,7 +42,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
+  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -46,11 +53,19 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const [isDragging, setIsDragging] = useState(false)
   const [mode, setMode] = useState<ChatMode>('ask')
   const [showModeMenu, setShowModeMenu] = useState(false)
+  const [showContextMenu, setShowContextMenu] = useState(false)
+  const [conversationContext, setConversationContext] = useState<ConversationContext | null>(existingContext || null)
+  const [showCustomerDialog, setShowCustomerDialog] = useState(false)
+  const [showProductDialog, setShowProductDialog] = useState(false)
+  const [showAikidoDialog, setShowAikidoDialog] = useState(false)
+  const [showJiraDialog, setShowJiraDialog] = useState(false)
+  const [showConfluenceDialog, setShowConfluenceDialog] = useState(false)
   const dragCounterRef = useRef(0)
   const pendingFindingsRef = useRef<string[]>([])
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const secretDebounceRef = useRef<number | null>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
 
   // Initialize attachments with existing attachments when they change
   useEffect(() => {
@@ -71,6 +86,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     })
   }, [existingAttachments])
 
+  // Initialize context with existing context when it changes
+  useEffect(() => {
+    setConversationContext(existingContext || null)
+  }, [existingContext])
+
   useImperativeHandle(ref, () => ({
     clear: () => {
       setInput('')
@@ -80,7 +100,8 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       if (textareaRef.current) textareaRef.current.style.height = 'auto'
     },
     focus: () => textareaRef.current?.focus(),
-    setMode: (m: ChatMode) => setMode(m),
+    setMode: (newMode: ChatMode) => setMode(newMode),
+    clearContext: () => setConversationContext(null)
   }))
 
   useEffect(() => {
@@ -97,22 +118,22 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
   }, [input])
 
-  // Close mode menu when clicking outside
+  // Auto-hide menus when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (modeMenuRef.current && !modeMenuRef.current.contains(event.target as Node)) {
         setShowModeMenu(false)
       }
+      if (contextMenuRef.current && !contextMenuRef.current.contains(event.target as Node)) {
+        setShowContextMenu(false)
+      }
     }
 
-    if (showModeMenu) {
+    if (showModeMenu || showContextMenu) {
       document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
-  }, [showModeMenu])
+  }, [showModeMenu, showContextMenu])
 
   // Handle keyboard shortcut for mode switching (Cmd/Ctrl + .)
   useEffect(() => {
@@ -157,7 +178,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       ? attachments.map(a => a.attachmentId) 
       : undefined
 
-    onSend(text, attachmentIds, mode)
+    onSend(text, attachmentIds, mode, conversationContext || undefined)
     setInput('')
     setAttachments([])
     setUploadError(null)
@@ -184,6 +205,90 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  // Context selection handlers
+  const handleCustomerSelect = (customers: CustomerContextItem[]) => {
+    const customerIds = customers.map(c => c.customerId)
+    updateConversationContext({ customerIds })
+  }
+
+  const handleProductSelect = (products: ProductContextItem[]) => {
+    const productIds = products.map(p => p.productId)
+    updateConversationContext({ productIds })
+  }
+
+  const handleAikidoIssueSelect = (issues: AikidoIssueContextItem[]) => {
+    const aikidoIssueIds = issues.map(i => i.issueGroupId)
+    updateConversationContext({ aikidoIssueIds })
+  }
+
+  const handleJiraIssueSelect = (issues: JiraIssueContextItem[]) => {
+    const jiraIssueKeys = issues.map(i => i.issueKey)
+    updateConversationContext({ jiraIssueKeys })
+  }
+
+  const handleConfluenceDocSelect = (docs: ConfluenceDocContextItem[]) => {
+    const confluenceDocIds = docs.map(d => d.pageId)
+    updateConversationContext({ confluenceDocIds })
+  }
+
+  const updateConversationContext = (updates: Partial<ConversationContext>) => {
+    setConversationContext(prev => {
+      const newContext = {
+        conversationId: conversationId || '',
+        customerIds: updates.customerIds || prev?.customerIds || [],
+        productIds: updates.productIds || prev?.productIds || [],
+        aikidoIssueIds: updates.aikidoIssueIds || prev?.aikidoIssueIds || [],
+        jiraIssueKeys: updates.jiraIssueKeys || prev?.jiraIssueKeys || [],
+        confluenceDocIds: updates.confluenceDocIds || prev?.confluenceDocIds || [],
+        createdAt: prev?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      return newContext
+    })
+  }
+
+  const removeContextItem = (type: string, id: string | number) => {
+    setConversationContext(prev => {
+      if (!prev) return null
+      
+      const updates: Partial<ConversationContext> = {}
+      switch (type) {
+        case 'customer':
+          updates.customerIds = prev.customerIds.filter(cid => cid !== id)
+          break
+        case 'product':
+          updates.productIds = prev.productIds.filter(pid => pid !== id)
+          break
+        case 'aikido':
+          updates.aikidoIssueIds = prev.aikidoIssueIds.filter(aid => aid !== id)
+          break
+        case 'jira':
+          updates.jiraIssueKeys = prev.jiraIssueKeys.filter(jid => jid !== id)
+          break
+        case 'confluence':
+          updates.confluenceDocIds = prev.confluenceDocIds.filter(cid => cid !== id)
+          break
+      }
+      
+      return {
+        ...prev,
+        ...updates,
+        updatedAt: new Date().toISOString()
+      }
+    })
+  }
+
+  const getContextItemCount = () => {
+    if (!conversationContext) return 0
+    return (
+      conversationContext.customerIds.length +
+      conversationContext.productIds.length +
+      conversationContext.aikidoIssueIds.length +
+      conversationContext.jiraIssueKeys.length +
+      conversationContext.confluenceDocIds.length
+    )
   }
 
   const handleFileUpload = async (files: FileList) => {
@@ -406,27 +511,100 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         )}
 
         <div className="flex items-center gap-2 p-3">
-        {/* Plus icon for attachments/options */}
-        <button
-          onClick={() => {
-            const fileInput = document.createElement('input')
-            fileInput.type = 'file'
-            fileInput.multiple = true
-            fileInput.accept = DEFAULT_ALLOWED_TYPES.join(',')
-            fileInput.onchange = (e) => {
-              const files = (e.target as HTMLInputElement).files
-              if (files && files.length > 0) {
-                handleFileUpload(files)
-              }
-            }
-            fileInput.click()
-          }}
-          disabled={isStreaming || uploading}
-          className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
-          title={uploading ? 'Uploading...' : 'Add attachment'}
-        >
-          <Plus size={18} />
-        </button>
+        {/* Context and attachment menu */}
+        <div className="relative" ref={contextMenuRef}>
+          <button
+            onClick={() => setShowContextMenu(!showContextMenu)}
+            disabled={isStreaming || uploading}
+            className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+            title={uploading ? 'Uploading...' : 'Add context or attachment'}
+          >
+            <Plus size={18} />
+          </button>
+
+          {/* Context/Attachment selection menu */}
+          {showContextMenu && (
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[200px] z-10">
+              <button
+                onClick={() => {
+                  const fileInput = document.createElement('input')
+                  fileInput.type = 'file'
+                  fileInput.multiple = true
+                  fileInput.accept = DEFAULT_ALLOWED_TYPES.join(',')
+                  fileInput.onchange = (e) => {
+                    const files = (e.target as HTMLInputElement).files
+                    if (files && files.length > 0) {
+                      handleFileUpload(files)
+                    }
+                  }
+                  fileInput.click()
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <FileText size={14} />
+                File Attachment
+              </button>
+              
+              <div className="border-t border-gray-100 my-1"></div>
+              
+              <button
+                onClick={() => {
+                  setShowCustomerDialog(true)
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <Building2 size={14} />
+                Customer Context
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowProductDialog(true)
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <Package size={14} />
+                Product Context
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowAikidoDialog(true)
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <Shield size={14} />
+                Aikido Issues
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowJiraDialog(true)
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <Bug size={14} />
+                Jira Issues
+              </button>
+              
+              <button
+                onClick={() => {
+                  setShowConfluenceDialog(true)
+                  setShowContextMenu(false)
+                }}
+                className="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 text-gray-700"
+              >
+                <FileText size={14} />
+                Confluence Docs
+              </button>
+            </div>
+          )}
+        </div>
 
         {/* Mode switcher button */}
         <div className="relative" ref={modeMenuRef}>
@@ -526,6 +704,138 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
         syntax-highlighted code.
       </p>
+
+      {/* Context Display */}
+      {conversationContext && getContextItemCount() > 0 && (
+        <div className="max-w-2xl mx-auto mt-3 px-4 sm:px-0">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-sm font-medium text-blue-900">Conversation Context</h4>
+              <span className="text-xs text-blue-700">
+                {getContextItemCount()} item{getContextItemCount() !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {conversationContext.customerIds.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Building2 size={12} className="text-blue-600" />
+                  <span className="text-xs text-blue-800 font-medium">Customers:</span>
+                  {conversationContext.customerIds.map(id => (
+                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      {id}
+                      <button
+                        onClick={() => removeContextItem('customer', id)}
+                        className="hover:bg-blue-200 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {conversationContext.productIds.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Package size={12} className="text-blue-600" />
+                  <span className="text-xs text-blue-800 font-medium">Products:</span>
+                  {conversationContext.productIds.map(id => (
+                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      {id}
+                      <button
+                        onClick={() => removeContextItem('product', id)}
+                        className="hover:bg-blue-200 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {conversationContext.aikidoIssueIds.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Shield size={12} className="text-blue-600" />
+                  <span className="text-xs text-blue-800 font-medium">Aikido Issues:</span>
+                  {conversationContext.aikidoIssueIds.map(id => (
+                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      #{id}
+                      <button
+                        onClick={() => removeContextItem('aikido', id)}
+                        className="hover:bg-blue-200 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {conversationContext.jiraIssueKeys.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <Bug size={12} className="text-blue-600" />
+                  <span className="text-xs text-blue-800 font-medium">Jira Issues:</span>
+                  {conversationContext.jiraIssueKeys.map(key => (
+                    <span key={key} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      {key}
+                      <button
+                        onClick={() => removeContextItem('jira', key)}
+                        className="hover:bg-blue-200 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {conversationContext.confluenceDocIds.length > 0 && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  <FileText size={12} className="text-blue-600" />
+                  <span className="text-xs text-blue-800 font-medium">Confluence Docs:</span>
+                  {conversationContext.confluenceDocIds.map(id => (
+                    <span key={id} className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                      {id}
+                      <button
+                        onClick={() => removeContextItem('confluence', id)}
+                        className="hover:bg-blue-200 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Context Selection Dialogs */}
+      <CustomerContextDialog
+        isOpen={showCustomerDialog}
+        onClose={() => setShowCustomerDialog(false)}
+        onSelect={handleCustomerSelect}
+      />
+      
+      <ProductContextDialog
+        isOpen={showProductDialog}
+        onClose={() => setShowProductDialog(false)}
+        onSelect={handleProductSelect}
+      />
+      
+      <AikidoIssueContextDialog
+        isOpen={showAikidoDialog}
+        onClose={() => setShowAikidoDialog(false)}
+        onSelect={handleAikidoIssueSelect}
+      />
+      
+      <JiraIssueContextDialog
+        isOpen={showJiraDialog}
+        onClose={() => setShowJiraDialog(false)}
+        onSelect={handleJiraIssueSelect}
+      />
+      
+      <ConfluenceDocContextDialog
+        isOpen={showConfluenceDialog}
+        onClose={() => setShowConfluenceDialog(false)}
+        onSelect={handleConfluenceDocSelect}
+      />
     </div>
   )
 })
