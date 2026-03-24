@@ -14,7 +14,7 @@ export async function initKeycloak(): Promise<boolean> {
   _initPromise = keycloak.init({
     onLoad: 'login-required',
     checkLoginIframe: false,
-    scope: 'openid email groups profile roles',
+    scope: 'openid email profile',
   })
   return _initPromise
 }
