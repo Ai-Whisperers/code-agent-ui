@@ -14,7 +14,7 @@
  *     --function-config Comment="Security headers",Runtime=cloudfront-js-2.0 \
  *     --function-code fileb://infra/cloudfront-security-headers.js
  */
-async function handler(event) {
+function handler(event) {
     const headers = event.response.headers;
 
     // Fixes: "CSP policy does not define a fallback" (High)
