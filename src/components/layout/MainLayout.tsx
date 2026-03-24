@@ -6,10 +6,12 @@ import { SideBar } from './SideBar'
 import { authStore } from '@/store/auth-store'
 
 export default function MainLayout() {
-  const user = useStore(authStore, (s) => s.user)!
+  const user = useStore(authStore, (s) => s.user)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const navigate = useNavigate()
   useRouterState()
+
+  if (!user) return null
 
   return (
     <>
