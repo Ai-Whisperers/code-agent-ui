@@ -7,6 +7,7 @@ import {
   MessageSquare,
   ChevronDown,
   BookOpen,
+  ClipboardList,
   FolderGit2,
   Zap,
   FileText,
@@ -16,9 +17,9 @@ import {
   ShieldCheck,
   GitPullRequest,
   BotMessageSquare,
-  Plug,
   ScrollText,
 } from 'lucide-react'
+import type { Permission } from '@/lib/permissions'
 
 export interface NavigationMenuItem {
   id: string
@@ -30,11 +31,14 @@ export interface NavigationMenuItem {
   children?: NavigationMenuItem[]
   type?: 'item' | 'section' | 'parent'
   sectionLabel?: string
+  /** When set, item is hidden unless the user has this permission */
+  requiredPermission?: Permission
 }
 
 export function ApplicationMenuItems(
   navigate: (opts: { to: string }) => void,
   currentPath: string,
+  permissions: Set<Permission>,
   onNavigate?: () => void,
 ): NavigationMenuItem[] {
   const go = (to: string) => {
@@ -42,7 +46,7 @@ export function ApplicationMenuItems(
     onNavigate?.()
   }
 
-  return [
+  const allItems: NavigationMenuItem[] = [
     {
       id: 'dashboard',
       label: 'Dashboard',
@@ -121,6 +125,7 @@ export function ApplicationMenuItems(
       type: 'parent',
       icon: <Settings size={18} />,
       isActive: currentPath.startsWith('/settings'),
+      requiredPermission: 'MANAGE_SETTINGS',
       children: [
         {
           id: 'repos',
@@ -129,6 +134,7 @@ export function ApplicationMenuItems(
           path: '/settings/repos',
           isActive: currentPath === '/settings/repos',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/repos'),
         },
         {
@@ -138,6 +144,7 @@ export function ApplicationMenuItems(
           path: '/settings/hooks',
           isActive: currentPath === '/settings/hooks',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/hooks'),
         },
         {
@@ -147,6 +154,7 @@ export function ApplicationMenuItems(
           path: '/settings/prompts',
           isActive: currentPath === '/settings/prompts',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/prompts'),
         },
         {
@@ -156,6 +164,7 @@ export function ApplicationMenuItems(
           path: '/settings/memories',
           isActive: currentPath === '/settings/memories',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/memories'),
         },
         {
@@ -165,6 +174,7 @@ export function ApplicationMenuItems(
           path: '/settings/customers',
           isActive: currentPath === '/settings/customers',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/customers'),
         },
         {
@@ -174,16 +184,8 @@ export function ApplicationMenuItems(
           path: '/settings/knowledge',
           isActive: currentPath === '/settings/knowledge',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/knowledge'),
-        },
-        {
-          id: 'mcp-profiles',
-          label: 'MCP Profiles',
-          icon: <Plug size={16} />,
-          path: '/settings/mcp-profiles',
-          isActive: currentPath === '/settings/mcp-profiles',
-          type: 'item',
-          onClick: () => go('/settings/mcp-profiles'),
         },
         {
           id: 'webhook-audit',
@@ -192,7 +194,18 @@ export function ApplicationMenuItems(
           path: '/settings/webhook-audit',
           isActive: currentPath === '/settings/webhook-audit',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/webhook-audit'),
+        },
+        {
+          id: 'audit-log',
+          label: 'Audit Log',
+          icon: <ClipboardList size={16} />,
+          path: '/settings/audit',
+          isActive: currentPath === '/settings/audit',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/audit'),
         },
         {
           id: 'system-settings',
@@ -201,11 +214,41 @@ export function ApplicationMenuItems(
           path: '/settings/system',
           isActive: currentPath === '/settings/system',
           type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/system'),
         },
       ],
     },
   ]
+
+  return filterByPermissions(allItems, permissions)
+}
+
+/**
+ * Recursively filters menu items by the user's permission set.
+ * A parent item is hidden when all of its children are hidden.
+ */
+function filterByPermissions(
+  items: NavigationMenuItem[],
+  permissions: Set<Permission>,
+): NavigationMenuItem[] {
+  const filtered: NavigationMenuItem[] = []
+
+  for (const item of items) {
+    if (item.requiredPermission && !permissions.has(item.requiredPermission)) {
+      continue
+    }
+
+    if (item.children && item.children.length > 0) {
+      const visibleChildren = filterByPermissions(item.children, permissions)
+      if (visibleChildren.length === 0) continue
+      filtered.push({ ...item, children: visibleChildren })
+    } else {
+      filtered.push(item)
+    }
+  }
+
+  return filtered
 }
 
 export { ChevronDown }

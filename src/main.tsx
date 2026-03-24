@@ -12,6 +12,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useStore } from '@tanstack/react-store'
 
 import { authStore, checkAuth } from '@/store/auth-store'
+import { createRouteGuard } from '@/lib/route-guards'
 import MainLayout from '@/components/layout/MainLayout'
 import Dashboard from '@/pages/Dashboard'
 import Jobs from '@/pages/Jobs'
@@ -33,7 +34,9 @@ import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
 import McpProfilesPage from '@/pages/McpProfiles'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
+import AuditLogPage from '@/pages/AuditLog'
 import AccessDenied from '@/pages/AccessDenied'
+import Unauthenticated from '@/pages/Unauthenticated'
 
 import './styles/index.css'
 
@@ -61,7 +64,7 @@ function RootComponent() {
 
   useEffect(() => {
     if (isInitialized && !isAuthenticated) {
-      navigate({ to: '/access-denied' })
+      navigate({ to: '/unauthenticated' })
     }
   }, [isInitialized, isAuthenticated, navigate])
 
@@ -121,18 +124,21 @@ const jobDetailRoute = createRoute({
 const reposRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/repos',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: RepoSettingsPage,
 })
 
 const hooksRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/hooks',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: HooksPage,
 })
 
 const promptsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/prompts',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: PromptsPage,
 })
 
@@ -178,24 +184,28 @@ const aiStatsRoute = createRoute({
 const memoriesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/memories',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: MemoriesPage,
 })
 
 const systemSettingsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/system',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: SystemSettingsPage,
 })
 
 const knowledgeIndexRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/knowledge',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: KnowledgeIndexPage,
 })
 
 const customersRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/customers',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: CustomerRegistryPage,
 })
 
@@ -220,13 +230,27 @@ const mcpProfilesRoute = createRoute({
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
   component: WebhookAuditLogPage,
+})
+
+const auditLogRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/audit',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: AuditLogPage,
 })
 
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
   component: AccessDenied,
+})
+
+const unauthenticatedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/unauthenticated',
+  component: Unauthenticated,
 })
 
 const routeTree = rootRoute.addChildren([
@@ -252,8 +276,10 @@ const routeTree = rootRoute.addChildren([
     chatConvRoute,
     mcpProfilesRoute,
     webhookAuditRoute,
+    auditLogRoute,
   ]),
   accessDeniedRoute,
+  unauthenticatedRoute,
 ])
 
 const router = createRouter({

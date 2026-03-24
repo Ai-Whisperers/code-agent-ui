@@ -1,11 +1,23 @@
 import { Store } from '@tanstack/react-store'
 import { getUserInfo, initKeycloak, login, logout } from '@/lib/keycloak'
+import type { AppRole, Permission } from '@/lib/permissions'
 
 export interface AuthUser {
   username: string
   name: string
   email: string
+  /** Raw Keycloak realm roles — kept for backward compatibility */
   roles: string[]
+  /** Combined realm + client KC roles */
+  kcRoles: string[]
+  /** KC groups claim (requires group mapper in KC; empty array if not configured) */
+  groups: string[]
+  /** KC subject ID */
+  sub: string
+  /** Derived internal application roles */
+  appRoles: AppRole[]
+  /** Effective permissions (union across all appRoles) */
+  permissions: Permission[]
 }
 
 interface AuthState {

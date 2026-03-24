@@ -1,4 +1,5 @@
 import Keycloak from 'keycloak-js'
+import { mapKcRolesToAppRoles, resolvePermissions, type AppRole, type Permission } from '@/lib/permissions'
 
 const keycloak = new Keycloak({
   url: import.meta.env.VITE_KEYCLOAK_URL,
@@ -13,6 +14,7 @@ export async function initKeycloak(): Promise<boolean> {
   _initPromise = keycloak.init({
     onLoad: 'login-required',
     checkLoginIframe: false,
+    scope: 'openid email profile',
   })
   return _initPromise
 }
@@ -36,11 +38,32 @@ export async function refreshToken(): Promise<boolean> {
 export function getUserInfo() {
   const tokenParsed = keycloak.tokenParsed
   if (!tokenParsed) return null
+
+  const realmRoles: string[] = keycloak.realmAccess?.roles ?? []
+  const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID as string | undefined
+  const clientRoles: string[] = (clientId ? keycloak.resourceAccess?.[clientId]?.roles : undefined) ?? []
+
+  const appRoles: AppRole[] = mapKcRolesToAppRoles(realmRoles, clientRoles)
+  const permissionsSet: Set<Permission> = resolvePermissions(appRoles)
+  const permissions: Permission[] = Array.from(permissionsSet)
+
+  // Groups claim requires an explicit KC group mapper; default to [] if absent
+  const groups: string[] = Array.isArray(tokenParsed['groups'])
+    ? (tokenParsed['groups'] as string[])
+    : []
+
+  const kcRoles: string[] = [...new Set([...realmRoles, ...clientRoles])]
+
   return {
     username: (tokenParsed['preferred_username'] as string) ?? '',
     name: (tokenParsed['name'] as string) ?? '',
     email: (tokenParsed['email'] as string) ?? '',
-    roles: (keycloak.realmAccess?.roles ?? []) as string[],
+    sub: (tokenParsed['sub'] as string) ?? '',
+    roles: realmRoles,
+    kcRoles,
+    groups,
+    appRoles,
+    permissions,
   }
 }
 
