@@ -15,32 +15,26 @@
  *     --function-code fileb://infra/cloudfront-security-headers.js
  */
 function handler(event) {
-    const headers = event.response.headers;
+    var response = event.response;
+    var headers = response.headers;
 
-    // Fixes: "CSP policy does not define a fallback" (High)
-    // Fixes: "CSP config allows inline javascript"   (High)  — no 'unsafe-inline' in script-src
-    // Fixes: "CSP policy does not block unsafe URLs" (High)  — explicit allowlist, no http: wildcard
-    // Mitigates: "CSP config allows inline CSS"      (Low)   — 'unsafe-inline' kept for Tailwind/shadcn runtime styles
-    headers['content-security-policy'] = {
-        value: [
-            "default-src 'self'",
-            "script-src 'self'",
-            "style-src 'self' 'unsafe-inline'",
-            "img-src 'self' data: blob:",
-            "font-src 'self'",
-            "connect-src 'self' https://lb-code-agent.julesenergy.com https://sso-prod.julesenergy.com",
-            "form-action 'self' https://sso-prod.julesenergy.com",
-            "frame-ancestors 'self'",
-            "object-src 'none'",
-            "base-uri 'self'",
-        ].join('; '),
-    };
+    var csp = "default-src 'self'; " +
+              "script-src 'self'; " +
+              "style-src 'self' 'unsafe-inline'; " +
+              "img-src 'self' data: blob:; " +
+              "font-src 'self'; " +
+              "connect-src 'self' https://lb-code-agent.julesenergy.com https://sso-prod.julesenergy.com; " +
+              "form-action 'self' https://sso-prod.julesenergy.com; " +
+              "frame-ancestors 'self'; " +
+              "object-src 'none'; " +
+              "base-uri 'self'";
 
-    headers['x-content-type-options']  = { value: 'nosniff' };
-    headers['x-frame-options']         = { value: 'SAMEORIGIN' };
-    headers['referrer-policy']         = { value: 'strict-origin-when-cross-origin' };
-    headers['permissions-policy']      = { value: 'camera=(), microphone=(), geolocation=()' };
-    headers['strict-transport-security'] = { value: 'max-age=63072000; includeSubDomains; preload' };
+    headers['content-security-policy']    = { value: csp };
+    headers['x-content-type-options']     = { value: 'nosniff' };
+    headers['x-frame-options']            = { value: 'SAMEORIGIN' };
+    headers['referrer-policy']            = { value: 'strict-origin-when-cross-origin' };
+    headers['permissions-policy']         = { value: 'camera=(), microphone=(), geolocation=()' };
+    headers['strict-transport-security']  = { value: 'max-age=63072000; includeSubDomains; preload' };
 
-    return event.response;
+    return response;
 }
