@@ -151,6 +151,14 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'knowledge',
+    label: 'Knowledge Indexer',
+    settings: [
+      { key: 'knowledge.indexer.jira-max-results', label: 'Jira Max Results', description: 'Maximum number of Jira issues fetched per project in a single indexing pass', defaultValue: '200', inputType: 'number', min: 1 },
+      { key: 'knowledge.indexer.max-attachment-bytes', label: 'Max Attachment Size (bytes)', description: 'Maximum attachment size in bytes that will be downloaded and indexed', defaultValue: '5242880', inputType: 'number', min: 1 },
+    ],
+  },
+  {
     id: 'notifications',
     label: 'Notifications',
     settings: [
@@ -195,7 +203,9 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'upgrade.scheduler.version-cache-minutes', label: 'Version Cache (minutes)', description: 'How long to cache resolved dependency versions', defaultValue: '60', inputType: 'number', min: 1 },
       { key: 'code-graph.scheduler.enabled', label: 'Code Graph Scheduler', description: 'Enable automated code graph indexing', defaultValue: 'true', inputType: 'boolean' },
       { key: 'code-graph.scheduler.default-branch', label: 'Code Graph Default Branch', description: 'Branch to index for code graph', defaultValue: 'main' },
+      { key: 'code-graph.scheduler.clone-timeout-minutes', label: 'Code Graph Clone Timeout (minutes)', description: 'Timeout for cloning a repository during code graph indexing', defaultValue: '10', inputType: 'number', min: 1 },
       { key: 'code-graph.cross-repo.enabled', label: 'Cross-Repo Analysis', description: 'Enable cross-repository dependency analysis in the code graph', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'code-graph.cross-repo.critical-threshold', label: 'Cross-Repo Critical Threshold', description: 'Number of repos using a symbol before it is labelled CRITICAL in impact analysis', defaultValue: '3', inputType: 'number', min: 1 },
     ],
   },
   {
@@ -260,7 +270,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',     label: 'AI & Models',    groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',  label: 'Source Control', groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'notifications'] },
+  { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'knowledge', 'notifications'] },
   { id: 'agent',        label: 'Agent',          groupIds: ['agent', 'schedulers', 'linter', 'review'] },
   { id: 'security',     label: 'Security',       groupIds: ['security'] },
 ]
