@@ -209,6 +209,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'quality-report.scheduler.enabled', label: 'Quality Report Scheduler', description: 'Enable automated quality report collection', defaultValue: 'false', inputType: 'boolean' },
       { key: 'quality-report.branches', label: 'Quality Report Branches', description: 'Comma-separated branches to collect quality reports for', defaultValue: 'main,develop', inputType: 'textarea' },
       { key: 'quality-report.cc-threshold', label: 'Quality Report CC Threshold', description: 'Cyclomatic complexity threshold to flag in quality reports', defaultValue: '10', inputType: 'number', min: 1 },
+      { key: 'quality-report.coverage.enabled', label: 'Quality Report Coverage', description: 'Enable coverage measurement during quality report collection', defaultValue: 'true', inputType: 'boolean' },
       { key: 'quality-report.job-timeout-minutes', label: 'Quality Report Timeout (minutes)', description: 'Timeout per quality report job', defaultValue: '30', inputType: 'number', min: 1 },
       { key: 'upgrade.scheduler.enabled', label: 'Upgrade Scheduler', description: 'Enable automated dependency upgrade jobs', defaultValue: 'false', inputType: 'boolean' },
       { key: 'upgrade.scheduler.default-branch', label: 'Upgrade Target Branch', description: 'Default branch for upgrade scheduler jobs', defaultValue: 'develop' },
