@@ -219,6 +219,8 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'code-graph.scheduler.clone-timeout-minutes', label: 'Code Graph Clone Timeout (minutes)', description: 'Timeout for cloning a repository during code graph indexing', defaultValue: '10', inputType: 'number', min: 1 },
       { key: 'code-graph.cross-repo.enabled', label: 'Cross-Repo Analysis', description: 'Enable cross-repository dependency analysis in the code graph', defaultValue: 'true', inputType: 'boolean' },
       { key: 'code-graph.cross-repo.critical-threshold', label: 'Cross-Repo Critical Threshold', description: 'Number of repos using a symbol before it is labelled CRITICAL in impact analysis', defaultValue: '3', inputType: 'number', min: 1 },
+      { key: 'hook.scheduler.enabled', label: 'Hook Scheduler', description: 'Enable cron-based automation hook evaluation', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'hook.scheduler.timezone', label: 'Hook Scheduler Timezone', description: 'Timezone for evaluating cron hook expressions (e.g. UTC, Europe/Berlin)', defaultValue: 'UTC' },
     ],
   },
   {
