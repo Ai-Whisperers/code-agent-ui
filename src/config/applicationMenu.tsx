@@ -17,6 +17,7 @@ import {
   GitPullRequest,
   BotMessageSquare,
   Plug,
+  ScrollText,
 } from 'lucide-react'
 
 export interface NavigationMenuItem {
@@ -183,6 +184,15 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/settings/mcp-profiles',
           type: 'item',
           onClick: () => go('/settings/mcp-profiles'),
+        },
+        {
+          id: 'webhook-audit',
+          label: 'Webhook Audit',
+          icon: <ScrollText size={16} />,
+          path: '/settings/webhook-audit',
+          isActive: currentPath === '/settings/webhook-audit',
+          type: 'item',
+          onClick: () => go('/settings/webhook-audit'),
         },
         {
           id: 'system-settings',

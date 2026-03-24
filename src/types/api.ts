@@ -533,3 +533,19 @@ export interface ConfluenceDocContextItem {
   spaceName?: string
   contentPreview?: string
 }
+
+// ---- Webhook Audit Log ----
+
+export interface WebhookAuditEntry {
+  id: number
+  platform: string
+  eventType: string
+  workspace?: string
+  repoSlug?: string
+  prId?: string
+  author?: string
+  action: string
+  hooksExecuted?: string[]
+  payload?: string
+  receivedAt: string
+}

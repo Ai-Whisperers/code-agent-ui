@@ -32,6 +32,7 @@ import KnowledgeIndexPage from '@/pages/KnowledgeIndex'
 import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
 import McpProfilesPage from '@/pages/McpProfiles'
+import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AccessDenied from '@/pages/AccessDenied'
 
 import './styles/index.css'
@@ -216,6 +217,12 @@ const mcpProfilesRoute = createRoute({
   component: McpProfilesPage,
 })
 
+const webhookAuditRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/webhook-audit',
+  component: WebhookAuditLogPage,
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -244,6 +251,7 @@ const routeTree = rootRoute.addChildren([
     chatRoute,
     chatConvRoute,
     mcpProfilesRoute,
+    webhookAuditRoute,
   ]),
   accessDeniedRoute,
 ])
