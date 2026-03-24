@@ -40,5 +40,5 @@ export function isVersionOutdated(
   if (!version || !archetype || !latestVersions) return false
   const latest = latestVersions[archetype]
   if (!latest) return false
-  return getVersionStatus(version, latest) !== 'up-to-date'
+  return getVersionStatus(version, latest) === 'critical'
 }

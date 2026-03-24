@@ -168,6 +168,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── AWS ───────────────────────────────────────────────────────────────────────
+  {
+    id: 'aws',
+    label: 'AWS Tools',
+    settings: [
+      { key: 'tools.aws.enabled', label: 'AWS Tools Enabled', description: 'Enable AWS CloudWatch, ECS, and Metrics tools for the agent', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'aws.region', label: 'Default Region', description: 'Default AWS region used when no region is specified in the product environment config', defaultValue: 'eu-central-1' },
+      { key: 'aws.access-key-id', label: 'Access Key ID', description: 'Explicit AWS access key for local development. Leave blank to use the ECS task role or default credential chain.', isSecret: true },
+      { key: 'aws.secret-access-key', label: 'Secret Access Key', description: 'Explicit AWS secret key for local development. Leave blank to use the ECS task role or default credential chain.', isSecret: true },
+    ],
+  },
+
   // ── Agent ─────────────────────────────────────────────────────────────────────
   {
     id: 'agent',
@@ -271,7 +283,7 @@ const TABS: TabDef[] = [
   { id: 'ai-models',     label: 'AI & Models',    groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',  label: 'Source Control', groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'knowledge', 'notifications'] },
-  { id: 'agent',        label: 'Agent',          groupIds: ['agent', 'schedulers', 'linter', 'review'] },
+  { id: 'agent',        label: 'Agent',          groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'security',     label: 'Security',       groupIds: ['security'] },
 ]
 
