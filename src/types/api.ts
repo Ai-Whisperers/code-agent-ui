@@ -419,6 +419,28 @@ export interface KnowledgeStatsResponse {
   jira: number
   confluence: number
   jiraAttachment: number
+  webDocs: number
+}
+
+export interface WebDocSource {
+  id: string
+  name: string
+  baseUrl: string
+  allowedPathPrefix: string
+  maxPages: number
+  crawlDelayMs: number
+  lastCrawledAt: string | null
+  lastCrawlChunks: number | null
+  lastCrawlError: string | null
+  createdAt: string
+}
+
+export interface WebDocSourceCreateRequest {
+  name: string
+  baseUrl: string
+  allowedPathPrefix: string
+  maxPages?: number
+  crawlDelayMs?: number
 }
 
 export interface KnowledgeIndexJiraRequest {

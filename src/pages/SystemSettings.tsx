@@ -170,6 +170,16 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'knowledge-crawler',
+    label: 'Web Docs Crawler',
+    settings: [
+      { key: 'knowledge.crawler.scheduler.enabled', label: 'Scheduler Enabled', description: 'Enable weekly Friday-night re-crawl of all registered web doc sources', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'knowledge.crawler.global-max-pages', label: 'Global Max Pages', description: 'Hard ceiling on total pages crawled across all sources (safety limit)', defaultValue: '2000', inputType: 'number', min: 1 },
+      { key: 'knowledge.crawler.user-agent', label: 'User-Agent', description: 'HTTP User-Agent header sent by the crawler to documentation sites', defaultValue: 'code-agent-bot/1.0' },
+      { key: 'knowledge.crawler.connect-timeout-ms', label: 'Connect Timeout (ms)', description: 'HTTP connection timeout per page fetch in milliseconds', defaultValue: '5000', inputType: 'number', min: 500, step: 500 },
+    ],
+  },
+  {
     id: 'notifications',
     label: 'Notifications',
     settings: [
@@ -305,7 +315,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'notifications'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'security',        label: 'Security',         groupIds: ['security'] },

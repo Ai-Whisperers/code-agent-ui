@@ -8,6 +8,11 @@ import {
   ExternalLink,
   Database,
   Play,
+  Globe,
+  Plus,
+  Trash2,
+  AlertCircle,
+  CheckCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
@@ -16,7 +21,8 @@ import type {
   KnowledgeStatEntry,
   KnowledgeSearchResponse,
   KnowledgeSearchResult,
-  ProductConfig,
+  WebDocSource,
+  WebDocSourceCreateRequest,
 } from '@/types/api'
 
 // ── Shared input styles ────────────────────────────────────────────────────────
@@ -106,6 +112,8 @@ function SourceTypeBadge({ type }: { type: string }) {
     cls = 'bg-[var(--color-tags-info-background)] text-[var(--color-tags-font-info)]'
   if (lower === 'confluence')
     cls = 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+  if (lower === 'web-docs')
+    cls = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
   return (
     <span
       className={`text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] font-medium ${cls}`}
@@ -322,8 +330,8 @@ function IndexManagementSection({
             </span>
           </div>
           <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-            Trigger a full reindex of all configured sources (Jira + Confluence). This may take
-            several minutes.
+            Trigger a full reindex of all configured sources (Jira, Confluence and web documentation
+            sources). This may take several minutes.
           </p>
         </div>
         <button
@@ -381,25 +389,328 @@ function SearchResultCard({ result }: { result: KnowledgeSearchResult }) {
   )
 }
 
+// ── Web doc sources section ────────────────────────────────────────────────────
+
+function WebDocSourcesSection({
+  addToast,
+}: {
+  addToast: (text: string, type: 'success' | 'error') => void
+}) {
+  const qc = useQueryClient()
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [crawlingId, setCrawlingId] = useState<string | null>(null)
+  const [form, setForm] = useState<WebDocSourceCreateRequest>({
+    name: '',
+    baseUrl: '',
+    allowedPathPrefix: '',
+    maxPages: 500,
+    crawlDelayMs: 500,
+  })
+
+  const { data: sources = [], isLoading } = useQuery<WebDocSource[]>({
+    queryKey: ['web-doc-sources'],
+    queryFn: () => api.get('/knowledge/web-doc-sources').then((r) => r.data).catch(() => []),
+  })
+
+  const addMutation = useMutation({
+    mutationFn: (req: WebDocSourceCreateRequest) =>
+      api.post('/knowledge/web-doc-sources', req),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['web-doc-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('Web doc source registered.', 'success')
+      setShowAddForm(false)
+      setForm({ name: '', baseUrl: '', allowedPathPrefix: '', maxPages: 500, crawlDelayMs: 500 })
+    },
+    onError: () => addToast('Failed to register web doc source.', 'error'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/knowledge/web-doc-sources/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['web-doc-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('Web doc source deleted.', 'success')
+    },
+    onError: () => addToast('Failed to delete web doc source.', 'error'),
+  })
+
+  const crawlMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/knowledge/index/web-docs/${id}`, {}),
+    onMutate: (id) => setCrawlingId(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['web-doc-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('Crawl completed successfully.', 'success')
+    },
+    onError: () => addToast('Crawl failed.', 'error'),
+    onSettled: () => setCrawlingId(null),
+  })
+
+  const crawlAllMutation = useMutation({
+    mutationFn: () => api.post('/knowledge/index/web-docs', {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['web-doc-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('Crawl all sources completed.', 'success')
+    },
+    onError: () => addToast('Crawl all failed.', 'error'),
+  })
+
+  function handleAdd() {
+    if (!form.name.trim() || !form.baseUrl.trim() || !form.allowedPathPrefix.trim()) {
+      addToast('Name, Base URL and Allowed Path Prefix are required.', 'error')
+      return
+    }
+    addMutation.mutate(form)
+  }
+
+  function handleDelete(id: string, name: string) {
+    if (!window.confirm(`Delete web doc source "${name}" and all its indexed content?`)) return
+    deleteMutation.mutate(id)
+  }
+
+  return (
+    <Section
+      title="Web Documentation Sources"
+      defaultOpen={true}
+      badge={
+        !isLoading && sources.length > 0 ? (
+          <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+            {sources.length} source{sources.length !== 1 ? 's' : ''}
+          </span>
+        ) : undefined
+      }
+    >
+      {/* Header row */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-cards-card-stroke)]">
+        <p className="text-xs text-[var(--color-fonts-font-color-support)]">
+          Register external documentation sites to crawl and index. Crawls run automatically every
+          Friday night when the scheduler is enabled.
+        </p>
+        <div className="flex items-center gap-2 shrink-0 ml-3">
+          <button
+            onClick={() => crawlAllMutation.mutate()}
+            disabled={crawlAllMutation.isPending || sources.length === 0}
+            className="flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
+          >
+            {crawlAllMutation.isPending ? (
+              <RefreshCw size={12} className="animate-spin" />
+            ) : (
+              <Globe size={12} />
+            )}
+            Crawl All
+          </button>
+          <button
+            onClick={() => setShowAddForm((v) => !v)}
+            className="flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity"
+          >
+            <Plus size={12} />
+            Add Source
+          </button>
+        </div>
+      </div>
+
+      {/* Source list */}
+      {isLoading ? (
+        <div className="p-4 space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+          ))}
+        </div>
+      ) : sources.length === 0 && !showAddForm ? (
+        <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+          No web documentation sources registered. Add one to get started.
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          {sources.length > 0 && (
+            <>
+              <thead>
+                <tr className="text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+                  <th className="px-4 py-2 text-left font-medium">Name</th>
+                  <th className="px-4 py-2 text-left font-medium">Base URL</th>
+                  <th className="px-4 py-2 text-left font-medium">Last Crawled</th>
+                  <th className="px-4 py-2 text-right font-medium">Chunks</th>
+                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sources.map((source) => (
+                  <tr
+                    key={source.id}
+                    className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        {source.lastCrawlError ? (
+                          <AlertCircle
+                            size={13}
+                            className="text-[var(--color-tags-font-critical)] shrink-0"
+                            title={source.lastCrawlError}
+                          />
+                        ) : source.lastCrawlChunks != null && source.lastCrawlChunks > 0 ? (
+                          <CheckCircle
+                            size={13}
+                            className="text-[var(--color-tags-font-success)] shrink-0"
+                          />
+                        ) : null}
+                        <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
+                          {source.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <a
+                        href={source.baseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-mono text-[var(--color-buttons-button-primary)] hover:underline truncate max-w-48 block"
+                      >
+                        {source.baseUrl}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-[var(--color-fonts-font-color-support)]">
+                      {source.lastCrawledAt
+                        ? new Date(source.lastCrawledAt).toLocaleString()
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                      {source.lastCrawlChunks != null ? source.lastCrawlChunks.toLocaleString() : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => crawlMutation.mutate(source.id)}
+                          disabled={crawlingId === source.id}
+                          title="Crawl now"
+                          className="flex items-center gap-1 px-2 h-6 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
+                        >
+                          {crawlingId === source.id ? (
+                            <RefreshCw size={11} className="animate-spin" />
+                          ) : (
+                            <Play size={11} />
+                          )}
+                          Crawl
+                        </button>
+                        <button
+                          onClick={() => handleDelete(source.id, source.name)}
+                          disabled={deleteMutation.isPending}
+                          title="Delete source"
+                          className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </>
+          )}
+        </table>
+      )}
+
+      {/* Add source form */}
+      {showAddForm && (
+        <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-4 bg-[var(--color-navigation-menu-item-hover-background)]">
+          <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">
+            Add Web Documentation Source
+          </p>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Name *
+              </label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="e.g. Quarkus Guides"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Base URL *
+              </label>
+              <input
+                type="text"
+                value={form.baseUrl}
+                onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                placeholder="https://quarkus.io/guides/"
+                className={inputCls}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Allowed Path Prefix * <span className="italic">(only links under this prefix will be followed)</span>
+              </label>
+              <input
+                type="text"
+                value={form.allowedPathPrefix}
+                onChange={(e) => setForm((f) => ({ ...f, allowedPathPrefix: e.target.value }))}
+                placeholder="https://quarkus.io/guides/"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Max Pages
+              </label>
+              <input
+                type="number"
+                value={form.maxPages ?? 500}
+                min={1}
+                onChange={(e) => setForm((f) => ({ ...f, maxPages: parseInt(e.target.value) || 500 }))}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Crawl Delay (ms)
+              </label>
+              <input
+                type="number"
+                value={form.crawlDelayMs ?? 500}
+                min={0}
+                step={100}
+                onChange={(e) => setForm((f) => ({ ...f, crawlDelayMs: parseInt(e.target.value) || 500 }))}
+                className={inputCls}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <button
+              onClick={handleAdd}
+              disabled={addMutation.isPending}
+              className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
+            >
+              {addMutation.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
+              Register Source
+            </button>
+            <button
+              onClick={() => setShowAddForm(false)}
+              className="px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Section>
+  )
+}
+
 // ── Semantic search section ────────────────────────────────────────────────────
 
-const SOURCE_TYPES = ['jira', 'confluence']
+const SOURCE_TYPES = ['jira', 'confluence', 'web-docs']
 
 function SemanticSearchSection() {
   const [query, setQuery] = useState('')
   const [selectedSources, setSelectedSources] = useState<string[]>([])
-  const [productId, setProductId] = useState('')
   const [topK, setTopK] = useState('10')
   const [hasSearched, setHasSearched] = useState(false)
-
-  const { data: products = [] } = useQuery<ProductConfig[]>({
-    queryKey: ['products'],
-    queryFn: () =>
-      api
-        .get('/customer-registry/products')
-        .then((r) => r.data)
-        .catch(() => []),
-  })
 
   function toggleSource(src: string) {
     setSelectedSources((prev) =>
@@ -408,11 +719,10 @@ function SemanticSearchSection() {
   }
 
   const { data, isFetching, refetch } = useQuery<KnowledgeSearchResponse>({
-    queryKey: ['knowledge-search', query, selectedSources, productId, topK],
+    queryKey: ['knowledge-search', query, selectedSources, topK],
     queryFn: () => {
       const params = new URLSearchParams({ q: query, topK })
       selectedSources.forEach((s) => params.append('sourceType', s))
-      if (productId.trim()) params.set('productId', productId.trim())
       return api.get(`/knowledge/search?${params.toString()}`).then((r) => r.data)
     },
     enabled: false,
@@ -482,23 +792,6 @@ function SemanticSearchSection() {
                 </span>
               )}
             </div>
-          </div>
-
-          {/* Product */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-[var(--color-fonts-font-color-support)]">Product:</span>
-            <select
-              value={productId}
-              onChange={(e) => setProductId(e.target.value)}
-              className={`${selectCls} h-7 text-xs`}
-            >
-              <option value="">all</option>
-              {products.map((p) => (
-                <option key={p.productId} value={p.productId}>
-                  {p.displayName}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Top-K */}
@@ -579,6 +872,7 @@ export default function KnowledgeIndexPage() {
         { sourceType: 'jira', count: statsData.jira, lastIndexed: null },
         { sourceType: 'confluence', count: statsData.confluence, lastIndexed: null },
         { sourceType: 'jira-attachment', count: statsData.jiraAttachment, lastIndexed: null },
+        { sourceType: 'web-docs', count: statsData.webDocs, lastIndexed: null },
       ]
     : []
 
@@ -635,6 +929,8 @@ export default function KnowledgeIndexPage() {
         triggering={triggering}
         addToast={addToast}
       />
+
+      <WebDocSourcesSection addToast={addToast} />
 
       <SemanticSearchSection />
 
