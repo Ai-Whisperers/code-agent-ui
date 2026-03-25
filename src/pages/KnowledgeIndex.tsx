@@ -557,11 +557,12 @@ function WebDocSourcesSection({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         {source.lastCrawlError ? (
+                          <span title={source.lastCrawlError}>
                           <AlertCircle
                             size={13}
                             className="text-[var(--color-tags-font-critical)] shrink-0"
-                            title={source.lastCrawlError}
                           />
+                          </span>
                         ) : source.lastCrawlChunks != null && source.lastCrawlChunks > 0 ? (
                           <CheckCircle
                             size={13}
@@ -885,11 +886,12 @@ function StaticFilesSection({
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     {f.indexError ? (
+                      <span title={f.indexError}>
                       <AlertCircle
                         size={13}
                         className="text-[var(--color-tags-font-critical)] shrink-0"
-                        title={f.indexError}
                       />
+                      </span>
                     ) : f.chunkCount != null && f.chunkCount > 0 ? (
                       <CheckCircle
                         size={13}
