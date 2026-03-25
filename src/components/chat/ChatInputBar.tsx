@@ -32,6 +32,7 @@ type ChatInputBarProps = {
   onViewPlan?: (plan: ExecutionPlan) => void
   onImplementPlan?: (plan: ExecutionPlan) => void
   onDismissPlan?: (planId: string) => void
+  canPlan?: boolean
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 10MB
@@ -42,7 +43,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan },
+  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -140,7 +141,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     const handleKeydown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === '.') {
         event.preventDefault()
-        setMode(prevMode => prevMode === 'ask' ? 'plan' : 'ask')
+        if (canPlan) setMode(prevMode => prevMode === 'ask' ? 'plan' : 'ask')
       }
     }
 
@@ -157,7 +158,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     // Check for mode switching commands
     const trimmedText = text.trim().toLowerCase()
     if (trimmedText === '.plan') {
-      setMode('plan')
+      if (canPlan) setMode('plan')
       setInput('')
       return
     }
@@ -593,7 +594,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
                     <Eye size={12} className="inline mr-1" />
                     View
                   </button>
-                  {plan.status === 'DRAFT' && (
+                  {plan.status === 'DRAFT' && canPlan && (
                     <button
                       onClick={() => onImplementPlan?.(plan)}
                       className="px-2.5 py-1 rounded-md bg-[var(--color-buttons-button-primary)] text-white text-xs font-medium hover:opacity-90 transition-opacity flex items-center gap-1"
@@ -808,18 +809,20 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
                 <MessageSquare size={14} />
                 Ask
               </button>
-              <button
-                onClick={() => {
-                  setMode('plan')
-                  setShowModeMenu(false)
-                }}
-                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                  mode === 'plan' ? 'bg-orange-50 text-orange-700' : 'text-gray-700'
-                }`}
-              >
-                <Lightbulb size={14} />
-                Plan
-              </button>
+              {canPlan && (
+                <button
+                  onClick={() => {
+                    setMode('plan')
+                    setShowModeMenu(false)
+                  }}
+                  className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                    mode === 'plan' ? 'bg-orange-50 text-orange-700' : 'text-gray-700'
+                  }`}
+                >
+                  <Lightbulb size={14} />
+                  Plan
+                </button>
+              )}
             </div>
           )}
         </div>

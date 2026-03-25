@@ -9,6 +9,8 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
+import { useStore } from '@tanstack/react-store'
+import { authStore } from '@/store/auth-store'
 import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext } from '@/types/api'
 import {
   ChatInputBar,
@@ -27,6 +29,8 @@ export default function Chat() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const params = useParams({ strict: false }) as { conversationId?: string }
+  const userPermissions = useStore(authStore, (s) => s.user?.permissions ?? [])
+  const canPlan = userPermissions.includes('EXECUTE_PLAN_JOBS')
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [streamingContent, setStreamingContent] = useState('')
@@ -494,7 +498,7 @@ export default function Chat() {
   }, [selectedPlan])
 
   const handleImplementPlan = useCallback(async (planId: string) => {
-    if (isStreaming) return
+    if (isStreaming || !canPlan) return
     setIsStreaming(true)
     setStreamingContent('')
     setStreamingThinkingSteps([])
@@ -936,6 +940,7 @@ export default function Chat() {
           isGeneratingPlan={isGeneratingPlan}
           generatingPlanTitle={generatingPlanTitle}
           onViewPlan={handleViewPlan}
+          canPlan={canPlan}
           onImplementPlan={(plan) => handleImplementPlan(plan.planId)}
           onDismissPlan={handleDismissPlan}
         />
