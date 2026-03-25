@@ -247,6 +247,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'PR Review & Metrics',
     settings: [
       { key: 'review.webhook.skip-authors', label: 'Skip Authors', description: 'Comma-separated PR author names that skip automatic review', defaultValue: 'code-agent', inputType: 'textarea' },
+      { key: 'rules.repo.url', label: 'Rules Repository URL', description: 'Git URL of a repository containing custom review rules. Leave blank to use only built-in rules.' },
       { key: 'review.pr-summary.enabled', label: 'PR Summary', description: 'Post a CodeRabbit-style PR summary before the review', defaultValue: 'true', inputType: 'boolean' },
       { key: 'review.sequence-diagrams.enabled', label: 'Sequence Diagrams in Summary', description: 'Include Mermaid sequence diagrams in PR summaries', defaultValue: 'true', inputType: 'boolean' },
       { key: 'metrics.cc-threshold', label: 'CC Threshold', description: 'Cyclomatic complexity threshold for flagging methods', defaultValue: '10', inputType: 'number', min: 1 },
