@@ -165,8 +165,10 @@ const SETTING_GROUPS: SettingGroup[] = [
     id: 'knowledge',
     label: 'Knowledge Indexer',
     settings: [
-      { key: 'knowledge.indexer.jira-max-results', label: 'Jira Max Results', description: 'Maximum number of Jira issues fetched per project in a single indexing pass', defaultValue: '200', inputType: 'number', min: 1 },
+      { key: 'knowledge.indexer.jira-max-results', label: 'Jira Max Results', description: 'Maximum number of Jira issues fetched per project in a single full indexing pass', defaultValue: '200', inputType: 'number', min: 1 },
       { key: 'knowledge.indexer.max-attachment-bytes', label: 'Max Attachment Size (bytes)', description: 'Maximum attachment size in bytes that will be downloaded and indexed', defaultValue: '5242880', inputType: 'number', min: 1 },
+      { key: 'knowledge.reindex.max-parallel', label: 'Webhook Reindex: Max Parallel', description: 'Number of concurrent threads for webhook-triggered reindexing of Jira issues and Confluence pages', defaultValue: '2', inputType: 'number', min: 1, max: 20 },
+      { key: 'knowledge.reindex.max-queue-size', label: 'Webhook Reindex: Queue Size', description: 'Maximum pending webhook-triggered reindex tasks. Excess events are silently dropped — the next webhook or scheduled full reindex will catch them up', defaultValue: '50', inputType: 'number', min: 1 },
     ],
   },
   {
