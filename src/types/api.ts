@@ -62,6 +62,15 @@ export interface RejectRequest {
   reason: string
 }
 
+// ---- Code Graph ----
+
+export interface CodeGraphStatus {
+  workspace: string
+  repoSlug: string
+  lastUpdatedAt: string | null
+  nodeCount: number
+}
+
 // ---- Repo Settings ----
 
 export interface RepoSettings {

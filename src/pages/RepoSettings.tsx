@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Save, X } from 'lucide-react'
+import { Save, X, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
-import type { RepoSettings } from '@/types/api'
+import type { RepoSettings, CodeGraphStatus } from '@/types/api'
 
 export default function RepoSettingsPage() {
   const qc = useQueryClient()
@@ -15,6 +15,11 @@ export default function RepoSettingsPage() {
     queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
   })
 
+  const { data: graphStatuses } = useQuery<CodeGraphStatus[]>({
+    queryKey: ['graph-status'],
+    queryFn: () => api.get('/graph/status').then((r) => r.data).catch(() => []),
+  })
+
   const saveMutation = useMutation({
     mutationFn: (repo: RepoSettings) =>
       api.put(`/settings/repos/${repo.workspace}/${repo.repoSlug}`, repo),
@@ -23,6 +28,13 @@ export default function RepoSettingsPage() {
       setEditRepo(null)
     },
   })
+
+  const graphStatusMap = new Map(
+    (Array.isArray(graphStatuses) ? graphStatuses : []).map((s) => [
+      `${s.workspace}/${s.repoSlug}`,
+      s,
+    ]),
+  )
 
   const all = Array.isArray(repos) ? repos : []
   const list = showArchived ? all : all.filter((r) => !r.archived)
@@ -63,9 +75,11 @@ export default function RepoSettingsPage() {
           <div onClick={(e) => e.stopPropagation()}>
             <RepoEditor
               repo={editRepo}
+              graphStatus={graphStatusMap.get(`${editRepo.workspace}/${editRepo.repoSlug}`) ?? null}
               onSave={(r) => saveMutation.mutate(r)}
               onCancel={() => setEditRepo(null)}
               isSaving={saveMutation.isPending}
+              onRebuildComplete={() => qc.invalidateQueries({ queryKey: ['graph-status'] })}
             />
           </div>
         </div>
@@ -75,7 +89,7 @@ export default function RepoSettingsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
-              {['Workspace', 'Repo', 'Review', 'Vectors', 'Docs', 'Upgrade', 'Quality', 'Archived', ''].map((h) => (
+              {['Workspace', 'Repo', 'Review', 'Vectors', 'Docs', 'Upgrade', 'Quality', 'Archived', 'Code Graph', ''].map((h) => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
@@ -89,7 +103,7 @@ export default function RepoSettingsPage() {
             {isLoading
               ? Array.from({ length: 3 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={9} className="px-4 py-3">
+                    <td colSpan={10} className="px-4 py-3">
                       <div className="h-5 skeleton-shimmer rounded" />
                     </td>
                   </tr>
@@ -97,38 +111,63 @@ export default function RepoSettingsPage() {
               : list.length === 0
               ? (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
+                  <td colSpan={10} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
                     No repositories configured yet.
                   </td>
                 </tr>
               )
-              : list.map((repo, i) => (
-                  <tr
-                    key={`${repo.workspace}/${repo.repoSlug}`}
-                    className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-                      repo.archived ? 'opacity-50' : i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                    }`}
-                    onClick={() => setEditRepo(repo)}
-                  >
-                    <td className="px-4 py-3 font-medium">{repo.workspace}</td>
-                    <td className="px-4 py-3">{repo.repoSlug}</td>
-                    {(['reviewEnabled', 'vectorEnabled', 'docsEnabled', 'upgradeEnabled', 'qualityReportEnabled'] as const).map(
-                      (key) => (
-                        <td key={key} className="px-4 py-3">
-                          <ToggleBadge value={repo[key]} />
-                        </td>
-                      ),
-                    )}
-                    <td className="px-4 py-3">
-                      <ToggleBadge value={!!repo.archived} />
-                    </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">Edit</td>
-                  </tr>
-                ))}
+              : list.map((repo, i) => {
+                  const graphStatus = graphStatusMap.get(`${repo.workspace}/${repo.repoSlug}`)
+                  return (
+                    <tr
+                      key={`${repo.workspace}/${repo.repoSlug}`}
+                      className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
+                        repo.archived ? 'opacity-50' : i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
+                      }`}
+                      onClick={() => setEditRepo(repo)}
+                    >
+                      <td className="px-4 py-3 font-medium">{repo.workspace}</td>
+                      <td className="px-4 py-3">{repo.repoSlug}</td>
+                      {(['reviewEnabled', 'vectorEnabled', 'docsEnabled', 'upgradeEnabled', 'qualityReportEnabled'] as const).map(
+                        (key) => (
+                          <td key={key} className="px-4 py-3">
+                            <ToggleBadge value={repo[key]} />
+                          </td>
+                        ),
+                      )}
+                      <td className="px-4 py-3">
+                        <ToggleBadge value={!!repo.archived} />
+                      </td>
+                      <td className="px-4 py-3">
+                        <GraphStatusBadge status={graphStatus ?? null} />
+                      </td>
+                      <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">Edit</td>
+                    </tr>
+                  )
+                })}
           </tbody>
         </table>
       </div>
     </main>
+  )
+}
+
+function GraphStatusBadge({ status }: { status: CodeGraphStatus | null }) {
+  if (!status) {
+    return (
+      <span className="text-xs font-medium px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+        None
+      </span>
+    )
+  }
+  const date = status.lastUpdatedAt ? new Date(status.lastUpdatedAt).toLocaleDateString() : '—'
+  return (
+    <span
+      className="text-xs font-medium px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]"
+      title={`${status.nodeCount.toLocaleString()} nodes · last updated ${status.lastUpdatedAt ?? '?'}`}
+    >
+      {date}
+    </span>
   )
 }
 
@@ -177,20 +216,37 @@ function Toggle({
 
 function RepoEditor({
   repo,
+  graphStatus,
   onSave,
   onCancel,
   isSaving,
+  onRebuildComplete,
 }: {
   repo: RepoSettings
+  graphStatus: CodeGraphStatus | null
   onSave: (r: RepoSettings) => void
   onCancel: () => void
   isSaving: boolean
+  onRebuildComplete: () => void
 }) {
   const [form, setForm] = useState<RepoSettings>(repo)
+  const [rebuildStatus, setRebuildStatus] = useState<'idle' | 'pending' | 'accepted' | 'error'>('idle')
+
   const field = (name: keyof RepoSettings) => (value: string) =>
     setForm((p) => ({ ...p, [name]: value }))
   const toggle = (name: keyof RepoSettings) => (value: boolean) =>
     setForm((p) => ({ ...p, [name]: value }))
+
+  const handleRebuild = async () => {
+    setRebuildStatus('pending')
+    try {
+      await api.post(`/graph/rebuild/${repo.workspace}/${repo.repoSlug}`)
+      setRebuildStatus('accepted')
+      onRebuildComplete()
+    } catch {
+      setRebuildStatus('error')
+    }
+  }
 
   return (
     <div className="relative w-full max-w-lg bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_8px_32px_rgba(0,0,0,0.24)]">
@@ -244,6 +300,57 @@ function RepoEditor({
         ).map(([name, label]) => (
           <Toggle key={name} label={label} value={form[name] as boolean} onChange={toggle(name)} />
         ))}
+      </div>
+
+      <div className="border-t border-[var(--color-cards-card-stroke)] pt-4 mb-4">
+        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-input-label)] mb-3">
+          Code Graph
+        </p>
+        <div className="flex items-center justify-between">
+          <div className="text-sm text-[var(--color-fonts-font-color-support)]">
+            {graphStatus ? (
+              <>
+                <span className="text-[var(--color-fonts-font-color-primary)] font-medium">
+                  {graphStatus.nodeCount.toLocaleString()} nodes
+                </span>
+                {' · last updated '}
+                <span className="text-[var(--color-fonts-font-color-primary)]">
+                  {graphStatus.lastUpdatedAt
+                    ? new Date(graphStatus.lastUpdatedAt).toLocaleString()
+                    : '—'}
+                </span>
+              </>
+            ) : (
+              <span>No code graph built yet</span>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={handleRebuild}
+            disabled={rebuildStatus === 'pending'}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-60 transition-colors"
+          >
+            <RefreshCw size={12} className={rebuildStatus === 'pending' ? 'animate-spin' : ''} />
+            {rebuildStatus === 'pending'
+              ? 'Starting…'
+              : rebuildStatus === 'accepted'
+              ? 'Queued'
+              : rebuildStatus === 'error'
+              ? 'Failed — retry'
+              : 'Force Rebuild'}
+          </button>
+        </div>
+        {rebuildStatus === 'accepted' && (
+          <p className="mt-2 text-xs text-[var(--color-tags-font-success)]">
+            Rebuild accepted — runs in background
+            {form.vectorEnabled ? ', including embeddings.' : '.'}
+          </p>
+        )}
+        {rebuildStatus === 'error' && (
+          <p className="mt-2 text-xs text-[var(--color-tags-font-error)]">
+            Failed to start rebuild. Check server logs.
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2">
