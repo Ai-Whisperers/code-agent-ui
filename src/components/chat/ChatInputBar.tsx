@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
+import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -22,6 +22,7 @@ type ChatInputBarProps = {
   isStreaming: boolean
   conversationId?: string
   onSend: (text: string, attachmentIds?: string[], mode?: ChatMode, conversationContext?: ConversationContext) => void
+  onStop?: () => void
   onSecretWarning: (findings: string[], pendingText: string) => void
   onConversationCreate?: (conversationId: string) => void
   existingAttachments?: ChatAttachment[]
@@ -43,7 +44,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false },
+  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -845,15 +846,25 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           style={{ maxHeight: '120px', overflowY: 'auto' }}
         />
 
-        {/* Send button */}
-        <button
-          onClick={() => handleSend(input)}
-          disabled={!input.trim() || isStreaming}
-          className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 transition-colors text-white"
-          title="Send message"
-        >
-          <Send size={16} />
-        </button>
+        {/* Send / Stop button */}
+        {isStreaming ? (
+          <button
+            onClick={onStop}
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 transition-colors text-white"
+            title="Stop generation"
+          >
+            <Square size={14} fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            onClick={() => handleSend(input)}
+            disabled={!input.trim()}
+            className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 transition-colors text-white"
+            title="Send message"
+          >
+            <Send size={16} />
+          </button>
+        )}
         </div>
         </div>
       </div>

@@ -26,6 +26,7 @@ import PlanDetail from '@/pages/PlanDetail'
 import NewPlan from '@/pages/NewPlan'
 import QualityReportsPage from '@/pages/QualityReports'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
+import DeveloperScorecardPage from '@/pages/DeveloperScorecard'
 import AiStatsPage from '@/pages/AiStats'
 import MemoriesPage from '@/pages/Memories'
 import SystemSettingsPage from '@/pages/SystemSettings'
@@ -175,6 +176,12 @@ const reviewMetricsRoute = createRoute({
   component: ReviewMetricsPage,
 })
 
+const developerScorecardRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/developers',
+  component: DeveloperScorecardPage,
+})
+
 const aiStatsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/stats',
@@ -267,6 +274,7 @@ const routeTree = rootRoute.addChildren([
     planDetailRoute,
     qualityRoute,
     reviewMetricsRoute,
+    developerScorecardRoute,
     aiStatsRoute,
     memoriesRoute,
     systemSettingsRoute,

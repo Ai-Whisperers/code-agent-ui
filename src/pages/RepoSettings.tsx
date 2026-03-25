@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Save, X, RefreshCw } from 'lucide-react'
+import { Save, X, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { RepoSettings, CodeGraphStatus } from '@/types/api'
@@ -9,8 +9,15 @@ export default function RepoSettingsPage() {
   const qc = useQueryClient()
   const [editRepo, setEditRepo] = useState<RepoSettings | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [rebuildAllStatus, setRebuildAllStatus] = useState<'idle' | 'pending' | 'accepted' | 'error'>('idle')
+  const [rebuildProgress, setRebuildProgress] = useState<Record<string, 'pending' | 'accepted' | 'error'>>({})
 
-  const { data: repos, isLoading } = useQuery<RepoSettings[]>({
+  const clearRebuildProgress = () => {
+    setRebuildProgress({})
+    setRebuildAllStatus('idle')
+  }
+
+  const { data: repos, isLoading, isFetching } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
     queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
   })
@@ -19,6 +26,38 @@ export default function RepoSettingsPage() {
     queryKey: ['graph-status'],
     queryFn: () => api.get('/graph/status').then((r) => r.data).catch(() => []),
   })
+
+  const handleRefresh = () => {
+    qc.invalidateQueries({ queryKey: ['repos'] })
+    qc.invalidateQueries({ queryKey: ['graph-status'] })
+  }
+
+  const handleRebuildAll = async () => {
+    const activeRepos = (Array.isArray(repos) ? repos : []).filter((r) => !r.archived)
+    if (activeRepos.length === 0) return
+
+    const initial: Record<string, 'pending' | 'accepted' | 'error'> = {}
+    activeRepos.forEach((r) => { initial[`${r.workspace}/${r.repoSlug}`] = 'pending' })
+    setRebuildProgress(initial)
+    setRebuildAllStatus('pending')
+
+    const results = await Promise.allSettled(
+      activeRepos.map(async (r) => {
+        const key = `${r.workspace}/${r.repoSlug}`
+        try {
+          await api.post(`/graph/rebuild/${r.workspace}/${r.repoSlug}`)
+          setRebuildProgress((prev) => ({ ...prev, [key]: 'accepted' }))
+        } catch {
+          setRebuildProgress((prev) => ({ ...prev, [key]: 'error' }))
+          throw key
+        }
+      }),
+    )
+
+    const hasError = results.some((r) => r.status === 'rejected')
+    setRebuildAllStatus(hasError ? 'error' : 'accepted')
+    qc.invalidateQueries({ queryKey: ['graph-status'] })
+  }
 
   const saveMutation = useMutation({
     mutationFn: (repo: RepoSettings) =>
@@ -46,6 +85,38 @@ export default function RepoSettingsPage() {
         subtitle="Manage per-repository configuration."
         actions={
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={isFetching}
+              title="Refresh"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-60 transition-colors"
+            >
+              <RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={handleRebuildAll}
+              disabled={rebuildAllStatus === 'pending' || isLoading}
+              title="Rebuild code graphs and embeddings for all active repositories"
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] border text-xs font-medium transition-colors disabled:opacity-60 ${
+                rebuildAllStatus === 'error'
+                  ? 'border-[var(--color-tags-font-error)] text-[var(--color-tags-font-error)] hover:bg-[var(--color-tags-error-background)]'
+                  : rebuildAllStatus === 'accepted'
+                  ? 'border-[var(--color-tags-font-success)] text-[var(--color-tags-font-success)] hover:bg-[var(--color-tags-success-background)]'
+                  : 'border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
+              }`}
+            >
+              <RefreshCw size={13} className={rebuildAllStatus === 'pending' ? 'animate-spin' : ''} />
+              {rebuildAllStatus === 'pending'
+                ? 'Rebuilding…'
+                : rebuildAllStatus === 'accepted'
+                ? 'Queued'
+                : rebuildAllStatus === 'error'
+                ? 'Failed — retry'
+                : 'Rebuild All'}
+            </button>
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <button
                 type="button"
@@ -65,6 +136,45 @@ export default function RepoSettingsPage() {
           </div>
         }
       />
+
+      {Object.keys(rebuildProgress).length > 0 && (
+        <div className="mb-4 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-input-label)]">
+              Rebuild Progress
+            </p>
+            {rebuildAllStatus !== 'pending' && (
+              <button
+                type="button"
+                onClick={clearRebuildProgress}
+                className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-icons-icon)]"
+                title="Dismiss"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {Object.entries(rebuildProgress).map(([key, status]) => (
+              <div
+                key={key}
+                className={`flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-small)] border text-xs ${
+                  status === 'accepted'
+                    ? 'border-[var(--color-tags-success-background)] bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+                    : status === 'error'
+                    ? 'border-[var(--color-tags-error-background)] bg-[var(--color-tags-error-background)] text-[var(--color-tags-font-error)]'
+                    : 'border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-support)]'
+                }`}
+              >
+                {status === 'pending' && <RefreshCw size={12} className="animate-spin shrink-0" />}
+                {status === 'accepted' && <CheckCircle size={12} className="shrink-0" />}
+                {status === 'error' && <XCircle size={12} className="shrink-0" />}
+                <span className="truncate font-medium">{key}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {editRepo && (
         <div
@@ -139,7 +249,10 @@ export default function RepoSettingsPage() {
                         <ToggleBadge value={!!repo.archived} />
                       </td>
                       <td className="px-4 py-3">
-                        <GraphStatusBadge status={graphStatus ?? null} />
+                        <GraphStatusBadge
+                          status={graphStatus ?? null}
+                          rebuilding={rebuildProgress[`${repo.workspace}/${repo.repoSlug}`]}
+                        />
                       </td>
                       <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">Edit</td>
                     </tr>
@@ -152,7 +265,21 @@ export default function RepoSettingsPage() {
   )
 }
 
-function GraphStatusBadge({ status }: { status: CodeGraphStatus | null }) {
+function GraphStatusBadge({
+  status,
+  rebuilding,
+}: {
+  status: CodeGraphStatus | null
+  rebuilding?: 'pending' | 'accepted' | 'error'
+}) {
+  if (rebuilding === 'pending' || rebuilding === 'accepted') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+        <RefreshCw size={11} className="animate-spin" />
+        {rebuilding === 'pending' ? 'Starting…' : 'Queued'}
+      </span>
+    )
+  }
   if (!status) {
     return (
       <span className="text-xs font-medium px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">

@@ -109,6 +109,15 @@ export function ApplicationMenuItems(
           onClick: () => go('/metrics/reviews'),
         },
         {
+          id: 'developer-scorecard',
+          label: 'Developer Scorecard',
+          icon: <Users size={16} />,
+          path: '/metrics/developers',
+          isActive: currentPath === '/metrics/developers',
+          type: 'item',
+          onClick: () => go('/metrics/developers'),
+        },
+        {
           id: 'ai-stats',
           label: 'AI Stats',
           icon: <BotMessageSquare size={16} />,

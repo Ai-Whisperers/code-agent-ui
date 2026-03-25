@@ -293,6 +293,24 @@ export interface ReviewMetrics {
   autoSuppressedPatterns: number
 }
 
+// ---- Developer Scorecard ----
+
+export interface DeveloperEntry {
+  author: string
+  totalPrs: number
+  totalFindings: number
+  resolvedFindings: number
+  resolutionRate: number
+  lastPrAt?: string
+}
+
+export interface DeveloperScorecard {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  authors: DeveloperEntry[]
+}
+
 // ---- Upgrades ----
 
 export type LatestVersionsResponse = Record<string, string>

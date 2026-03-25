@@ -57,6 +57,14 @@ export default function Chat() {
   const chatInputRef = useRef<ChatInputHandle>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Abort any in-flight stream when the component unmounts
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort()
+    }
+  }, [])
 
   // Function to load existing attachments
   const loadExistingAttachments = useCallback(async (conversationId: string) => {
@@ -196,12 +204,16 @@ export default function Chat() {
       const accumulatedThinkingSteps: ThinkingStep[] = []
       streamingContentRef.current = ''
 
+      const controller = new AbortController()
+      abortControllerRef.current = controller
+
       try {
         await refreshToken()
         const token = getToken()
 
         const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
           method: 'POST',
+          signal: controller.signal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
@@ -408,15 +420,34 @@ export default function Chat() {
             },
           ])
         }
-      } catch {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content: '**Error:** Could not reach the assistant. Please try again.',
-          },
-        ])
+      } catch (err) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          // Stream was cancelled — save whatever was streamed so far
+          if (accumulatedContent) {
+            setMessages((prev) => {
+              const next = [
+                ...prev,
+                {
+                  id: crypto.randomUUID(),
+                  role: 'assistant' as const,
+                  content: accumulatedContent + '\n\n*(stopped)*',
+                  thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                },
+              ]
+              if (activeConversationId) saveMessagesToStorage(activeConversationId, next)
+              return next
+            })
+          }
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: '**Error:** Could not reach the assistant. Please try again.',
+            },
+          ])
+        }
       } finally {
         if (streamingRafRef.current) {
           cancelAnimationFrame(streamingRafRef.current)
@@ -511,10 +542,14 @@ export default function Chat() {
     let accumulatedContent = ''
     const accumulatedThinkingSteps: ThinkingStep[] = []
 
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
     try {
       const token = getToken()
       const response = await fetch(`${import.meta.env.VITE_API_URL}/plans/${planId}/implement`, {
         method: 'POST',
+        signal: controller.signal,
         headers: { Authorization: `Bearer ${token}` },
       })
 
@@ -639,14 +674,31 @@ export default function Chat() {
           },
         ])
       }
-    } catch {
-      setActivePlans(prev => prev.map(p =>
-        p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
-      ))
-      setMessages(prev => [
-        ...prev,
-        { id: crypto.randomUUID(), role: 'assistant' as const, content: '**Error:** Could not reach the implementation service. Please try again.' },
-      ])
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        setActivePlans(prev => prev.map(p =>
+          p.planId === planId ? { ...p, status: 'DRAFT' as PlanStatus } : p
+        ))
+        if (accumulatedContent) {
+          setMessages(prev => [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant' as const,
+              content: accumulatedContent + '\n\n*(stopped)*',
+              thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+            },
+          ])
+        }
+      } else {
+        setActivePlans(prev => prev.map(p =>
+          p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
+        ))
+        setMessages(prev => [
+          ...prev,
+          { id: crypto.randomUUID(), role: 'assistant' as const, content: '**Error:** Could not reach the implementation service. Please try again.' },
+        ])
+      }
     } finally {
       if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
       setIsStreaming(false)
@@ -677,6 +729,10 @@ export default function Chat() {
       // Still remove from UI even if API call fails
       setActivePlans(prev => prev.filter(p => p.planId !== planId))
     }
+  }, [])
+
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort()
   }, [])
 
   const handleConversationCreate = useCallback((conversationId: string) => {
@@ -932,6 +988,7 @@ export default function Chat() {
           isStreaming={isStreaming}
           conversationId={activeConversationId || undefined}
           onSend={sendMessage}
+          onStop={handleStop}
           onSecretWarning={handleSecretWarning}
           onConversationCreate={handleConversationCreate}
           existingAttachments={existingAttachments}
