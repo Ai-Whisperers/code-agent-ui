@@ -13,6 +13,8 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle,
+  FileText,
+  Upload,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
@@ -23,6 +25,7 @@ import type {
   KnowledgeSearchResult,
   WebDocSource,
   WebDocSourceCreateRequest,
+  StaticFileSource,
 } from '@/types/api'
 
 // ── Shared input styles ────────────────────────────────────────────────────────
@@ -114,6 +117,8 @@ function SourceTypeBadge({ type }: { type: string }) {
     cls = 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
   if (lower === 'web-docs')
     cls = 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+  if (lower === 'static-file')
+    cls = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return (
     <span
       className={`text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] font-medium ${cls}`}
@@ -121,6 +126,14 @@ function SourceTypeBadge({ type }: { type: string }) {
       {type}
     </span>
   )
+}
+
+// ── File size formatter ────────────────────────────────────────────────────────
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 // ── Stats section ──────────────────────────────────────────────────────────────
@@ -702,9 +715,243 @@ function WebDocSourcesSection({
   )
 }
 
+// ── Static files section ───────────────────────────────────────────────────────
+
+function StaticFilesSection({
+  addToast,
+}: {
+  addToast: (text: string, type: 'success' | 'error') => void
+}) {
+  const qc = useQueryClient()
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [name, setName] = useState('')
+  const [reindexingId, setReindexingId] = useState<string | null>(null)
+
+  const { data: files = [], isLoading } = useQuery<StaticFileSource[]>({
+    queryKey: ['static-file-sources'],
+    queryFn: () => api.get('/knowledge/static-files').then((r) => r.data).catch(() => []),
+  })
+
+  const uploadMutation = useMutation({
+    mutationFn: ({ file, displayName }: { file: File; displayName: string }) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (displayName.trim()) fd.append('name', displayName.trim())
+      return api.post('/knowledge/static-files', fd)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['static-file-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('File uploaded and indexed successfully.', 'success')
+      setSelectedFile(null)
+      setName('')
+    },
+    onError: () => addToast('Upload failed.', 'error'),
+  })
+
+  const reindexMutation = useMutation({
+    mutationFn: (id: string) => api.post(`/knowledge/static-files/${id}/reindex`, {}),
+    onMutate: (id) => setReindexingId(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['static-file-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('File reindexed successfully.', 'success')
+    },
+    onError: () => addToast('Reindex failed.', 'error'),
+    onSettled: () => setReindexingId(null),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/knowledge/static-files/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['static-file-sources'] })
+      qc.invalidateQueries({ queryKey: ['knowledge-stats'] })
+      addToast('File deleted.', 'success')
+    },
+    onError: () => addToast('Failed to delete file.', 'error'),
+  })
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null
+    setSelectedFile(file)
+    if (file && !name.trim()) {
+      setName(file.name.replace(/\.[^.]+$/, ''))
+    }
+  }
+
+  function handleUpload() {
+    if (!selectedFile) {
+      addToast('Select a file first.', 'error')
+      return
+    }
+    uploadMutation.mutate({ file: selectedFile, displayName: name })
+  }
+
+  function handleDelete(id: string, fileName: string) {
+    if (!window.confirm(`Delete "${fileName}" and all its indexed content?`)) return
+    deleteMutation.mutate(id)
+  }
+
+  return (
+    <Section
+      title="Static Files"
+      defaultOpen={true}
+      badge={
+        !isLoading && files.length > 0 ? (
+          <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+            {files.length} file{files.length !== 1 ? 's' : ''}
+          </span>
+        ) : undefined
+      }
+    >
+      {/* Upload area */}
+      <div className="px-4 py-4 border-b border-[var(--color-cards-card-stroke)]">
+        <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-3">
+          Upload <code className="font-mono">.txt</code>,{' '}
+          <code className="font-mono">.md</code> or{' '}
+          <code className="font-mono">.pdf</code> files to index into the knowledge base.
+          Files are stored in S3 and indexed automatically on upload.
+        </p>
+        <div className="flex items-end gap-3 flex-wrap">
+          <div>
+            <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+              File *
+            </label>
+            <input
+              type="file"
+              accept=".txt,.md,.pdf"
+              onChange={handleFileChange}
+              className="text-xs text-[var(--color-fonts-font-color-primary)] file:mr-3 file:h-8 file:px-3 file:text-xs file:font-medium file:rounded-[var(--border-radius-button-small)] file:border file:border-[var(--color-inputs-input-border)] file:bg-[var(--color-buttons-button-back)] file:text-[var(--color-fonts-font-color-buttons)] file:cursor-pointer hover:file:bg-[var(--color-buttons-button-back-hover)] file:transition-colors"
+            />
+          </div>
+          <div className="flex-1 min-w-40">
+            <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+              Display name (optional)
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Architecture Overview"
+              className={inputCls}
+            />
+          </div>
+          <button
+            onClick={handleUpload}
+            disabled={!selectedFile || uploadMutation.isPending}
+            className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
+          >
+            {uploadMutation.isPending ? (
+              <RefreshCw size={12} className="animate-spin" />
+            ) : (
+              <Upload size={12} />
+            )}
+            Upload & Index
+          </button>
+        </div>
+      </div>
+
+      {/* File list */}
+      {isLoading ? (
+        <div className="p-4 space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+          ))}
+        </div>
+      ) : files.length === 0 ? (
+        <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+          No files uploaded yet. Upload a file above to get started.
+        </div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+              <th className="px-4 py-2 text-left font-medium">Name</th>
+              <th className="px-4 py-2 text-left font-medium">File</th>
+              <th className="px-4 py-2 text-left font-medium">Indexed</th>
+              <th className="px-4 py-2 text-right font-medium">Size</th>
+              <th className="px-4 py-2 text-right font-medium">Chunks</th>
+              <th className="px-4 py-2 text-right font-medium">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {files.map((f) => (
+              <tr
+                key={f.id}
+                className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+              >
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2">
+                    {f.indexError ? (
+                      <AlertCircle
+                        size={13}
+                        className="text-[var(--color-tags-font-critical)] shrink-0"
+                        title={f.indexError}
+                      />
+                    ) : f.chunkCount != null && f.chunkCount > 0 ? (
+                      <CheckCircle
+                        size={13}
+                        className="text-[var(--color-tags-font-success)] shrink-0"
+                      />
+                    ) : (
+                      <FileText
+                        size={13}
+                        className="text-[var(--color-fonts-font-color-support)] shrink-0"
+                      />
+                    )}
+                    <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
+                      {f.name}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-xs font-mono text-[var(--color-fonts-font-color-support)] truncate max-w-40">
+                  {f.originalFilename}
+                </td>
+                <td className="px-4 py-3 text-xs text-[var(--color-fonts-font-color-support)]">
+                  {f.indexedAt ? new Date(f.indexedAt).toLocaleString() : '—'}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                  {formatFileSize(f.fileSize)}
+                </td>
+                <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                  {f.chunkCount != null ? f.chunkCount.toLocaleString() : '—'}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => reindexMutation.mutate(f.id)}
+                      disabled={reindexingId === f.id}
+                      title="Reindex file"
+                      className="flex items-center gap-1 px-2 h-6 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
+                    >
+                      <RefreshCw
+                        size={11}
+                        className={reindexingId === f.id ? 'animate-spin' : ''}
+                      />
+                      Reindex
+                    </button>
+                    <button
+                      onClick={() => handleDelete(f.id, f.name)}
+                      disabled={deleteMutation.isPending}
+                      title="Delete file"
+                      className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Section>
+  )
+}
+
 // ── Semantic search section ────────────────────────────────────────────────────
 
-const SOURCE_TYPES = ['jira', 'confluence', 'web-docs']
+const SOURCE_TYPES = ['jira', 'confluence', 'web-docs', 'static-file']
 
 function SemanticSearchSection() {
   const [query, setQuery] = useState('')
@@ -873,6 +1120,7 @@ export default function KnowledgeIndexPage() {
         { sourceType: 'confluence', count: statsData.confluence, lastIndexed: null },
         { sourceType: 'jira-attachment', count: statsData.jiraAttachment, lastIndexed: null },
         { sourceType: 'web-docs', count: statsData.webDocs, lastIndexed: null },
+        { sourceType: 'static-file', count: statsData.staticFiles ?? 0, lastIndexed: null },
       ]
     : []
 
@@ -931,6 +1179,8 @@ export default function KnowledgeIndexPage() {
       />
 
       <WebDocSourcesSection addToast={addToast} />
+
+      <StaticFilesSection addToast={addToast} />
 
       <SemanticSearchSection />
 

@@ -420,6 +420,7 @@ export interface KnowledgeStatsResponse {
   confluence: number
   jiraAttachment: number
   webDocs: number
+  staticFiles: number
 }
 
 export interface WebDocSource {
@@ -441,6 +442,18 @@ export interface WebDocSourceCreateRequest {
   allowedPathPrefix: string
   maxPages?: number
   crawlDelayMs?: number
+}
+
+export interface StaticFileSource {
+  id: string
+  name: string
+  originalFilename: string
+  contentType: string
+  fileSize: number
+  indexedAt: string | null
+  chunkCount: number | null
+  indexError: string | null
+  createdAt: string
 }
 
 export interface KnowledgeIndexJiraRequest {
