@@ -319,6 +319,7 @@ export interface AwsConfig {
 
 export interface EnvironmentConfig {
   name: string
+  type?: string
   aws?: AwsConfig
 }
 
@@ -331,6 +332,7 @@ export interface TeamMember {
 export interface CustomerConfig {
   customerId: string
   name: string
+  cloudAccountId?: string
   environments?: EnvironmentConfig[]
   metadata?: Record<string, unknown>
   createdAt?: string
@@ -352,6 +354,7 @@ export interface ProductConfig {
 
 export interface UpsertCustomerRequest {
   name: string
+  cloudAccountId?: string
   environments?: EnvironmentConfig[]
   metadata?: Record<string, unknown>
 }
@@ -364,6 +367,28 @@ export interface UpsertProductRequest {
   confluence?: ConfluenceProductConfig
   teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
+}
+
+// ---- Cloud Accounts ----
+
+export type CloudAccountType = 'AWS' | 'AZURE' | 'GOOGLE' | 'OTHER'
+
+export interface CloudAccount {
+  id: string
+  name: string
+  description?: string
+  type: CloudAccountType
+  /** Credential keys are present but values are masked (****) in API responses */
+  credentials?: Record<string, string>
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UpsertCloudAccountRequest {
+  name: string
+  description?: string
+  type: CloudAccountType
+  credentials?: Record<string, string>
 }
 
 // ---- System Settings ----

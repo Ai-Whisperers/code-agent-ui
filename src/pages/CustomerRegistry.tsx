@@ -21,6 +21,7 @@ import type {
   UpsertProductRequest,
   EnvironmentConfig,
   TeamMember,
+  CloudAccount,
 } from '@/types/api'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -109,21 +110,28 @@ function CustomerModal({
   const [tab, setTab] = useState<CustomerModalTab>('general')
   const [customerId, setCustomerId] = useState(initial?.customerId ?? '')
   const [name, setName] = useState(initial?.name ?? '')
+  const [cloudAccountId, setCloudAccountId] = useState(initial?.cloudAccountId ?? '')
   const [environments, setEnvironments] = useState<EnvironmentConfig[]>(initial?.environments ?? [])
 
   function handleSubmit() {
     if (!customerId.trim() || !name.trim()) return
     onSave(customerId.trim(), {
       name: name.trim(),
+      cloudAccountId: cloudAccountId || undefined,
       environments: environments.length > 0 ? environments : undefined,
     })
   }
+
+  const envTabLabel = [
+    environments.length > 0 ? `${environments.length} env` : null,
+    cloudAccountId ? '1 account' : null,
+  ].filter(Boolean).join(', ')
 
   const MODAL_TABS: Array<{ id: CustomerModalTab; label: string }> = [
     { id: 'general', label: 'General' },
     {
       id: 'environments',
-      label: environments.length > 0 ? `Environments (${environments.length})` : 'Environments',
+      label: envTabLabel ? `Environments (${envTabLabel})` : 'Environments',
     },
   ]
 
@@ -200,7 +208,12 @@ function CustomerModal({
             </div>
           )}
           {tab === 'environments' && (
-            <EnvironmentsTab environments={environments} onChange={setEnvironments} />
+            <EnvironmentsTab
+              cloudAccountId={cloudAccountId}
+              onCloudAccountChange={setCloudAccountId}
+              environments={environments}
+              onChange={setEnvironments}
+            />
           )}
         </div>
 
@@ -636,6 +649,14 @@ function IntegrationsTab({
   )
 }
 
+const ENVIRONMENT_TYPES = [
+  { value: 'production',  label: 'Production' },
+  { value: 'acceptance',  label: 'Acceptance' },
+  { value: 'test',        label: 'Test' },
+  { value: 'development', label: 'Development' },
+  { value: 'other',       label: 'Other' },
+]
+
 function EnvironmentEditor({
   env,
   onChange,
@@ -646,6 +667,8 @@ function EnvironmentEditor({
   onRemove: () => void
 }) {
   const [open, setOpen] = useState(true)
+
+  const typeLabel = ENVIRONMENT_TYPES.find((t) => t.value === env.type)?.label ?? env.type ?? ''
 
   return (
     <div className="bg-[var(--color-inputs-input-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] mb-3 overflow-hidden">
@@ -659,10 +682,15 @@ function EnvironmentEditor({
         </button>
         <input
           className="flex-1 h-7 px-2 bg-transparent text-sm font-medium text-[var(--color-fonts-font-color-headings)] focus:outline-none border-0"
-          placeholder="Environment name (e.g. production)"
+          placeholder="Environment name (e.g. Engie Netherlands Production)"
           value={env.name}
           onChange={(e) => onChange({ ...env, name: e.target.value })}
         />
+        {typeLabel && (
+          <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] shrink-0">
+            {typeLabel}
+          </span>
+        )}
         <button
           type="button"
           onClick={onRemove}
@@ -674,6 +702,22 @@ function EnvironmentEditor({
 
       {open && (
         <div className="px-4 py-3 space-y-4">
+          {/* Type */}
+          <div>
+            <label className={labelCls}>Environment Type</label>
+            <select
+              className={selectCls}
+              value={env.type ?? ''}
+              onChange={(e) => onChange({ ...env, type: e.target.value || undefined })}
+            >
+              <option value="">— Select type —</option>
+              {ENVIRONMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* AWS */}
           <div>
             <p className="text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-2">
               AWS
@@ -714,7 +758,6 @@ function EnvironmentEditor({
               </div>
             </div>
           </div>
-
         </div>
       )}
     </div>
@@ -722,12 +765,23 @@ function EnvironmentEditor({
 }
 
 function EnvironmentsTab({
+  cloudAccountId,
+  onCloudAccountChange,
   environments,
   onChange,
 }: {
+  cloudAccountId: string
+  onCloudAccountChange: (id: string) => void
   environments: EnvironmentConfig[]
   onChange: (envs: EnvironmentConfig[]) => void
 }) {
+  const { data: cloudAccounts } = useQuery<CloudAccount[]>({
+    queryKey: ['cloud-accounts'],
+    queryFn: () => api.get('/cloud-accounts').then((r) => r.data).catch(() => []),
+  })
+
+  const accounts = Array.isArray(cloudAccounts) ? cloudAccounts : []
+
   function addEnvironment() {
     onChange([
       ...environments,
@@ -743,8 +797,43 @@ function EnvironmentsTab({
     onChange(environments.filter((_, i) => i !== idx))
   }
 
+  const selectedAccount = accounts.find((a) => a.id === cloudAccountId)
+
   return (
     <div>
+      {/* Cloud Account selector */}
+      <div className="mb-5 pb-4 border-b border-[var(--color-cards-card-stroke)]">
+        <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide mb-3">
+          Cloud Account
+        </p>
+        <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-2">
+          Select which global cloud account (credentials) should be used to access this customer's environments.
+        </p>
+        <select
+          className={selectCls}
+          value={cloudAccountId}
+          onChange={(e) => onCloudAccountChange(e.target.value)}
+        >
+          <option value="">— None —</option>
+          {accounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name} ({a.type})
+            </option>
+          ))}
+        </select>
+        {selectedAccount && (
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+            {selectedAccount.description ?? selectedAccount.type}
+          </p>
+        )}
+        {accounts.length === 0 && (
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1 italic">
+            No cloud accounts configured. Add one in System Settings → Cloud Accounts.
+          </p>
+        )}
+      </div>
+
+      {/* Environments */}
       <div className="flex items-center justify-between mb-4">
         <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide">
           Environments

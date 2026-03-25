@@ -9,10 +9,12 @@ import {
   X,
   ChevronDown,
   ChevronRight,
+  Plus,
+  Cloud,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
-import type { SystemSetting, UpsertSettingRequest } from '@/types/api'
+import type { SystemSetting, UpsertSettingRequest, CloudAccount, CloudAccountType } from '@/types/api'
 
 // ── Setting catalog ────────────────────────────────────────────────────────────
 
@@ -297,14 +299,16 @@ interface TabDef {
   id: string
   label: string
   groupIds: string[]
+  custom?: boolean
 }
 
 const TABS: TabDef[] = [
-  { id: 'ai-models',     label: 'AI & Models',    groupIds: ['ai', 'voyage'] },
-  { id: 'source-ctrl',  label: 'Source Control', groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'notifications'] },
-  { id: 'agent',        label: 'Agent',          groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
-  { id: 'security',     label: 'Security',       groupIds: ['security'] },
+  { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
+  { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'notifications'] },
+  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
+  { id: 'security',        label: 'Security',         groupIds: ['security'] },
 ]
 
 const GROUP_BY_ID = new Map(SETTING_GROUPS.map((g) => [g.id, g]))
@@ -735,6 +739,410 @@ function ToastList({ toasts }: { toasts: ToastMsg[] }) {
   )
 }
 
+// ── Cloud Accounts ─────────────────────────────────────────────────────────────
+
+const CLOUD_ACCOUNT_TYPES: CloudAccountType[] = ['AWS', 'AZURE', 'GOOGLE', 'OTHER']
+
+const TYPE_LABELS: Record<CloudAccountType, string> = {
+  AWS: 'AWS',
+  AZURE: 'Azure',
+  GOOGLE: 'Google Cloud',
+  OTHER: 'Other',
+}
+
+const TYPE_BADGE_COLORS: Record<CloudAccountType, string> = {
+  AWS: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
+  AZURE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  GOOGLE: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  OTHER: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
+}
+
+interface CredentialFieldDef {
+  key: string
+  label: string
+  placeholder?: string
+  isSecret: boolean
+  multiline?: boolean
+}
+
+const CREDENTIAL_FIELDS: Record<CloudAccountType, CredentialFieldDef[]> = {
+  AWS: [
+    { key: 'awsKeyId',  label: 'Access Key ID',     placeholder: 'AKIAIOSFODNN7EXAMPLE', isSecret: false },
+    { key: 'awsSecret', label: 'Secret Access Key',  placeholder: '••••••••',              isSecret: true },
+  ],
+  AZURE: [
+    { key: 'tenantId',       label: 'Tenant ID',        placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', isSecret: false },
+    { key: 'subscriptionId', label: 'Subscription ID',  placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', isSecret: false },
+    { key: 'clientId',       label: 'Client ID',        placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx', isSecret: false },
+    { key: 'clientSecret',   label: 'Client Secret',    placeholder: '••••••••',                              isSecret: true },
+  ],
+  GOOGLE: [
+    { key: 'serviceAccountJson', label: 'Service Account JSON', placeholder: '{ "type": "service_account", ... }', isSecret: true, multiline: true },
+  ],
+  OTHER: [
+    { key: 'credential', label: 'Credential', placeholder: 'Provider-specific credential value', isSecret: true },
+  ],
+}
+
+const MASKED = '****'
+
+function isMasked(v?: string) {
+  return v === MASKED
+}
+
+interface CloudAccountModalProps {
+  initial?: CloudAccount
+  onSave: (id: string, body: CloudAccount) => void
+  onClose: () => void
+  isSaving: boolean
+}
+
+function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountModalProps) {
+  const isEdit = !!initial
+  const [id, setId] = useState(initial?.id ?? '')
+  const [name, setName] = useState(initial?.name ?? '')
+  const [description, setDescription] = useState(initial?.description ?? '')
+  const [type, setType] = useState<CloudAccountType>(initial?.type ?? 'AWS')
+  const [creds, setCreds] = useState<Record<string, string>>(initial?.credentials ?? {})
+  const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({})
+
+  const fields = CREDENTIAL_FIELDS[type]
+
+  function updateCred(key: string, value: string) {
+    setCreds((prev) => ({ ...prev, [key]: value }))
+  }
+
+  function toggleShow(key: string) {
+    setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
+  function handleTypeChange(t: CloudAccountType) {
+    setType(t)
+    setCreds({})
+    setShowSecrets({})
+  }
+
+  function handleSubmit() {
+    if (!id.trim() || !name.trim()) return
+    // Strip out masked values so the server knows not to update them
+    const cleanCreds: Record<string, string> = {}
+    Object.entries(creds).forEach(([k, v]) => {
+      if (!isMasked(v)) cleanCreds[k] = v
+    })
+    onSave(id.trim(), {
+      id: id.trim(),
+      name: name.trim(),
+      description: description.trim() || undefined,
+      type,
+      credentials: Object.keys(cleanCreds).length > 0 ? cleanCreds : undefined,
+    })
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-2xl flex flex-col max-h-[90vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)] shrink-0">
+          <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] flex items-center gap-2">
+            <Cloud size={15} />
+            {isEdit ? `Edit — ${initial.name}` : 'Add Cloud Account'}
+          </h2>
+          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
+          {/* ID */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
+              ID *
+            </label>
+            <input
+              className={inputCls}
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              disabled={isEdit}
+              placeholder="e.g. my-aws-prod"
+              autoFocus={!isEdit}
+            />
+            {!isEdit && (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                Unique slug — cannot be changed after creation.
+              </p>
+            )}
+          </div>
+
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
+              Name *
+            </label>
+            <input
+              className={inputCls}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Engie AWS Production"
+              autoFocus={isEdit}
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
+              Description
+            </label>
+            <input
+              className={inputCls}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional description"
+            />
+          </div>
+
+          {/* Type */}
+          <div>
+            <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
+              Type *
+            </label>
+            <select
+              className={selectCls}
+              value={type}
+              onChange={(e) => handleTypeChange(e.target.value as CloudAccountType)}
+            >
+              {CLOUD_ACCOUNT_TYPES.map((t) => (
+                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Provider-specific credentials */}
+          <div>
+            <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide mb-3">
+              Credentials
+            </p>
+            <div className="space-y-3">
+              {fields.map((f) => {
+                const val = creds[f.key] ?? ''
+                const show = !!showSecrets[f.key]
+                const masked = isMasked(val)
+                return (
+                  <div key={f.key}>
+                    <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
+                      {f.label}
+                      {f.isSecret && (
+                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                          encrypted
+                        </span>
+                      )}
+                    </label>
+                    {f.multiline ? (
+                      <textarea
+                        className={textareaCls}
+                        value={masked ? '' : val}
+                        onChange={(e) => updateCred(f.key, e.target.value)}
+                        placeholder={masked ? '(stored — enter new value to replace)' : f.placeholder}
+                        rows={4}
+                      />
+                    ) : (
+                      <div className="relative">
+                        <input
+                          type={f.isSecret && !show ? 'password' : 'text'}
+                          className={`${inputCls} ${f.isSecret ? 'pr-8' : ''}`}
+                          value={masked ? '' : val}
+                          onChange={(e) => updateCred(f.key, e.target.value)}
+                          placeholder={masked ? '(stored — enter new value to replace)' : f.placeholder}
+                        />
+                        {f.isSecret && (
+                          <button
+                            type="button"
+                            onClick={() => toggleShow(f.key)}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+                          >
+                            {show ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {masked && (
+                      <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+                        Value stored. Leave blank to keep unchanged.
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+            onClick={handleSubmit}
+            disabled={!id.trim() || !name.trim() || isSaving}
+          >
+            {isSaving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CloudAccountsSection() {
+  const qc = useQueryClient()
+  const [addOpen, setAddOpen] = useState(false)
+  const [editAccount, setEditAccount] = useState<CloudAccount | null>(null)
+  const [toasts, setToasts] = useState<ToastMsg[]>([])
+
+  function addToast(text: string, type: 'success' | 'error') {
+    const id = ++toastId
+    setToasts((prev) => [...prev, { id, text, type }])
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+  }
+
+  const { data: accounts, isLoading } = useQuery<CloudAccount[]>({
+    queryKey: ['cloud-accounts'],
+    queryFn: () => api.get('/cloud-accounts').then((r) => r.data).catch(() => []),
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: CloudAccount }) =>
+      api.put(`/cloud-accounts/${id}`, body),
+    onSuccess: (_data, { id }) => {
+      qc.invalidateQueries({ queryKey: ['cloud-accounts'] })
+      addToast(`Cloud account "${id}" saved.`, 'success')
+      setAddOpen(false)
+      setEditAccount(null)
+    },
+    onError: (_err, { id }) => addToast(`Failed to save "${id}".`, 'error'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/cloud-accounts/${id}`),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ['cloud-accounts'] })
+      addToast(`Cloud account "${id}" deleted.`, 'success')
+    },
+    onError: (_data, id) => addToast(`Failed to delete "${id}".`, 'error'),
+  })
+
+  const list = Array.isArray(accounts) ? accounts : []
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs text-[var(--color-fonts-font-color-support)]">
+          Named cloud provider credentials used by the agent when accessing customer environments.
+          Secrets are stored encrypted and never returned in plaintext.
+        </p>
+        <button
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity shrink-0 ml-4"
+          onClick={() => setAddOpen(true)}
+        >
+          <Plus size={13} /> Add Account
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-3">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-14 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+          ))}
+        </div>
+      )}
+
+      {!isLoading && list.length === 0 && (
+        <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] px-4 py-12 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+          No cloud accounts configured. Add one to get started.
+        </div>
+      )}
+
+      {!isLoading && list.length > 0 && (
+        <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] overflow-hidden">
+          {list.map((account, idx) => {
+            const credCount = account.credentials ? Object.keys(account.credentials).length : 0
+            return (
+              <div
+                key={account.id}
+                className={`flex items-center gap-3 px-4 py-3 ${
+                  idx < list.length - 1 ? 'border-b border-[var(--color-cards-card-stroke)]' : ''
+                }`}
+              >
+                <Cloud size={16} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-[var(--color-fonts-font-color-headings)]">
+                      {account.name}
+                    </span>
+                    <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                      {account.id}
+                    </code>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BADGE_COLORS[account.type]}`}>
+                      {TYPE_LABELS[account.type]}
+                    </span>
+                    {credCount > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+                        {credCount} credential{credCount !== 1 ? 's' : ''} stored
+                      </span>
+                    )}
+                  </div>
+                  {account.description && (
+                    <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+                      {account.description}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    title="Edit"
+                    onClick={() => setEditAccount(account)}
+                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <button
+                    title="Delete"
+                    onClick={() => deleteMutation.mutate(account.id)}
+                    disabled={deleteMutation.isPending}
+                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {(addOpen || editAccount) && (
+        <CloudAccountModal
+          initial={editAccount ?? undefined}
+          onSave={(id, body) => saveMutation.mutate({ id, body })}
+          onClose={() => { setAddOpen(false); setEditAccount(null) }}
+          isSaving={saveMutation.isPending}
+        />
+      )}
+
+      <ToastList toasts={toasts} />
+    </div>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
 
 export default function SystemSettingsPage() {
@@ -896,14 +1304,20 @@ export default function SystemSettingsPage() {
               </div>
 
               {/* Tab content */}
-              {tabGroups.map((group, idx) => (
-                <SettingSection
-                  key={group.id}
-                  group={group}
-                  defaultOpen={idx === 0}
-                  {...sectionProps}
-                />
-              ))}
+              {currentTab.custom ? (
+                currentTab.id === 'cloud-accounts' ? (
+                  <CloudAccountsSection />
+                ) : null
+              ) : (
+                tabGroups.map((group, idx) => (
+                  <SettingSection
+                    key={group.id}
+                    group={group}
+                    defaultOpen={idx === 0}
+                    {...sectionProps}
+                  />
+                ))
+              )}
             </>
           )}
         </>
