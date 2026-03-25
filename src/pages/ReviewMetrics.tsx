@@ -1,7 +1,7 @@
 import { useQuery, useQueries, useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowUpCircle, Loader2, X } from 'lucide-react'
+import { ArrowUpCircle, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
@@ -58,7 +58,7 @@ export default function ReviewMetricsPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
-              {['Workspace', 'Repo', 'Archetype', 'Version', 'Total Reviews', 'Avg Score', 'Last Review', ''].map((h) => (
+              {['Workspace', 'Repo', 'Archetype', 'Version', 'Findings', 'Resolution Rate', 'FP Rate', ''].map((h) => (
                 <th
                   key={h}
                   className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
@@ -106,15 +106,13 @@ export default function ReviewMetricsPage() {
                       />
                     </td>
                     <td className="px-4 py-3">
-                      {row.metrics?.totalReviews ?? '—'}
+                      {row.metrics?.totalFindings ?? '—'}
                     </td>
                     <td className="px-4 py-3">
-                      <ScoreBadge score={row.metrics?.avgScore} />
+                      <RateBadge rate={row.metrics?.resolutionRate} good={0.7} warn={0.4} />
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
-                      {row.metrics?.lastReviewAt
-                        ? new Date(row.metrics.lastReviewAt).toLocaleDateString()
-                        : '—'}
+                    <td className="px-4 py-3">
+                      <RateBadge rate={row.metrics?.fpRate} good={0.1} warn={0.25} invert />
                     </td>
                     <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">
                       View
@@ -132,19 +130,30 @@ export default function ReviewMetricsPage() {
   )
 }
 
-function ScoreBadge({ score }: { score?: number }) {
-  if (score === undefined || score === null) {
+function RateBadge({
+  rate,
+  good,
+  warn,
+  invert = false,
+}: {
+  rate?: number
+  good: number
+  warn: number
+  invert?: boolean
+}) {
+  if (rate === undefined || rate === null) {
     return <span className="text-[var(--color-fonts-font-color-support)]">—</span>
   }
-  const color =
-    score >= 0.8
-      ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
-      : score >= 0.5
-      ? 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'
-      : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+  const isGood = invert ? rate <= good : rate >= good
+  const isWarn = invert ? rate <= warn : rate >= warn
+  const color = isGood
+    ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+    : isWarn
+    ? 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'
+    : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-[var(--border-radius-tag)] ${color}`}>
-      {score.toFixed(2)}
+      {(rate * 100).toFixed(1)}%
     </span>
   )
 }
@@ -232,18 +241,27 @@ function MetricsDialog({
         {/* Body */}
         <div className="p-5 space-y-4">
           {metrics ? (
-            <div className="grid grid-cols-3 gap-3">
-              <MetricCard label="Total Reviews" value={metrics.totalReviews} />
-              <MetricCard label="Avg Score" value={metrics.avgScore?.toFixed(2) ?? '—'} />
-              <MetricCard
-                label="Last Review"
-                value={
-                  metrics.lastReviewAt
-                    ? new Date(metrics.lastReviewAt).toLocaleDateString()
-                    : '—'
-                }
-              />
-            </div>
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <MetricCard label="Total Findings" value={metrics.totalFindings} />
+                <MetricCard label="Resolved" value={metrics.resolvedByDeveloper} />
+                <MetricCard
+                  label="Resolution Rate"
+                  value={<RateBadge rate={metrics.resolutionRate} good={0.7} warn={0.4} />}
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <MetricCard label="False Positives" value={metrics.falsePositives} />
+                <MetricCard
+                  label="FP Rate"
+                  value={<RateBadge rate={metrics.fpRate} good={0.1} warn={0.25} invert />}
+                />
+                <MetricCard label="Auto-Suppressed" value={metrics.autoSuppressedPatterns} />
+              </div>
+              {Object.keys(metrics.fpByCategory ?? {}).length > 0 && (
+                <FpByCategorySection fpByCategory={metrics.fpByCategory} />
+              )}
+            </>
           ) : (
             <p className="py-6 text-center text-sm text-[var(--color-fonts-font-color-support)]">
               No review metrics available yet.
@@ -273,6 +291,32 @@ function MetricsDialog({
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+function FpByCategorySection({ fpByCategory }: { fpByCategory: Record<string, number> }) {
+  const [expanded, setExpanded] = useState(false)
+  const entries = Object.entries(fpByCategory).sort((a, b) => b[1] - a[1])
+  return (
+    <div className="border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-small)] overflow-hidden">
+      <button
+        className="w-full flex items-center justify-between px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] bg-[var(--color-cards-small-section-background)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span>False Positives by Category</span>
+        {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+      </button>
+      {expanded && (
+        <ul className="divide-y divide-[var(--color-tables-table-cell-stroke)]">
+          {entries.map(([cat, count]) => (
+            <li key={cat} className="flex items-center justify-between px-4 py-2 text-sm">
+              <span className="text-[var(--color-fonts-font-color-primary)]">{cat}</span>
+              <span className="font-semibold text-[var(--color-fonts-font-color-headings)]">{count}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

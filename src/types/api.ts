@@ -284,9 +284,13 @@ export interface AiCallRecord {
 export interface ReviewMetrics {
   workspace: string
   repoSlug: string
-  totalReviews: number
-  avgScore: number
-  lastReviewAt?: string
+  totalFindings: number
+  resolvedByDeveloper: number
+  resolutionRate: number
+  falsePositives: number
+  fpRate: number
+  fpByCategory: Record<string, number>
+  autoSuppressedPatterns: number
 }
 
 // ---- Upgrades ----
