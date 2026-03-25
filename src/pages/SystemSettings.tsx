@@ -139,6 +139,8 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'jira.agent.assignee', label: 'Agent Assignee ID', description: 'Jira account ID to assign agent-worked tickets to' },
       { key: 'jira.agent.label', label: 'Agent Trigger Label', description: 'Jira label that triggers the agent', defaultValue: 'WALL-E' },
       { key: 'jira.agent.default-repo-url', label: 'Default Repo URL', description: 'Fallback repository URL when not specified in the ticket' },
+      { key: 'jira.billing-category-field', label: 'Billing Category Field ID', description: 'Jira custom field ID for billing category on created issues. Leave blank to omit.' },
+      { key: 'jira.billing-code-field', label: 'Billing Code Field ID', description: 'Jira custom field ID for billing code on created issues. Leave blank to omit.' },
     ],
   },
   {
@@ -148,6 +150,13 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'confluence.base.url', label: 'Base URL', description: 'Confluence Cloud or Server API base URL' },
       { key: 'confluence.user', label: 'Username', description: 'Confluence username or email address' },
       { key: 'confluence.api.token', label: 'API Token', description: 'Confluence API token (personal access token)', isSecret: true },
+    ],
+  },
+  {
+    id: 'mcp',
+    label: 'MCP / Linked Accounts',
+    settings: [
+      { key: 'mcp.system-credential-fallback.enabled', label: 'System Credential Fallback', description: 'Allow MCP tools to fall back to system-level credentials when no linked account is found for the current user', defaultValue: 'false', inputType: 'boolean' },
     ],
   },
   {
@@ -194,6 +203,11 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'run-fix.max-loop-iterations', label: 'Max Loop Iterations', description: 'Maximum agent loop cycles before the job is aborted', defaultValue: '150', inputType: 'number', min: 1 },
       { key: 'run-fix.job-timeout-minutes', label: 'Job Timeout (minutes)', description: 'Total wall-clock timeout per fix job', defaultValue: '30', inputType: 'number', min: 1 },
       { key: 'run-fix.max-build-retries', label: 'Max Build Retries', description: 'Number of times to retry a failing build before giving up', defaultValue: '2', inputType: 'number', min: 0 },
+      { key: 'metrics.job-timeout-minutes', label: 'Metrics Job Timeout (minutes)', description: 'Total wall-clock timeout for a standalone metrics collection job', defaultValue: '30', inputType: 'number', min: 1 },
+      { key: 'generate-tests.max-loop-iterations', label: 'Generate Tests: Max Iterations', description: 'Maximum agent loop cycles for a test-generation job', defaultValue: '500', inputType: 'number', min: 1 },
+      { key: 'generate-tests.job-timeout-minutes', label: 'Generate Tests: Timeout (minutes)', description: 'Total wall-clock timeout for a test-generation job', defaultValue: '60', inputType: 'number', min: 1 },
+      { key: 'generate-docs.max-loop-iterations', label: 'Generate Docs: Max Iterations', description: 'Maximum agent loop cycles for a documentation-generation job', defaultValue: '200', inputType: 'number', min: 1 },
+      { key: 'build.java-home', label: 'Java Home', description: 'Path to the JDK installation used for building, linting (PMD/SpotBugs), and validation. Leave blank to use the JVM that runs the agent.' },
       { key: 'run-fix.self-review.enabled', label: 'Self-Review', description: 'Agent self-reviews its own changes before submitting', defaultValue: 'true', inputType: 'boolean' },
       { key: 'run-fix.self-review.max-iterations', label: 'Self-Review Max Iterations', description: 'Maximum self-review loop cycles', defaultValue: '15', inputType: 'number', min: 1 },
       { key: 'run-fix.self-review.max-diff-chars', label: 'Self-Review Max Diff Chars', description: 'Maximum diff size sent to self-review (characters)', defaultValue: '30000', inputType: 'number', min: 1000, step: 1000 },
@@ -250,6 +264,8 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'rules.repo.url', label: 'Rules Repository URL', description: 'Git URL of a repository containing custom review rules. Leave blank to use only built-in rules.' },
       { key: 'review.pr-summary.enabled', label: 'PR Summary', description: 'Post a CodeRabbit-style PR summary before the review', defaultValue: 'true', inputType: 'boolean' },
       { key: 'review.sequence-diagrams.enabled', label: 'Sequence Diagrams in Summary', description: 'Include Mermaid sequence diagrams in PR summaries', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'pr.summary.diagram.upload.enabled', label: 'Upload Rendered Diagrams', description: 'Render Mermaid diagrams to PNG and upload them to the SCM platform rather than posting raw Mermaid source', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'review.fp.auto-suppress-threshold', label: 'False-Positive Auto-Suppress Threshold', description: 'Number of times the same finding must be dismissed before it is auto-suppressed for future reviews', defaultValue: '3', inputType: 'number', min: 1 },
       { key: 'metrics.cc-threshold', label: 'CC Threshold', description: 'Cyclomatic complexity threshold for flagging methods', defaultValue: '10', inputType: 'number', min: 1 },
       { key: 'metrics.max-iterations', label: 'Metrics Fix Iterations', description: 'Number of FIX → METRICS improvement cycles', defaultValue: '3', inputType: 'number', min: 1 },
       { key: 'metrics.max-methods-per-fix', label: 'Max Methods per Fix', description: 'High-CC methods to address per FIX step', defaultValue: '10', inputType: 'number', min: 1 },
@@ -286,7 +302,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',     label: 'AI & Models',    groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',  label: 'Source Control', groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'knowledge', 'notifications'] },
+  { id: 'integrations', label: 'Integrations',   groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'notifications'] },
   { id: 'agent',        label: 'Agent',          groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'security',     label: 'Security',       groupIds: ['security'] },
 ]
