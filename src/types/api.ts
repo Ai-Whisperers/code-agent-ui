@@ -105,6 +105,8 @@ export interface AutomationHook {
   cronExpr?: string
   actionType?: string
   prompt?: string
+  jobName?: string
+  newBranchName?: string
   ruleNames?: string[]
   extraRules?: string
   targetBranch?: string

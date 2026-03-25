@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { GitBranch, ChevronDown, X, Search, Check } from 'lucide-react'
 import { getToken } from '@/lib/keycloak'
 import type { RepoOption } from '@/types/api'
@@ -20,6 +21,7 @@ export function RepositorySelect({
   const [loading, setLoading] = useState(true)
   const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -41,6 +43,35 @@ export function RepositorySelect({
     }
     if (isOpen) document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [isOpen])
+
+  // Recompute dropdown position whenever it opens or the window resizes/scrolls
+  useEffect(() => {
+    if (!isOpen || !containerRef.current) return
+    const update = () => {
+      const rect = containerRef.current!.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const dropHeight = Math.min(224, Math.max(spaceBelow, spaceAbove) - 8)
+      const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        width: rect.width,
+        maxHeight: dropHeight,
+        zIndex: 9999,
+        ...(openAbove
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+      })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
   }, [isOpen])
 
   const filtered = options.filter((o) =>
@@ -96,9 +127,12 @@ export function RepositorySelect({
         />
       </div>
 
-      {isOpen && (
-        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-small)] shadow-lg max-h-56 flex flex-col">
-          <div className="p-2 border-b border-[var(--color-cards-card-stroke)]">
+      {isOpen && createPortal(
+        <div
+          style={dropdownStyle}
+          className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-small)] shadow-lg flex flex-col overflow-hidden"
+        >
+          <div className="p-2 border-b border-[var(--color-cards-card-stroke)] shrink-0">
             <div className="flex items-center gap-2 px-2 py-1.5 rounded border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)]">
               <Search size={13} className="text-[var(--color-icons-icon)] shrink-0" />
               <input
@@ -111,7 +145,7 @@ export function RepositorySelect({
               />
             </div>
           </div>
-          <div className="overflow-y-auto">
+          <div className="overflow-y-auto flex-1">
             {loading ? (
               <div className="px-3 py-4 text-sm text-center text-[var(--color-fonts-font-color-support)]">
                 Loading...
@@ -143,7 +177,8 @@ export function RepositorySelect({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )
