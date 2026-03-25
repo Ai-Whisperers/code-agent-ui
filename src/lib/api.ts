@@ -19,6 +19,13 @@ api.interceptors.request.use(async (config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+
+  // Let the browser set Content-Type (including the multipart boundary) for FormData requests.
+  // The default 'application/json' header would otherwise override it and break multipart uploads.
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
+  }
+
   return config
 })
 

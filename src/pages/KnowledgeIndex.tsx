@@ -736,6 +736,8 @@ function StaticFilesSection({
     mutationFn: ({ file, displayName }: { file: File; displayName: string }) => {
       const fd = new FormData()
       fd.append('file', file)
+      fd.append('filename', file.name)
+      fd.append('contentType', file.type || 'application/octet-stream')
       if (displayName.trim()) fd.append('name', displayName.trim())
       return api.post('/knowledge/static-files', fd)
     },

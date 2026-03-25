@@ -9,18 +9,21 @@ const keycloak = new Keycloak({
 
 let _initPromise: Promise<boolean> | null = null
 
+const idpHint = import.meta.env.VITE_KEYCLOAK_IDP_HINT as string | undefined
+
 export async function initKeycloak(): Promise<boolean> {
   if (_initPromise) return _initPromise
   _initPromise = keycloak.init({
     onLoad: 'login-required',
     checkLoginIframe: false,
     scope: 'openid email profile',
+    ...(idpHint ? { idpHint } : {}),
   })
   return _initPromise
 }
 
 export async function login(): Promise<void> {
-  return keycloak.login()
+  return keycloak.login(idpHint ? { idpHint } : undefined)
 }
 
 export async function logout(): Promise<void> {
