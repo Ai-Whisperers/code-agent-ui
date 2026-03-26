@@ -56,6 +56,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'anthropic.api.key', label: 'API Key', description: 'Anthropic Claude API key', isSecret: true },
       { key: 'anthropic.model', label: 'Primary Model', description: 'Main Claude model for code agent tasks', defaultValue: 'claude-sonnet-4-20250514', inputType: 'select', options: CLAUDE_MODELS },
       { key: 'anthropic.fast-model', label: 'Fast Model', description: 'Cheaper model used for simple decisions', defaultValue: 'claude-3-5-haiku-20241022', inputType: 'select', options: CLAUDE_MODELS },
+      { key: 'anthropic.summary-model', label: 'Summary Model', description: 'Model used for PR summary generation. Defaults to Fast Model if not set.', inputType: 'select', options: CLAUDE_MODELS },
       { key: 'anthropic.max-tokens', label: 'Max Output Tokens', description: 'Maximum tokens per model response', defaultValue: '8192', inputType: 'number', min: 256 },
       { key: 'anthropic.rate-limit.tokens-per-minute', label: 'Tokens per Minute', description: 'TPM budget (Tier 1=40k, Tier 2=80k, Tier 3=160k, Tier 4=400k)', defaultValue: '80000', inputType: 'number', min: 1000, step: 1000 },
       { key: 'anthropic.rate-limit.safety-margin', label: 'Rate Limit Safety Margin', description: 'Fraction of TPM budget before throttling (0–1)', defaultValue: '0.80', inputType: 'number', min: 0.1, max: 1.0, step: 0.05 },
