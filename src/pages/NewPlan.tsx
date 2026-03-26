@@ -3,6 +3,9 @@ import { useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Send } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { TableCard } from '@/components/ui/TableCard'
+import { Input } from '@/components/ui/Input'
 import { RepoCombobox } from '@/components/plan/RepoCombobox'
 import { JiraCombobox } from '@/components/plan/JiraCombobox'
 import api from '@/lib/api'
@@ -58,29 +61,33 @@ export default function NewPlan() {
 
   return (
     <main>
-      <div className="mb-4">
-        <button
-          onClick={() => navigate({ to: '/plans' })}
-          className="flex items-center gap-1.5 text-sm text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-        >
-          <ArrowLeft size={15} />
-          Back to Plans
-        </button>
-      </div>
+      <PageHeader
+        title="New Plan"
+        subtitle="Create a new execution plan."
+        actions={
+          <Button
+            variant="ghost"
+            size="md"
+            icon={<ArrowLeft size={15} />}
+            onClick={() => navigate({ to: '/plans' })}
+          >
+            Back to Plans
+          </Button>
+        }
+      />
 
-      <PageHeader title="New Plan" subtitle="Create a new execution plan." />
-
-      <div className="max-w-xl bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <TableCard title="Plan Configuration" maxHeight="none" className="max-w-xl mx-auto">
         {/* Source tabs */}
-        <div className="flex gap-1 mb-5 p-1 bg-[var(--color-filters-segmented-control-background)] rounded-lg">
+        <div className="flex border-b border-[var(--color-borders-border-primary)]">
           {(['custom', 'jira', 'quality'] as PlanSource[]).map((s) => (
             <button
               key={s}
+              type="button"
               onClick={() => setSource(s)}
-              className={`flex-1 py-1.5 text-xs font-medium rounded-md transition-colors capitalize ${
+              className={`px-4 py-2 text-xs font-medium transition-colors border-b-2 -mb-px ${
                 source === s
-                  ? 'bg-[var(--color-filters-segmented-control-active)] text-[var(--color-fonts-font-color-buttons)] shadow-sm'
-                  : 'text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
+                  ? 'text-[var(--color-buttons-button-primary)] border-[var(--color-buttons-button-primary)]'
+                  : 'text-[var(--color-fonts-font-color-support)] border-transparent hover:text-[var(--color-fonts-font-color-primary)]'
               }`}
             >
               {s === 'jira' ? 'From JIRA' : s === 'quality' ? 'Quality Plan' : 'Custom'}
@@ -94,7 +101,7 @@ export default function NewPlan() {
             setError(null)
             mutation.mutate()
           }}
-          className="space-y-4"
+          className="space-y-4 p-5 pt-4"
         >
           {source === 'jira' ? (
             <JiraCombobox value={form.jiraKey} onChange={set('jiraKey')} required />
@@ -123,16 +130,17 @@ export default function NewPlan() {
             <p className="text-sm text-[var(--color-status-border-critical)]">{error}</p>
           )}
 
-          <button
+          <Button
             type="submit"
-            disabled={mutation.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-[var(--border-radius-button)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-60 transition-colors"
+            variant="primary"
+            size="lg"
+            icon={<Send size={15} />}
+            loading={mutation.isPending}
           >
-            <Send size={15} />
             {mutation.isPending ? 'Creating…' : 'Create Plan'}
-          </button>
+          </Button>
         </form>
-      </div>
+      </TableCard>
     </main>
   )
 }
@@ -197,12 +205,12 @@ function InputField({
         {label}
         {required && <span className="text-[var(--color-status-border-critical)] ml-1">*</span>}
       </label>
-      <input
+      <Input
         type="text"
         value={value}
         onChange={onChange}
         required={required}
-        className={inputClass()}
+        className="w-full px-3 py-2 text-sm"
       />
     </div>
   )

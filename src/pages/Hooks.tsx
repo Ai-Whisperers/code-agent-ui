@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
 import type { AutomationHook } from '@/types/api'
 import { CATEGORIES, getCategories } from '@/components/hooks/hookConstants'
@@ -82,13 +83,14 @@ export default function HooksPage() {
         subtitle="Configure event-driven automation triggers."
         actions={
           <div className="relative">
-            <button
+            <Button
+              size="md"
+              variant="primary"
+              icon={<Plus size={13} />}
               onClick={() => setShowTypeMenu(v => !v)}
-              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
             >
-              <Plus size={15} />
               New Hook
-            </button>
+            </Button>
             {showTypeMenu && (
               <HookTypeMenu
                 onSelect={openNewHook}

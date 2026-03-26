@@ -3,6 +3,8 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
+import { Button } from '@/components/ui/Button'
+import { TableCard } from '@/components/ui/TableCard'
 import api from '@/lib/api'
 import type { JobStatusResponse } from '@/types/api'
 
@@ -35,39 +37,41 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
   return (
     <main>
-      <div className="mb-4">
-        <button
-          onClick={() => navigate({ to: '/jobs' })}
-          className="flex items-center gap-1.5 text-sm text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-        >
-          <ArrowLeft size={15} />
-          Back to Jobs
-        </button>
-      </div>
-
       <PageHeader
         title={isLoading ? 'Loading…' : `Job: ${job?.jobType ?? jobId}`}
         actions={
-          job?.status === 'AWAITING_APPROVAL' ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => approveMutation.mutate()}
-                disabled={approveMutation.isPending}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-status-border-success)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                <CheckCircle size={15} />
-                Approve & Merge
-              </button>
-              <button
-                onClick={() => rejectMutation.mutate()}
-                disabled={rejectMutation.isPending}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm font-medium hover:opacity-90 transition-opacity"
-              >
-                <XCircle size={15} />
-                Reject
-              </button>
-            </div>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {job?.status === 'AWAITING_APPROVAL' && (
+              <>
+                <Button
+                  variant="primary"
+                  size="lg"
+                  icon={<CheckCircle size={15} />}
+                  loading={approveMutation.isPending}
+                  onClick={() => approveMutation.mutate()}
+                >
+                  Approve & Merge
+                </Button>
+                <Button
+                  variant="danger"
+                  size="lg"
+                  icon={<XCircle size={15} />}
+                  loading={rejectMutation.isPending}
+                  onClick={() => rejectMutation.mutate()}
+                >
+                  Reject
+                </Button>
+              </>
+            )}
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<ArrowLeft size={15} />}
+              onClick={() => navigate({ to: '/jobs' })}
+            >
+              Back to Jobs
+            </Button>
+          </div>
         }
       />
 
@@ -80,8 +84,8 @@ export default function JobDetail({ jobId }: JobDetailProps) {
       ) : job ? (
         <div className="space-y-4">
           {/* Status card */}
-          <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <TableCard title="Details" maxHeight="none">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-5">
               <Detail label="Status" value={<JobStatusBadge status={job.status} />} />
               <Detail label="Type" value={job.jobType} />
               <Detail label="Created" value={new Date(job.createdAt).toLocaleString()} />
@@ -95,7 +99,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 <Detail label="Lines Changed" value={job.linesChanged} />
               )}
             </div>
-          </div>
+          </TableCard>
 
           {/* PR link */}
           {job.prUrl && (
@@ -114,12 +118,11 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
           {/* Summary */}
           {job.summary && (
-            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5">
-              <h3 className="mb-2">Summary</h3>
-              <p className="text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap">
+            <TableCard title="Summary" maxHeight="none">
+              <p className="text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap p-5">
                 {job.summary}
               </p>
-            </div>
+            </TableCard>
           )}
 
           {/* Error */}

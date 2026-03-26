@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowUpCircle, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TableCard } from '@/components/ui/TableCard'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -54,14 +55,17 @@ export default function ReviewMetricsPage() {
     <main>
       <PageHeader title="Review Metrics" subtitle="AI code review quality metrics per repository." />
 
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
+      <TableCard
+        title="Repositories"
+        subtitle={`${rows.length} repo${rows.length !== 1 ? 's' : ''}`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {['Workspace', 'Repo', 'Archetype', 'Version', 'Findings', 'Resolution Rate', 'FP Rate', ''].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                  className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
                   {h}
                 </th>
@@ -72,8 +76,8 @@ export default function ReviewMetricsPage() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={8} className="px-4 py-3">
-                      <div className="h-5 skeleton-shimmer rounded" />
+                    <td colSpan={8} className="px-4 py-2">
+                      <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
                 ))
@@ -85,43 +89,41 @@ export default function ReviewMetricsPage() {
                   </td>
                 </tr>
               )
-              : rows.map((row, i) => (
+              : rows.map((row) => (
                   <tr
                     key={`${row.repo.workspace}/${row.repo.repoSlug}`}
-                    className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-                      i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                    }`}
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
                     onClick={() => setSelected(row)}
                   >
-                    <td className="px-4 py-3 font-medium">{row.repo.workspace}</td>
-                    <td className="px-4 py-3">{row.repo.repoSlug}</td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                    <td className="px-4 py-1.5 font-medium">{row.repo.workspace}</td>
+                    <td className="px-4 py-1.5">{row.repo.repoSlug}</td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {row.repo.archetype ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <VersionBadge
                         version={row.repo.archetypeVersion}
                         archetype={row.repo.archetype}
                         latestVersions={latestVersions}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       {row.metrics?.totalFindings ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <RateBadge rate={row.metrics?.resolutionRate} good={0.7} warn={0.4} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <RateBadge rate={row.metrics?.fpRate} good={0.1} warn={0.25} invert />
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-brand)]">
                       View
                     </td>
                   </tr>
                 ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {selected && (
         <MetricsDialog row={selected} latestVersions={latestVersions} onClose={() => setSelected(null)} />

@@ -10,7 +10,7 @@ interface PageHeaderProps {
 export function PageHeader({ title, subtitle, actions, statusMessage }: PageHeaderProps) {
   return (
     <div className="mb-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-[var(--color-fonts-font-color-headings)]">{title}</h1>
           {subtitle && (

@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { TableCard } from '@/components/ui/TableCard'
 import api from '@/lib/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -125,33 +127,31 @@ function DetailViewer({ detail }: { detail?: string | null }) {
   )
 }
 
-function AuditRow({ entry, isOdd }: { entry: AuditEntry; isOdd: boolean }) {
+function AuditRow({ entry }: { entry: AuditEntry }) {
   const [expanded, setExpanded] = useState(false)
 
   return (
     <>
       <tr
-        className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-          isOdd ? '' : 'bg-[var(--color-tables-table-row-a)]'
-        }`}
+        className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
-        <td className="px-3 py-2.5 text-[var(--color-fonts-font-color-support)]">
+        <td className="px-3 py-1.5 text-[var(--color-fonts-font-color-support)]">
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </td>
-        <td className="px-3 py-2.5 text-xs text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
+        <td className="px-3 py-1.5 text-xs text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
           {formatDate(entry.occurredAt)}
         </td>
-        <td className="px-3 py-2.5 text-xs font-medium text-[var(--color-fonts-font-color-primary)]">
+        <td className="px-3 py-1.5 text-xs font-medium text-[var(--color-fonts-font-color-primary)]">
           {entry.actor}
         </td>
-        <td className="px-3 py-2.5">
+        <td className="px-3 py-1.5">
           <CategoryBadge category={entry.category} />
         </td>
-        <td className="px-3 py-2.5">
+        <td className="px-3 py-1.5">
           <ActionBadge action={entry.action} />
         </td>
-        <td className="px-3 py-2.5 text-xs text-[var(--color-fonts-font-color-primary)] font-mono">
+        <td className="px-3 py-1.5 text-xs text-[var(--color-fonts-font-color-primary)] font-mono">
           {entry.resourceId ?? (entry.resourceType ?? '—')}
         </td>
       </tr>
@@ -203,14 +203,15 @@ export default function AuditLogPage() {
         title="Audit Log"
         subtitle="Record of administrative and operational actions performed within the application."
         actions={
-          <button
+          <Button
+            size="md"
+            variant="secondary"
+            icon={<RefreshCw size={13} className={isFetching ? 'animate-spin' : ''} />}
             onClick={() => refetch()}
             disabled={isFetching}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-sm font-medium hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-60 transition-colors"
           >
-            <RefreshCw size={14} className={isFetching ? 'animate-spin' : ''} />
             Refresh
-          </button>
+          </Button>
         }
       />
 
@@ -250,58 +251,54 @@ export default function AuditLogPage() {
             className={`${selectClass} w-40`}
           />
         </div>
-        {(filtered.length !== entries.length) && (
-          <span className="text-xs text-[var(--color-fonts-font-color-support)]">
-            Showing {filtered.length} of {entries.length}
-          </span>
-        )}
       </div>
 
       {/* Table */}
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
-                {['', 'Timestamp', 'Actor', 'Category', 'Action', 'Resource'].map((h) => (
-                  <th
-                    key={h}
-                    className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap"
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading
-                ? Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                      <td colSpan={6} className="px-3 py-3">
-                        <div className="h-4 skeleton-shimmer rounded" />
-                      </td>
-                    </tr>
-                  ))
-                : filtered.length === 0
-                ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-12 text-center text-[var(--color-fonts-font-color-support)]"
-                    >
-                      {entries.length === 0
-                        ? 'No audit events recorded yet.'
-                        : 'No entries match the current filters.'}
+      <TableCard
+        title="Audit Log"
+        subtitle={isLoading ? '…' : `${filtered.length}${filtered.length !== entries.length ? ` of ${entries.length}` : ''} event${filtered.length !== 1 ? 's' : ''}`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
+              {['', 'Timestamp', 'Actor', 'Category', 'Action', 'Resource'].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading
+              ? Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
+                    <td colSpan={6} className="px-3 py-2">
+                      <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
-                )
-                : filtered.map((entry, i) => (
-                    <AuditRow key={entry.id} entry={entry} isOdd={i % 2 !== 0} />
-                  ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                ))
+              : filtered.length === 0
+              ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-12 text-center text-[var(--color-fonts-font-color-support)]"
+                  >
+                    {entries.length === 0
+                      ? 'No audit events recorded yet.'
+                      : 'No entries match the current filters.'}
+                  </td>
+                </tr>
+              )
+              : filtered.map((entry) => (
+                  <AuditRow key={entry.id} entry={entry} />
+                ))}
+          </tbody>
+        </table>
+      </TableCard>
     </main>
   )
 }

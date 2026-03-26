@@ -32,39 +32,41 @@ export function CustomerContextDialog({ isOpen, onClose, onSelect }: CustomerCon
     <div
       onClick={onToggle}
       className={`
-        p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-sm
-        ${isSelected 
-          ? 'border-blue-500 bg-blue-50' 
-          : 'border-gray-200 hover:border-gray-300'
+        p-3 rounded-[var(--border-radius-card)] border-2 cursor-pointer transition-colors
+        ${isSelected
+          ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-tags-success-background)]'
+          : 'border-[var(--color-cards-card-stroke)] hover:border-[var(--color-inputs-input-border)] hover:bg-[var(--color-navigation-menu-item-hover-background)]'
         }
       `}
     >
       <div className="flex items-start gap-3">
         <div className={`
-          p-2 rounded-lg flex-shrink-0
-          ${isSelected ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}
+          p-1.5 rounded-[var(--border-radius-small)] flex-shrink-0
+          ${isSelected
+            ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+            : 'bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]'}
         `}>
-          <Building2 size={20} />
+          <Building2 size={18} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <h4 className="font-medium text-gray-900 truncate">{customer.name}</h4>
-            <span className="text-xs px-2 py-1 bg-gray-100 text-gray-600 rounded">
+          <div className="flex items-center gap-2 mb-0.5">
+            <h4 className="text-sm font-medium text-[var(--color-fonts-font-color-headings)] truncate">{customer.name}</h4>
+            <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
               {customer.customerId}
             </span>
           </div>
           {customer.metadataSummary && (
-            <div className="flex items-center gap-1 text-sm text-gray-600">
-              <Hash size={14} />
+            <div className="flex items-center gap-1 text-xs text-[var(--color-fonts-font-color-support)]">
+              <Hash size={12} />
               <span className="truncate">{customer.metadataSummary}</span>
             </div>
           )}
         </div>
         {isSelected && (
           <div className="flex-shrink-0">
-            <div className="w-5 h-5 bg-blue-600 text-white rounded-full flex items-center justify-center">
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
-                <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+            <div className="w-4 h-4 bg-[var(--color-buttons-button-primary)] text-white rounded-full flex items-center justify-center">
+              <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
+                <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </div>
           </div>

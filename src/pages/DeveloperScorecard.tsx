@@ -1,6 +1,7 @@
 import { useQuery, useQueries } from '@tanstack/react-query'
 import { useState } from 'react'
 import { User, X } from 'lucide-react'
+import { TableCard } from '@/components/ui/TableCard'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -215,14 +216,17 @@ export default function DeveloperScorecardPage() {
       )}
 
       {/* Table */}
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
+      <TableCard
+        title="Developers"
+        subtitle={`${allRows.length} developer${allRows.length !== 1 ? 's' : ''}`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {['Developer', 'Workspace', 'Repo', 'PRs Reviewed', 'Findings', 'Resolved', 'Resolution Rate', 'Last PR', ''].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                  className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
                   {h}
                 </th>
@@ -233,8 +237,8 @@ export default function DeveloperScorecardPage() {
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={9} className="px-4 py-3">
-                      <div className="h-5 skeleton-shimmer rounded" />
+                    <td colSpan={9} className="px-4 py-2">
+                      <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
                 ))
@@ -246,37 +250,35 @@ export default function DeveloperScorecardPage() {
                   </td>
                 </tr>
               )
-              : allRows.map(({ repo, entry }, i) => (
+              : allRows.map(({ repo, entry }) => (
                   <tr
                     key={`${repo.workspace}/${repo.repoSlug}/${entry.author}`}
-                    className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-                      i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                    }`}
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
                     onClick={() => setSelected({ repo, entry, periodDays: days })}
                   >
-                    <td className="px-4 py-3 font-medium">
+                    <td className="px-4 py-1.5 font-medium">
                       <span className="flex items-center gap-2">
-                        <User size={14} className="text-[var(--color-fonts-font-color-support)]" />
+                        <User size={13} className="text-[var(--color-fonts-font-color-support)]" />
                         {entry.author}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">{repo.workspace}</td>
-                    <td className="px-4 py-3">{repo.repoSlug}</td>
-                    <td className="px-4 py-3">{entry.totalPrs}</td>
-                    <td className="px-4 py-3">{entry.totalFindings}</td>
-                    <td className="px-4 py-3">{entry.resolvedFindings}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">{repo.workspace}</td>
+                    <td className="px-4 py-1.5">{repo.repoSlug}</td>
+                    <td className="px-4 py-1.5">{entry.totalPrs}</td>
+                    <td className="px-4 py-1.5">{entry.totalFindings}</td>
+                    <td className="px-4 py-1.5">{entry.resolvedFindings}</td>
+                    <td className="px-4 py-1.5">
                       <ResolutionBadge rate={entry.resolutionRate} />
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {entry.lastPrAt ? new Date(entry.lastPrAt).toLocaleDateString() : '—'}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">View</td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-brand)]">View</td>
                   </tr>
                 ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {selected && (
         <DevDetailDialog

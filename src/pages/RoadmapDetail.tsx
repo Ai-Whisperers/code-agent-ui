@@ -1081,7 +1081,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
         }
       >
           <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10">
+            <thead className="sticky top-[33px] z-10">
               <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
                 <th
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"

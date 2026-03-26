@@ -6,6 +6,8 @@ import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
 import api from '@/lib/api'
 import type { AiCallSummary, AiCallSummaryByJobType, JobTypeSummary } from '@/types/api'
+import { Button } from '@/components/ui/Button'
+import { TableCard } from '@/components/ui/TableCard'
 
 function StatCard({
   label,
@@ -138,43 +140,38 @@ export default function Dashboard() {
       )}
 
       {/* Quick actions */}
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <h3 className="mb-4">Quick Actions</h3>
-        <div className="flex flex-wrap gap-3">
-          {[
-            { label: 'New Fix Job', to: '/jobs/new', variant: 'primary' },
-            { label: 'View Jobs', to: '/jobs', variant: 'secondary' },
-            { label: 'View Plans', to: '/plans', variant: 'secondary' },
-            { label: 'Quality Reports', to: '/metrics/quality', variant: 'secondary' },
-          ].map(({ label, to, variant }) => (
-            <button
-              key={to}
-              onClick={() => navigate({ to })}
-              className={`px-4 py-2 rounded-[var(--border-radius-button-small)] text-sm font-medium transition-colors ${
-                variant === 'primary'
-                  ? 'bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)]'
-                  : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
-              }`}
-            >
+      <TableCard title="Quick Actions">
+        <div className="flex flex-wrap gap-3 p-4">
+          {(
+            [
+              { label: 'New Fix Job', to: '/jobs/new', variant: 'primary' },
+              { label: 'View Jobs', to: '/jobs', variant: 'secondary' },
+              { label: 'View Plans', to: '/plans', variant: 'secondary' },
+              { label: 'Quality Reports', to: '/metrics/quality', variant: 'secondary' },
+            ] as const
+          ).map(({ label, to, variant }) => (
+            <Button key={to} variant={variant} size="lg" onClick={() => navigate({ to })}>
               {label}
-            </button>
+            </Button>
           ))}
         </div>
-      </div>
+      </TableCard>
 
       {/* Recent jobs */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3>Recent Jobs</h3>
-          <button
-            className="text-sm text-[var(--color-fonts-font-color-brand)] hover:underline"
-            onClick={() => navigate({ to: '/jobs' })}
-          >
+      <TableCard
+        className="mt-6"
+        title="Recent Jobs"
+        maxHeight="none"
+        toolbar={
+          <Button variant="ghost" size="sm" onClick={() => navigate({ to: '/jobs' })}>
             View all
-          </button>
+          </Button>
+        }
+      >
+        <div className="p-3">
+          <RecentJobsList />
         </div>
-        <RecentJobsList />
-      </div>
+      </TableCard>
     </main>
   )
 }

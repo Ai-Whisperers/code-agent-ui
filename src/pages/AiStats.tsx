@@ -10,6 +10,7 @@ import {
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TableCard } from '@/components/ui/TableCard'
 import api from '@/lib/api'
 import type { AiCallSummary, AiCallDailyStat, AiCallRecord } from '@/types/api'
 
@@ -189,14 +190,14 @@ export default function AiStatsPage() {
       {dailyList.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
           <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-            <h3 className="mb-4">Daily Token Usage</h3>
+            <h3 className="text-sm font-semibold mb-4 text-[var(--color-fonts-font-color-headings)]">Daily Token Usage</h3>
             <div style={{ height: 220 }}>
               <Bar data={tokenChartData} options={BAR_OPTIONS} />
             </div>
           </div>
 
           <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-            <h3 className="mb-4">Daily Cost (USD)</h3>
+            <h3 className="text-sm font-semibold mb-4 text-[var(--color-fonts-font-color-headings)]">Daily Cost (USD)</h3>
             <div style={{ height: 220 }}>
               <Bar data={costChartData} options={BAR_OPTIONS} />
             </div>
@@ -205,17 +206,17 @@ export default function AiStatsPage() {
       )}
 
       {/* Records table */}
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <div className="px-5 py-3 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
-          <h3>Recent Calls</h3>
-        </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
+      <TableCard
+        title="Recent Calls"
+        subtitle={`${recordList.length} record${recordList.length !== 1 ? 's' : ''}`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {['Job ID', 'Model', 'Input', 'Output', 'Cost', 'Called At'].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                  className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
                   {h}
                 </th>
@@ -233,21 +234,19 @@ export default function AiStatsPage() {
                 </td>
               </tr>
             ) : (
-              recordList.map((rec, i) => (
+              recordList.map((rec) => (
                 <tr
                   key={rec.id}
-                  className={`border-b border-[var(--color-tables-table-cell-stroke)] ${
-                    i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                  }`}
+                  className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
                 >
-                  <td className="px-4 py-3 font-mono text-xs text-[var(--color-fonts-font-color-support)]">
+                  <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)]">
                     {rec.jobId?.slice(0, 8) ?? '—'}…
                   </td>
-                  <td className="px-4 py-3 text-xs">{rec.model}</td>
-                  <td className="px-4 py-3">{rec.inputTokens.toLocaleString()}</td>
-                  <td className="px-4 py-3">{rec.outputTokens.toLocaleString()}</td>
-                  <td className="px-4 py-3">${rec.costUsd.toFixed(4)}</td>
-                  <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                  <td className="px-4 py-1.5">{rec.model}</td>
+                  <td className="px-4 py-1.5">{rec.inputTokens.toLocaleString()}</td>
+                  <td className="px-4 py-1.5">{rec.outputTokens.toLocaleString()}</td>
+                  <td className="px-4 py-1.5">${rec.costUsd.toFixed(4)}</td>
+                  <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                     {new Date(rec.calledAt).toLocaleString()}
                   </td>
                 </tr>
@@ -255,7 +254,7 @@ export default function AiStatsPage() {
             )}
           </tbody>
         </table>
-      </div>
+      </TableCard>
     </main>
   )
 }

@@ -13,6 +13,7 @@ import {
   Cloud,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
 import type { SystemSetting, UpsertSettingRequest, CloudAccount, CloudAccountType } from '@/types/api'
 
@@ -1083,12 +1084,15 @@ function CloudAccountsSection() {
           Named cloud provider credentials used by the agent when accessing customer environments.
           Secrets are stored encrypted and never returned in plaintext.
         </p>
-        <button
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity shrink-0 ml-4"
+        <Button
+          size="md"
+          variant="primary"
+          icon={<Plus size={13} />}
+          className="shrink-0 ml-4"
           onClick={() => setAddOpen(true)}
         >
-          <Plus size={13} /> Add Account
-        </button>
+          Add Account
+        </Button>
       </div>
 
       {isLoading && (

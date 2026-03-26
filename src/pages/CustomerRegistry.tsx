@@ -12,6 +12,7 @@ import {
   Link2,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
 import type {
   CustomerConfig,
@@ -838,9 +839,9 @@ function EnvironmentsTab({
         <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide">
           Environments
         </p>
-        <button type="button" onClick={addEnvironment} className={btnSecondary}>
-          <Plus size={13} /> Add Environment
-        </button>
+        <Button size="md" variant="secondary" icon={<Plus size={13} />} type="button" onClick={addEnvironment}>
+          Add Environment
+        </Button>
       </div>
 
       {environments.length === 0 && (
@@ -1333,9 +1334,9 @@ function CustomersTab({
           placeholder="Search customers…"
           className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
         />
-        <button className={btnPrimary + ' ml-auto'} onClick={() => setAddOpen(true)}>
-          <Plus size={14} /> Add Customer
-        </button>
+        <Button size="md" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
+          Add Customer
+        </Button>
       </div>
 
       {isLoading && (
@@ -1444,9 +1445,9 @@ function ProductsTab() {
           placeholder="Search products…"
           className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
         />
-        <button className={btnPrimary + ' ml-auto'} onClick={() => setAddOpen(true)}>
-          <Plus size={14} /> Add Product
-        </button>
+        <Button size="md" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
+          Add Product
+        </Button>
       </div>
 
       {isLoading && (

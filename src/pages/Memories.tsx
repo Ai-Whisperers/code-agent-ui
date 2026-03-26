@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Trash2, ToggleLeft, ToggleRight, X, Brain } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TableCard } from '@/components/ui/TableCard'
 import api from '@/lib/api'
 import type { MemoryEntry } from '@/types/api'
 
@@ -209,39 +210,42 @@ export default function MemoriesPage() {
         </div>
 
         <span className="ml-auto text-xs text-[var(--color-fonts-font-color-support)]">
-          {isLoading ? '…' : `${filtered.length} of ${list.length} entries`}
+          {!isLoading && list.length > 0 && `${filtered.length} of ${list.length}`}
         </span>
       </div>
 
       {/* Table */}
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-cards-card-stroke)]">
-              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
+      <TableCard
+        title="Memories"
+        subtitle={isLoading ? '…' : `${filtered.length} of ${list.length} entries`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
+              <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
                 Workspace
               </th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
+              <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
                 Repository
               </th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
+              <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
                 Content
               </th>
-              <th className="text-left px-4 py-3 text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-40">
+              <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-40">
                 Created
               </th>
-              <th className="text-center px-4 py-3 text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-24">
+              <th className="text-center px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-24">
                 Status
               </th>
-              <th className="px-4 py-3 w-20" />
+              <th className="px-4 py-2 w-20" />
             </tr>
           </thead>
           <tbody>
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
-                  <tr key={i} className="border-b border-[var(--color-cards-card-stroke)] last:border-0">
+                  <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)] last:border-0">
                     {Array.from({ length: 6 }).map((__, j) => (
-                      <td key={j} className="px-4 py-3">
+                      <td key={j} className="px-4 py-2">
                         <div className="h-4 skeleton-shimmer rounded" />
                       </td>
                     ))}
@@ -252,7 +256,7 @@ export default function MemoriesPage() {
                   <tr>
                     <td
                       colSpan={6}
-                      className="px-4 py-12 text-center text-sm text-[var(--color-fonts-font-color-support)]"
+                      className="px-4 py-12 text-center text-[var(--color-fonts-font-color-support)]"
                     >
                       {list.length === 0 ? 'No memory entries yet.' : 'No entries match the current filters.'}
                     </td>
@@ -261,22 +265,22 @@ export default function MemoriesPage() {
               : filtered.map((entry) => (
                   <tr
                     key={entry.id}
-                    className="border-b border-[var(--color-cards-card-stroke)] last:border-0 bg-[var(--color-tables-table-row-a)] hover:bg-[var(--color-tables-table-row-hover)] transition-colors cursor-pointer"
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] last:border-0 hover:bg-[var(--color-tables-table-hover)] transition-colors cursor-pointer"
                     onClick={() => setSelected(entry)}
                   >
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-primary)] font-medium">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-primary)] font-medium">
                       {entry.workspace}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-primary)]">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-primary)]">
                       {entry.repoSlug}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)] max-w-xs">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)] max-w-xs">
                       <span className="line-clamp-2">{entry.content}</span>
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
                       {formatDate(entry.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <button
                         title={entry.active ? 'Deactivate' : 'Activate'}
                         onClick={() => toggleMutation.mutate(entry)}
@@ -296,7 +300,7 @@ export default function MemoriesPage() {
                         )}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-4 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                       <button
                         title="Delete memory"
                         onClick={() => setPendingDelete(entry)}
@@ -309,7 +313,7 @@ export default function MemoriesPage() {
                 ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {selected && (
         <MemoryDetailModal entry={selected} onClose={() => setSelected(null)} />

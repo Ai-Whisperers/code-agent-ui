@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { Plus, Archive } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
 import { PlanCard } from '@/components/plans/PlanCard'
 import api from '@/lib/api'
 import type { ExecutionPlan } from '@/types/api'
@@ -60,24 +61,23 @@ export default function PlansPage() {
         subtitle="Create and manage multi-step execution plans."
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <Button
+              variant="secondary"
+              size="md"
+              icon={<Archive size={13} />}
               onClick={toggleArchived}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] text-xs font-medium transition-colors ${
-                showArchived
-                  ? 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'
-                  : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
-              }`}
+              className={showArchived ? '!bg-[var(--color-tags-attention-background)] !text-[var(--color-tags-font-attention)] hover:!bg-[var(--color-tags-attention-background)]' : ''}
             >
-              <Archive size={13} />
               {showArchived ? 'Hide Archived' : 'Show Archived'}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
+              size="lg"
+              icon={<Plus size={15} />}
               onClick={() => navigate({ to: '/plans/new' })}
-              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
             >
-              <Plus size={15} />
               New Plan
-            </button>
+            </Button>
           </div>
         }
       />

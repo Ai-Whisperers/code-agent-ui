@@ -189,12 +189,12 @@ function StatsSection({
           No index stats available. Run indexing to populate the knowledge base.
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
-              <th className="px-4 py-2 text-left font-medium">Source Type</th>
-              <th className="px-4 py-2 text-right font-medium">Documents</th>
-              <th className="px-4 py-2 text-right font-medium">Last Indexed</th>
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Source Type</th>
+              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Documents</th>
+              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Last Indexed</th>
             </tr>
           </thead>
           <tbody>
@@ -203,13 +203,13 @@ function StatsSection({
                 key={entry.sourceType}
                 className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
               >
-                <td className="px-4 py-3">
+                <td className="px-4 py-1.5">
                   <SourceTypeBadge type={entry.sourceType} />
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
                   {entry.count.toLocaleString()}
                 </td>
-                <td className="px-4 py-3 text-right text-xs text-[var(--color-fonts-font-color-support)]">
+                <td className="px-4 py-1.5 text-right text-[var(--color-fonts-font-color-support)]">
                   {entry.lastIndexed
                     ? new Date(entry.lastIndexed).toLocaleString()
                     : '—'}
@@ -536,16 +536,16 @@ function WebDocSourcesSection({
           No web documentation sources registered. Add one to get started.
         </div>
       ) : (
-        <table className="w-full text-sm">
+        <table className="w-full text-xs">
           {sources.length > 0 && (
             <>
-              <thead>
-                <tr className="text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
-                  <th className="px-4 py-2 text-left font-medium">Name</th>
-                  <th className="px-4 py-2 text-left font-medium">Base URL</th>
-                  <th className="px-4 py-2 text-left font-medium">Last Crawled</th>
-                  <th className="px-4 py-2 text-right font-medium">Chunks</th>
-                  <th className="px-4 py-2 text-right font-medium">Actions</th>
+              <thead className="sticky top-[33px] z-10">
+                <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Base URL</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Last Crawled</th>
+                  <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
+                  <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -554,7 +554,7 @@ function WebDocSourcesSection({
                     key={source.id}
                     className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <div className="flex items-center gap-2">
                         {source.lastCrawlError ? (
                           <span title={source.lastCrawlError}>
@@ -574,25 +574,25 @@ function WebDocSourcesSection({
                         </span>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <a
                         href={source.baseUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs font-mono text-[var(--color-buttons-button-primary)] hover:underline truncate max-w-48 block"
+                        className="font-mono text-[var(--color-buttons-button-primary)] hover:underline truncate max-w-48 block"
                       >
                         {source.baseUrl}
                       </a>
                     </td>
-                    <td className="px-4 py-3 text-xs text-[var(--color-fonts-font-color-support)]">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {source.lastCrawledAt
                         ? new Date(source.lastCrawledAt).toLocaleString()
                         : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                    <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
                       {source.lastCrawlChunks != null ? source.lastCrawlChunks.toLocaleString() : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-1.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => crawlMutation.mutate(source.id)}
@@ -866,15 +866,15 @@ function StaticFilesSection({
           No files uploaded yet. Upload a file above to get started.
         </div>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
-              <th className="px-4 py-2 text-left font-medium">Name</th>
-              <th className="px-4 py-2 text-left font-medium">File</th>
-              <th className="px-4 py-2 text-left font-medium">Indexed</th>
-              <th className="px-4 py-2 text-right font-medium">Size</th>
-              <th className="px-4 py-2 text-right font-medium">Chunks</th>
-              <th className="px-4 py-2 text-right font-medium">Actions</th>
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
+              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">File</th>
+              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Indexed</th>
+              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Size</th>
+              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
+              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -883,7 +883,7 @@ function StaticFilesSection({
                 key={f.id}
                 className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
               >
-                <td className="px-4 py-3">
+                <td className="px-4 py-1.5">
                   <div className="flex items-center gap-2">
                     {f.indexError ? (
                       <span title={f.indexError}>
@@ -908,19 +908,19 @@ function StaticFilesSection({
                     </span>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-xs font-mono text-[var(--color-fonts-font-color-support)] truncate max-w-40">
+                <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)] truncate max-w-40">
                   {f.originalFilename}
                 </td>
-                <td className="px-4 py-3 text-xs text-[var(--color-fonts-font-color-support)]">
+                <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                   {f.indexedAt ? new Date(f.indexedAt).toLocaleString() : '—'}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
                   {formatFileSize(f.fileSize)}
                 </td>
-                <td className="px-4 py-3 text-right font-mono text-xs text-[var(--color-fonts-font-color-primary)]">
+                <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
                   {f.chunkCount != null ? f.chunkCount.toLocaleString() : '—'}
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-1.5 text-right">
                   <div className="flex items-center justify-end gap-1">
                     <button
                       onClick={() => reindexMutation.mutate(f.id)}

@@ -1,8 +1,11 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, Check } from 'lucide-react'
 import api from '@/lib/api'
 import type { RepoSettings } from '@/types/api'
+
+const BITBUCKET_BASE_URL = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
 
 interface Props {
   value: string
@@ -12,8 +15,7 @@ interface Props {
 }
 
 function buildRepoUrl(repo: RepoSettings): string {
-  const base = repo.gitPlatformUrl?.replace(/\/$/, '') ?? ''
-  if (!base) return ''
+  const base = (repo.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')
   return `${base}/${repo.workspace}/${repo.repoSlug}.git`
 }
 
@@ -21,6 +23,7 @@ export function RepoCombobox({ value, onChange, required, filterQualityEnabled }
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
   const { data: repos = [] } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -43,22 +46,52 @@ export function RepoCombobox({ value, onChange, required, filterQualityEnabled }
 
   const selectedLabel = (() => {
     const match = active.find((r) => buildRepoUrl(r) === value)
-    return match ? `${match.workspace} / ${match.repoSlug}` : value
+    return match ? `${match.workspace} / ${match.repoSlug}` : ''
   })()
 
+  // Close on outside click
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false)
+        setQuery('')
       }
     }
     document.addEventListener('mousedown', handleOutside)
     return () => document.removeEventListener('mousedown', handleOutside)
   }, [])
 
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(false); setQuery('') } }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  // Compute fixed dropdown position (escapes overflow-hidden containers)
+  useEffect(() => {
+    if (!open || !containerRef.current) return
+    const update = () => {
+      const rect = containerRef.current!.getBoundingClientRect()
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        top: rect.bottom + 4,
+        width: rect.width,
+        zIndex: 9999,
+      })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open])
+
   function select(repo: RepoSettings) {
-    const url = buildRepoUrl(repo)
-    onChange(url)
+    onChange(buildRepoUrl(repo))
     setQuery('')
     setOpen(false)
   }
@@ -70,61 +103,66 @@ export function RepoCombobox({ value, onChange, required, filterQualityEnabled }
         {required && <span className="text-[var(--color-status-border-critical)] ml-1">*</span>}
       </label>
       <div ref={containerRef} className="relative">
+        {/* Trigger */}
         <div
-          className="flex items-center w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus-within:border-[var(--color-buttons-button-primary)] cursor-text"
           onClick={() => setOpen(true)}
+          className={`flex items-center gap-1.5 w-full px-3 py-2 text-sm rounded border transition-all cursor-text ${
+            open
+              ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-cards-card-background)]'
+              : 'bg-[var(--color-cards-card-background)] border-[var(--color-cards-card-stroke)] hover:border-[var(--color-buttons-button-primary)]'
+          }`}
         >
           <input
             type="text"
-            className="flex-1 bg-transparent outline-none min-w-0"
-            placeholder="Search repositories…"
+            className="flex-1 bg-transparent outline-none min-w-0 text-sm text-[var(--color-fonts-font-color-user-input)] placeholder:text-[var(--color-fonts-font-color-support)]"
+            placeholder={selectedLabel || 'Search repositories…'}
             value={open ? query : selectedLabel}
             required={required && !value}
-            onChange={(e) => {
-              setQuery(e.target.value)
-              setOpen(true)
-            }}
+            onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
             onFocus={() => setOpen(true)}
           />
           <ChevronDown
-            size={14}
-            className="shrink-0 text-[var(--color-fonts-font-color-support)] ml-1"
+            size={13}
+            className={`shrink-0 text-[var(--color-icons-icon)] transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
           />
         </div>
 
-        {open && (
-          <ul className="absolute z-50 mt-1 w-full max-h-56 overflow-y-auto rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-cards-card-background)] shadow-lg">
+        {/* Dropdown via portal — escapes overflow-hidden card container */}
+        {open && createPortal(
+          <ul
+            style={dropdownStyle}
+            className="max-h-56 overflow-y-auto rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg py-0.5"
+          >
             {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-xs text-[var(--color-fonts-font-color-support)]">
+              <li className="px-3 py-1.5 text-sm text-[var(--color-fonts-font-color-support)]">
                 No repositories found
               </li>
             ) : (
               filtered.map((repo) => {
                 const url = buildRepoUrl(repo)
-                const isSelected = url === value
+                const isSelected = value ? url === value : false
                 return (
                   <li
                     key={`${repo.workspace}/${repo.repoSlug}`}
-                    className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-[var(--color-navigation-menu-item-hover-background)] ${
-                      isSelected ? 'text-[var(--color-fonts-font-color-brand)]' : 'text-[var(--color-fonts-font-color-primary)]'
+                    className={`flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer transition-colors hover:bg-[var(--color-tables-table-hover)] ${
+                      isSelected
+                        ? 'text-[var(--color-fonts-font-color-primary)] font-medium'
+                        : 'text-[var(--color-fonts-font-color-support)]'
                     }`}
-                    onMouseDown={(e) => {
-                      e.preventDefault()
-                      select(repo)
-                    }}
+                    onMouseDown={(e) => { e.preventDefault(); select(repo) }}
                   >
-                    {isSelected && <Check size={12} className="shrink-0" />}
-                    {!isSelected && <span className="w-3 shrink-0" />}
-                    <span>
-                      <span className="font-medium">{repo.workspace}</span>
-                      <span className="text-[var(--color-fonts-font-color-support)]"> / </span>
+                    <Check size={11} className={`shrink-0 ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+                    <span className="whitespace-nowrap">
+                      {repo.workspace}
+                      <span className="opacity-40"> / </span>
                       {repo.repoSlug}
                     </span>
                   </li>
                 )
               })
             )}
-          </ul>
+          </ul>,
+          document.body,
         )}
       </div>
     </div>

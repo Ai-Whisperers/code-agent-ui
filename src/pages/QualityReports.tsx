@@ -15,6 +15,7 @@ import {
 import { Line } from 'react-chartjs-2'
 import { ArrowUpCircle, BarChart2, Loader2, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { TableCard } from '@/components/ui/TableCard'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -97,14 +98,17 @@ export default function QualityReportsPage() {
         subtitle="Code quality metrics per repository."
       />
 
-      <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
+      <TableCard
+        title="Repositories"
+        subtitle={`${rows.length} repo${rows.length !== 1 ? 's' : ''}`}
+      >
+        <table className="w-full text-xs">
+          <thead className="sticky top-[33px] z-10">
+            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {['Workspace', 'Repo', 'Archetype', 'Version', 'Score', 'Linter Errors', 'Security Issues', 'Avg Complexity', 'Last Measured', ''].map((h) => (
                 <th
                   key={h}
-                  className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                  className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
                   {h}
                 </th>
@@ -115,8 +119,8 @@ export default function QualityReportsPage() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={10} className="px-4 py-3">
-                      <div className="h-5 skeleton-shimmer rounded" />
+                    <td colSpan={10} className="px-4 py-2">
+                      <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
                 ))
@@ -128,52 +132,50 @@ export default function QualityReportsPage() {
                   </td>
                 </tr>
               )
-              : rows.map((row, i) => (
+              : rows.map((row) => (
                   <tr
                     key={`${row.repo.workspace}/${row.repo.repoSlug}`}
-                    className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
-                      i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                    }`}
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
                     onClick={() => setSelected(row)}
                   >
-                    <td className="px-4 py-3 font-medium">{row.repo.workspace}</td>
-                    <td className="px-4 py-3">{row.repo.repoSlug}</td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                    <td className="px-4 py-1.5 font-medium">{row.repo.workspace}</td>
+                    <td className="px-4 py-1.5">{row.repo.repoSlug}</td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {row.repo.archetype ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <VersionBadge
                         version={row.repo.archetypeVersion}
                         archetype={row.repo.archetype}
                         latestVersions={latestVersions}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <ScoreBadge score={row.report?.score} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <LinterErrorsBadge count={row.report?.linter?.errorCount} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <SecurityBadge
                         issueCount={row.report?.aikido?.totalIssues ?? row.report?.aikido?.issueCount}
                         criticalCount={row.report?.aikido?.criticalCount}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-1.5">
                       <ComplexityBadge value={row.report?.complexity?.avgComplexity} />
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-support)]">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {row.report ? new Date(row.report.measuredAt).toLocaleString() : '—'}
                     </td>
-                    <td className="px-4 py-3 text-[var(--color-fonts-font-color-brand)] text-xs">
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-brand)]">
                       View
                     </td>
                   </tr>
                 ))}
           </tbody>
         </table>
-      </div>
+      </TableCard>
 
       {selected && (
         <ReportDialog
