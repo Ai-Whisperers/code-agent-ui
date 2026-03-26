@@ -684,4 +684,54 @@ export interface RoadmapTreeItem {
   isStale?: boolean
   overrideStatus?: ItemOverrideStatus
   overrideUpdatedBy?: string
+  assignee?: string
+  reporter?: string
+  sprintName?: string
+  sprintStart?: string
+  sprintEnd?: string
+}
+
+export interface RoadmapSprintItem {
+  issueKey: string
+  issueType: 'FEATURE' | 'USERSTORY'
+  summary: string
+  parentKey?: string
+  grandparentKey?: string
+  jiraStatus?: string
+  assignee?: string
+  sprintStart?: string
+  sprintEnd?: string
+}
+
+export interface RoadmapSprintGroup {
+  sprintName: string
+  sprintStart?: string
+  sprintEnd?: string
+  items: RoadmapSprintItem[]
+}
+
+export type RoadmapSprintView = RoadmapSprintGroup[]
+
+/** Minimal shape returned by GET /roadmap/{id}/products */
+export interface RoadmapLinkedProduct {
+  productId: string
+  displayName: string
+  customerId?: string
+}
+
+export interface RoadmapProposal {
+  id: string
+  roadmapId: string
+  issueKey: string
+  issueType: 'EPIC' | 'FEATURE' | 'USERSTORY'
+  parentKey?: string
+  proposedSummary?: string
+  proposedDescription?: string
+  proposedCriteria?: string
+  proposedTechnical?: string
+  aiExplanation?: string
+  status: 'DRAFT' | 'ACCEPTED' | 'REJECTED'
+  jiraResultKey?: string
+  createdAt: string
+  updatedAt: string
 }

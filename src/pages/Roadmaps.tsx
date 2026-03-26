@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Plus, Trash2, MapPin, Loader2, AlertTriangle, Pencil, X, Check, Settings2 } from 'lucide-react'
+import { Plus, Trash2, MapPin, Loader2, AlertTriangle, Pencil, X, Settings2, Link2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
-import type { Roadmap } from '@/types/api'
+import type { Roadmap, RoadmapLinkedProduct } from '@/types/api'
 
 // A setting entry returned by GET /settings
 interface AgentSetting { key: string; value: string }
@@ -18,7 +20,7 @@ interface RoadmapFormValues {
 }
 
 const INPUT_CLS =
-  'w-full px-3 py-2 text-sm rounded-[var(--border-radius-input)] bg-[var(--color-surface-surface-2)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-2 focus:ring-[var(--color-buttons-button-primary)]'
+  'w-full px-3 py-2 text-sm rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-2 focus:ring-[var(--color-buttons-button-primary)]'
 
 const LABEL_CLS = 'block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1'
 
@@ -62,14 +64,16 @@ function RoadmapFormDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-surface-surface-1)] shadow-xl p-6">
+      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[var(--color-fonts-font-color-headings)] font-semibold">
             {initial?.name ? 'Edit Roadmap' : 'New Roadmap'}
           </h2>
-          <button onClick={onClose} className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]">
-            <X size={18} />
-          </button>
+          <Tooltip text="Close without saving">
+            <button onClick={onClose} className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]">
+              <X size={18} />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="space-y-4">
@@ -84,15 +88,17 @@ function RoadmapFormDialog({
 
           {/* Issue type overrides – collapsed by default */}
           <div>
-            <button
-              type="button"
-              onClick={() => setShowIssueTypes((v) => !v)}
-              className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-            >
-              <Settings2 size={13} />
-              Jira issue types
-              <span className="opacity-60 ml-1">{showIssueTypes ? '▲' : '▼'}</span>
-            </button>
+            <Tooltip text="Override the Jira issue type names used when syncing this roadmap">
+              <button
+                type="button"
+                onClick={() => setShowIssueTypes((v) => !v)}
+                className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+              >
+                <Settings2 size={13} />
+                Jira issue types
+                <span className="opacity-60 ml-1">{showIssueTypes ? '▲' : '▼'}</span>
+              </button>
+            </Tooltip>
 
             {showIssueTypes && (
               <div className="mt-3 space-y-3 pl-2 border-l-2 border-[var(--color-borders-border-primary)]">
@@ -109,23 +115,151 @@ function RoadmapFormDialog({
         </div>
 
         <div className="flex justify-end gap-2 mt-6">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={!valid || isPending}
-            onClick={() => onSubmit({
-              name: name.trim(), label: label.trim(),
-              epicIssuetype: epic.trim(), featureIssuetype: feature.trim(), userstoryIssuetype: story.trim(),
-            })}
-            className="flex items-center gap-2 px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {isPending && <Loader2 size={14} className="animate-spin" />}
-            {initial?.name ? 'Save' : 'Create'}
-          </button>
+          <Tooltip text="Discard changes and close">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
+            >
+              Cancel
+            </button>
+          </Tooltip>
+          <Tooltip text={initial?.name ? 'Save changes to this roadmap' : 'Create roadmap and sync issues from Jira'}>
+            <button
+              disabled={!valid || isPending}
+              onClick={() => onSubmit({
+                name: name.trim(), label: label.trim(),
+                epicIssuetype: epic.trim(), featureIssuetype: feature.trim(), userstoryIssuetype: story.trim(),
+              })}
+              className="flex items-center gap-2 px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {isPending && <Loader2 size={14} className="animate-spin" />}
+              {initial?.name ? 'Save' : 'Create'}
+            </button>
+          </Tooltip>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── ProductLinkerDialog ───────────────────────────────────────────────────────
+
+function ProductLinkerDialog({ roadmap, onClose }: { roadmap: Roadmap; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [search, setSearch] = useState('')
+
+  const { data: linked = [] } = useQuery<RoadmapLinkedProduct[]>({
+    queryKey: ['roadmap-products', roadmap.id],
+    queryFn: () => api.get(`/roadmap/${roadmap.id}/products`).then((r) => r.data),
+  })
+
+  // All available products from the customer registry
+  interface AvailableProduct { productId: string; displayName: string }
+  const { data: allProducts = [] } = useQuery<AvailableProduct[]>({
+    queryKey: ['all-products'],
+    queryFn: () => api.get('/registry/products').then((r) => r.data).catch(() => []),
+    staleTime: 60_000,
+  })
+
+  const linkedIds = new Set(linked.map((p) => p.productId))
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase()
+    return allProducts.filter(
+      (p) => !linkedIds.has(p.productId) && p.displayName.toLowerCase().includes(q),
+    )
+  }, [allProducts, linkedIds, search])
+
+  const linkMutation = useMutation({
+    mutationFn: (productId: string) =>
+      api.put(`/roadmap/${roadmap.id}/products/${encodeURIComponent(productId)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roadmap-products', roadmap.id] }),
+  })
+
+  const unlinkMutation = useMutation({
+    mutationFn: (productId: string) =>
+      api.delete(`/roadmap/${roadmap.id}/products/${encodeURIComponent(productId)}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['roadmap-products', roadmap.id] }),
+  })
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+              Linked Products
+            </h2>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+              {roadmap.name} — AI improvements will use these products' knowledge base & code index.
+            </p>
+          </div>
+          <Tooltip text="Close">
+            <button onClick={onClose} className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]">
+              <X size={16} />
+            </button>
+          </Tooltip>
+        </div>
+
+        {/* Currently linked */}
+        <div className="mb-4">
+          {linked.length === 0 ? (
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] italic">No products linked yet.</p>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {linked.map((p) => (
+                <span
+                  key={p.productId}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded-md bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800"
+                >
+                  {p.displayName}
+                  <Tooltip text={`Unlink ${p.displayName} from this roadmap`}>
+                    <button
+                      onClick={() => unlinkMutation.mutate(p.productId)}
+                      disabled={unlinkMutation.isPending}
+                      className="hover:text-red-500 transition-colors"
+                    >
+                      {unlinkMutation.isPending && unlinkMutation.variables === p.productId
+                        ? <Loader2 size={10} className="animate-spin" />
+                        : <X size={10} />}
+                    </button>
+                  </Tooltip>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Add products */}
+        <div className="border-t border-[var(--color-borders-border-primary)] pt-3">
+          <label className={LABEL_CLS}>Add product</label>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search products…"
+            className={INPUT_CLS + ' mb-2'}
+          />
+          <div className="max-h-40 overflow-y-auto space-y-0.5">
+            {filtered.length === 0 ? (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] px-1">
+                {allProducts.length === 0 ? 'No products configured.' : 'All products already linked.'}
+              </p>
+            ) : (
+              filtered.slice(0, 20).map((p) => (
+                <button
+                  key={p.productId}
+                  onClick={() => linkMutation.mutate(p.productId)}
+                  disabled={linkMutation.isPending && linkMutation.variables === p.productId}
+                  className="w-full flex items-center justify-between px-2 py-1.5 text-xs text-left rounded-md hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+                >
+                  <span className="text-[var(--color-fonts-font-color-primary)]">{p.displayName}</span>
+                  {linkMutation.isPending && linkMutation.variables === p.productId
+                    ? <Loader2 size={11} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
+                    : <Plus size={11} className="text-[var(--color-fonts-font-color-support)]" />}
+                </button>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -138,7 +272,8 @@ export default function RoadmapsPage() {
 
   const [showCreate,    setShowCreate]    = useState(false)
   const [editTarget,    setEditTarget]    = useState<Roadmap | null>(null)
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
+  const [deleteTarget,  setDeleteTarget]  = useState<Roadmap | null>(null)
+  const [linkTarget,    setLinkTarget]    = useState<Roadmap | null>(null)
 
   const { data: roadmaps, isLoading } = useQuery<Roadmap[]>({
     queryKey: ['roadmaps'],
@@ -181,7 +316,7 @@ export default function RoadmapsPage() {
     mutationFn: (id: string) => api.delete(`/roadmap/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['roadmaps'] })
-      setDeleteConfirm(null)
+      setDeleteTarget(null)
     },
   })
 
@@ -193,13 +328,15 @@ export default function RoadmapsPage() {
         title="Roadmap"
         subtitle="Manage product roadmaps linked to Jira labels."
         actions={
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
-          >
-            <Plus size={15} />
-            New Roadmap
-          </button>
+          <Tooltip text="Create a new roadmap linked to a Jira label">
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
+            >
+              <Plus size={15} />
+              New Roadmap
+            </button>
+          </Tooltip>
         }
       />
 
@@ -220,7 +357,7 @@ export default function RoadmapsPage() {
           {list.map((rm) => (
             <div
               key={rm.id}
-              className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--border-radius-card)] bg-[var(--color-surface-surface-1)] border border-[var(--color-borders-border-primary)] hover:border-[var(--color-buttons-button-primary)] transition-colors cursor-pointer group"
+              className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] hover:border-[var(--color-buttons-button-primary)] transition-colors cursor-pointer group"
               onClick={() => navigate({ to: `/metrics/roadmap/${rm.id}` })}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -240,40 +377,31 @@ export default function RoadmapsPage() {
               </div>
 
               <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                <button
-                  title="Edit"
-                  onClick={() => setEditTarget(rm)}
-                  className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-surface-surface-2)] transition-colors opacity-0 group-hover:opacity-100"
-                >
-                  <Pencil size={14} />
-                </button>
-
-                {deleteConfirm === rm.id ? (
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs text-[var(--color-tags-font-critical)] mr-1">Delete?</span>
-                    <button
-                      onClick={() => deleteMutation.mutate(rm.id)}
-                      disabled={deleteMutation.isPending}
-                      className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-tags-font-critical)] hover:bg-[var(--color-tags-critical-background)] transition-colors"
-                    >
-                      {deleteMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                    </button>
-                    <button
-                      onClick={() => setDeleteConfirm(null)}
-                      className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-surface-surface-2)] transition-colors"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : (
+                <Tooltip text="Link products — AI improvements will use the products' knowledge base & code index">
                   <button
-                    title="Delete"
-                    onClick={() => setDeleteConfirm(rm.id)}
+                    onClick={() => setLinkTarget(rm)}
+                    className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Link2 size={14} />
+                  </button>
+                </Tooltip>
+                <Tooltip text="Edit roadmap name, label and issue type mappings">
+                  <button
+                    onClick={() => setEditTarget(rm)}
+                    className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                </Tooltip>
+
+                <Tooltip text="Delete this roadmap and all its synced items">
+                  <button
+                    onClick={() => setDeleteTarget(rm)}
                     className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] hover:bg-[var(--color-tags-critical-background)] transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 size={14} />
                   </button>
-                )}
+                </Tooltip>
               </div>
             </div>
           ))}
@@ -303,6 +431,26 @@ export default function RoadmapsPage() {
           onClose={() => setEditTarget(null)}
           isPending={updateMutation.isPending}
         />
+      )}
+
+      {linkTarget && (
+        <ProductLinkerDialog roadmap={linkTarget} onClose={() => setLinkTarget(null)} />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete roadmap?"
+          variant="danger"
+          icon={<Trash2 size={16} />}
+          confirmLabel="Delete"
+          isPending={deleteMutation.isPending}
+          onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
+          onCancel={() => setDeleteTarget(null)}
+        >
+          <span className="font-medium text-[var(--color-fonts-font-color-primary)]">{deleteTarget.name}</span>
+          {' '}and all its synced items, reviews, and proposals will be permanently deleted.
+          This action cannot be undone.
+        </ConfirmDialog>
       )}
 
       {createMutation.isError && (
