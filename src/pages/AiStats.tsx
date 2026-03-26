@@ -11,6 +11,7 @@ import {
 import { Bar } from 'react-chartjs-2'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 import type { AiCallSummary, AiCallDailyStat, AiCallRecord } from '@/types/api'
 
@@ -213,12 +214,19 @@ export default function AiStatsPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['Job ID', 'Model', 'Input', 'Output', 'Cost', 'Called At'].map((h) => (
+              {([
+                { label: 'Job ID',    tip: 'Agent job that triggered this AI call' },
+                { label: 'Model',     tip: 'AI model used for this call' },
+                { label: 'Input',     tip: 'Number of input tokens consumed' },
+                { label: 'Output',    tip: 'Number of output tokens generated' },
+                { label: 'Cost',      tip: 'Estimated cost in USD' },
+                { label: 'Called At', tip: 'When the AI call was made' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label}
                   className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
-                  {h}
+                  <Tooltip text={tip} position="bottom">{label}</Tooltip>
                 </th>
               ))}
             </tr>

@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 import type { WebhookAuditEntry } from '@/types/api'
 
@@ -248,12 +249,22 @@ export default function WebhookAuditLogPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['', 'Received', 'Platform', 'Event', 'Repository', 'PR', 'Author', 'Action', 'Hooks Executed'].map((h) => (
+              {([
+                { label: '',               tip: '' },
+                { label: 'Received',       tip: 'When the webhook payload was received' },
+                { label: 'Platform',       tip: 'Source platform (e.g. Bitbucket, GitHub)' },
+                { label: 'Event',          tip: 'Webhook event type' },
+                { label: 'Repository',     tip: 'Target repository slug' },
+                { label: 'PR',             tip: 'Associated pull request number' },
+                { label: 'Author',         tip: 'Pull request author' },
+                { label: 'Action',         tip: 'Webhook action (e.g. created, updated, merged)' },
+                { label: 'Hooks Executed', tip: 'Number of automation hooks triggered by this event' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label || 'expand'}
                   className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap"
                 >
-                  {h}
+                  {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
                 </th>
               ))}
             </tr>

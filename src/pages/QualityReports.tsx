@@ -16,6 +16,7 @@ import { Line } from 'react-chartjs-2'
 import { ArrowUpCircle, BarChart2, Loader2, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -105,12 +106,23 @@ export default function QualityReportsPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['Workspace', 'Repo', 'Archetype', 'Version', 'Score', 'Linter Errors', 'Security Issues', 'Avg Complexity', 'Last Measured', ''].map((h) => (
+              {([
+                { label: 'Workspace',        tip: 'Git workspace slug' },
+                { label: 'Repo',             tip: 'Repository slug' },
+                { label: 'Archetype',        tip: 'Repository language / framework archetype' },
+                { label: 'Version',          tip: 'Current primary dependency version' },
+                { label: 'Score',            tip: 'Composite quality score (0–100)' },
+                { label: 'Linter Errors',    tip: 'Total linter violations in the last report' },
+                { label: 'Security Issues',  tip: 'Total security vulnerabilities detected' },
+                { label: 'Avg Complexity',   tip: 'Average cyclomatic complexity per function' },
+                { label: 'Last Measured',    tip: 'When the last quality report was collected' },
+                { label: '',                 tip: '' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label || 'actions'}
                   className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
-                  {h}
+                  {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
                 </th>
               ))}
             </tr>

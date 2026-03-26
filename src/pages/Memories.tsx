@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Trash2, ToggleLeft, ToggleRight, X, Brain } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 import type { MemoryEntry } from '@/types/api'
 
@@ -223,19 +224,19 @@ export default function MemoriesPage() {
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
-                Workspace
+                <Tooltip text="Git workspace slug" position="bottom">Workspace</Tooltip>
               </th>
               <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
-                Repository
+                <Tooltip text="Repository slug" position="bottom">Repository</Tooltip>
               </th>
               <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-                Content
+                <Tooltip text="Agent-generated memory content" position="bottom">Content</Tooltip>
               </th>
               <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-40">
-                Created
+                <Tooltip text="When this memory entry was created" position="bottom">Created</Tooltip>
               </th>
               <th className="text-center px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-24">
-                Status
+                <Tooltip text="Active entries are considered during agent reasoning" position="bottom">Status</Tooltip>
               </th>
               <th className="px-4 py-2 w-20" />
             </tr>

@@ -4,6 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowUpCircle, Loader2, X, ChevronDown, ChevronUp } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -62,12 +63,21 @@ export default function ReviewMetricsPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['Workspace', 'Repo', 'Archetype', 'Version', 'Findings', 'Resolution Rate', 'FP Rate', ''].map((h) => (
+              {([
+                { label: 'Workspace',        tip: 'Git workspace slug' },
+                { label: 'Repo',             tip: 'Repository slug' },
+                { label: 'Archetype',        tip: 'Repository language / framework archetype' },
+                { label: 'Version',          tip: 'Current primary dependency version' },
+                { label: 'Findings',         tip: 'Total code review findings raised' },
+                { label: 'Resolution Rate',  tip: 'Percentage of findings resolved' },
+                { label: 'FP Rate',          tip: 'Proportion of findings marked as false positives' },
+                { label: '',                 tip: '' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label || 'actions'}
                   className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
-                  {h}
+                  {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
                 </th>
               ))}
             </tr>

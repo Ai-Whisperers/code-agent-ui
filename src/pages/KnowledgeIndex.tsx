@@ -190,8 +190,8 @@ function StatsSection({
         </div>
       ) : (
         <table className="w-full text-xs">
-          <thead className="sticky top-[33px] z-10">
-            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+          <thead>
+            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Source Type</th>
               <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Documents</th>
               <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Last Indexed</th>
@@ -539,8 +539,8 @@ function WebDocSourcesSection({
         <table className="w-full text-xs">
           {sources.length > 0 && (
             <>
-              <thead className="sticky top-[33px] z-10">
-                <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+              <thead>
+                <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
                   <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
                   <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Base URL</th>
                   <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Last Crawled</th>
@@ -867,8 +867,8 @@ function StaticFilesSection({
         </div>
       ) : (
         <table className="w-full text-xs">
-          <thead className="sticky top-[33px] z-10">
-            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+          <thead>
+            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">File</th>
               <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Indexed</th>

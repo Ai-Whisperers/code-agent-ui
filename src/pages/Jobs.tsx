@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import type { FilterSelectOption } from '@/components/ui/FilterSelect'
 import api from '@/lib/api'
@@ -68,12 +69,19 @@ export default function Jobs() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['Job ID', 'Type', 'Status', 'Created', 'PR', 'Actions'].map((h) => (
+              {([
+                { label: 'Job ID',  tip: 'Unique agent job identifier' },
+                { label: 'Type',    tip: 'Job type (e.g. review, upgrade, docs)' },
+                { label: 'Status',  tip: 'Current execution status' },
+                { label: 'Created', tip: 'When the job was created' },
+                { label: 'PR',      tip: 'Associated pull request' },
+                { label: 'Actions', tip: 'Available actions for this job' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label}
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
-                  {h}
+                  <Tooltip text={tip} position="bottom">{label}</Tooltip>
                 </th>
               ))}
             </tr>

@@ -2,6 +2,7 @@ import { useQuery, useQueries } from '@tanstack/react-query'
 import { useState } from 'react'
 import { User, X } from 'lucide-react'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -223,12 +224,22 @@ export default function DeveloperScorecardPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['Developer', 'Workspace', 'Repo', 'PRs Reviewed', 'Findings', 'Resolved', 'Resolution Rate', 'Last PR', ''].map((h) => (
+              {([
+                { label: 'Developer',        tip: 'Developer name' },
+                { label: 'Workspace',        tip: 'Git workspace slug' },
+                { label: 'Repo',             tip: 'Repository slug' },
+                { label: 'PRs Reviewed',     tip: 'Number of pull requests reviewed by the agent' },
+                { label: 'Findings',         tip: 'Total code review findings raised' },
+                { label: 'Resolved',         tip: 'Findings acknowledged or resolved by the developer' },
+                { label: 'Resolution Rate',  tip: 'Percentage of findings resolved' },
+                { label: 'Last PR',          tip: 'Most recent pull request reviewed' },
+                { label: '',                 tip: '' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label || 'actions'}
                   className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
-                  {h}
+                  {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
                 </th>
               ))}
             </tr>

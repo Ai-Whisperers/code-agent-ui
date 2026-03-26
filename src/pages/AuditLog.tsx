@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -261,12 +262,19 @@ export default function AuditLogPage() {
         <table className="w-full text-xs">
           <thead className="sticky top-[33px] z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {['', 'Timestamp', 'Actor', 'Category', 'Action', 'Resource'].map((h) => (
+              {([
+                { label: '',           tip: '' },
+                { label: 'Timestamp',  tip: 'When the event occurred' },
+                { label: 'Actor',      tip: 'User or service that triggered the event' },
+                { label: 'Category',   tip: 'High-level grouping of the event type' },
+                { label: 'Action',     tip: 'Specific operation performed' },
+                { label: 'Resource',   tip: 'Entity affected by the action' },
+              ] as const).map(({ label, tip }) => (
                 <th
-                  key={h}
+                  key={label || 'expand'}
                   className="px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap"
                 >
-                  {h}
+                  {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
                 </th>
               ))}
             </tr>
