@@ -208,7 +208,7 @@ export default function DeveloperScorecardPage() {
               Resolution Rate by Developer
             </h3>
             <div style={{ height: chartHeight }}>
-              <Bar data={rateChartData} options={rateChartOptions as typeof HBAR_BASE_OPTIONS} />
+              <Bar data={rateChartData} options={rateChartOptions as unknown as typeof HBAR_BASE_OPTIONS} />
             </div>
           </div>
         </div>

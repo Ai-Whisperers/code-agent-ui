@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { X, ArrowLeft, ArrowRight, Save, Check } from 'lucide-react'
 import type { AutomationHook } from '@/types/api'
 import { TRIGGER_OPTIONS, getTriggerLabel } from './hookConstants'
@@ -20,7 +20,7 @@ export function HookWizard({ hook, initialCategory, onSave, onCancel, isSaving }
   const [step, setStep] = useState<WizardStep>(1)
   const [form, setForm] = useState<AutomationHook>(hook)
 
-  const [selectedCategory, setSelectedCategory] = useState(() => {
+  const [selectedCategory] = useState(() => {
     if (initialCategory) return initialCategory
     if (form.triggerTypes?.length) {
       const opt = TRIGGER_OPTIONS.find(o => o.triggers.some(t => form.triggerTypes!.includes(t.value)))
