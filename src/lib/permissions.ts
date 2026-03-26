@@ -56,6 +56,7 @@ export type Permission =
   | 'EXECUTE_PLAN_JOBS'
   | 'MANAGE_SETTINGS'
   | 'MANAGE_USERS'
+  | 'VIEW_ROADMAP'
 
 export interface PermissionMeta {
   label: string
@@ -94,6 +95,11 @@ export const PERMISSION_META: Record<Permission, PermissionMeta> = {
     description: 'Manage users and invitations.',
     category: 'Administration',
   },
+  VIEW_ROADMAP: {
+    label: 'View roadmap',
+    description: 'Access the product roadmap and Jira readiness reviews.',
+    category: 'Analysis',
+  },
 }
 
 export const PERMISSION_CATEGORY_ORDER = ['Chat', 'Analysis', 'Jobs', 'Administration']
@@ -102,9 +108,9 @@ export const PERMISSION_CATEGORY_ORDER = ['Chat', 'Analysis', 'Jobs', 'Administr
 
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   USER:          ['USE_CHAT', 'EXECUTE_ANALYSIS'],
-  STAFF:         ['USE_CHAT', 'EXECUTE_ANALYSIS'],
-  DEVELOPER:     ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS'],
-  ADMINISTRATOR: ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'MANAGE_SETTINGS', 'MANAGE_USERS'],
+  STAFF:         ['USE_CHAT', 'EXECUTE_ANALYSIS', 'VIEW_ROADMAP'],
+  DEVELOPER:     ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'VIEW_ROADMAP'],
+  ADMINISTRATOR: ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'VIEW_ROADMAP'],
 }
 
 // ── Mapping functions ─────────────────────────────────────────────────────────

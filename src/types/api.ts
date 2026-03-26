@@ -23,6 +23,9 @@ export type JobType =
   | 'SYNC_CONFLUENCE'
   | 'METRICS'
   | 'QUALITY_REPORT'
+  | 'REVIEW_EPIC'
+  | 'REVIEW_FEATURE'
+  | 'REVIEW_USERSTORY'
 
 export interface JobStatusResponse {
   jobId: string
@@ -643,4 +646,42 @@ export interface WebhookAuditEntry {
   hooksExecuted?: string[]
   payload?: string
   receivedAt: string
+}
+
+// ---- Roadmap ----
+
+export type JiraReadinessStatus = 'New' | 'In Progress' | 'QA' | 'Closed'
+export type ItemOverrideStatus = 'ACCEPTED' | 'REMOVED'
+export type ReadinessLabel = 'poor' | 'needs_refinement' | 'ready_with_minor_improvements' | 'fully_ready'
+
+export interface Roadmap {
+  id: string
+  name: string
+  label: string
+  epicIssuetype: string
+  featureIssuetype: string
+  userstoryIssuetype: string
+  createdAt: string
+}
+
+export interface RoadmapTreeItem {
+  issueKey: string
+  issueType: 'EPIC' | 'FEATURE' | 'USERSTORY'
+  parentKey?: string
+  grandparentKey?: string
+  summary: string
+  jiraStatus?: JiraReadinessStatus
+  readinessScore?: number
+  readinessLabel?: ReadinessLabel
+  complexityScore?: number
+  aggregateScore?: number
+  readyForDelivery?: boolean
+  improvementSummary?: string
+  reviewedAt?: string
+  /** ISO timestamp from Jira's `updated` field, populated during sync. */
+  jiraModifiedAt?: string
+  /** True when Jira was modified after the last AI review — review is stale. */
+  isStale?: boolean
+  overrideStatus?: ItemOverrideStatus
+  overrideUpdatedBy?: string
 }

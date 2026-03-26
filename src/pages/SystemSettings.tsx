@@ -289,6 +289,26 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Roadmap ───────────────────────────────────────────────────────────────────
+  {
+    id: 'roadmap',
+    label: 'Roadmap Reviews',
+    settings: [
+      { key: 'roadmap.review.model', label: 'Review Model', description: 'Claude model for Jira readiness reviews (leave blank to use primary model)', inputType: 'select', options: ['', ...CLAUDE_MODELS] },
+      { key: 'roadmap.review.max-tokens', label: 'Max Tokens', description: 'Max output tokens for review responses', defaultValue: '4096', inputType: 'number', min: 512 },
+      { key: 'roadmap.jira.epic-issuetype', label: 'Epic Issue Type', description: 'Jira issue type name for Epics', defaultValue: 'Epic' },
+      { key: 'roadmap.jira.feature-issuetype', label: 'Feature Issue Type', description: 'Jira issue type name for Features', defaultValue: 'Story' },
+      { key: 'roadmap.jira.userstory-issuetype', label: 'User Story Issue Type', description: 'Jira issue type name for User Stories', defaultValue: 'Sub-task' },
+      { key: 'roadmap.jira.status-map.new', label: 'Status Map: New', description: 'Comma-separated Jira statuses mapped to "New"', defaultValue: 'To Do,Open,New', inputType: 'textarea' },
+      { key: 'roadmap.jira.status-map.in-progress', label: 'Status Map: In Progress', description: 'Comma-separated Jira statuses mapped to "In Progress"', defaultValue: 'In Progress', inputType: 'textarea' },
+      { key: 'roadmap.jira.status-map.qa', label: 'Status Map: QA', description: 'Comma-separated Jira statuses mapped to "QA"', defaultValue: 'In Review,QA,Testing', inputType: 'textarea' },
+      { key: 'roadmap.jira.status-map.closed', label: 'Status Map: Closed', description: 'Comma-separated Jira statuses mapped to "Closed"', defaultValue: 'Done,Closed,Resolved', inputType: 'textarea' },
+      { key: 'roadmap.delivery.readiness-threshold', label: 'Delivery Readiness Threshold', description: 'Minimum aggregate score (0–100) for an item to be marked "Ready for Delivery Team"', defaultValue: '70', inputType: 'number', min: 0, max: 100 },
+      { key: 'roadmap.delivery.complexity-weight-enabled', label: 'Complexity-Weighted Aggregation', description: 'When enabled, child scores are weighted by their complexity score when rolling up to parent. Disable to use a simple average.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'roadmap.review.max-jobs-per-review-all', label: 'Max Jobs per Review-All', description: 'Maximum number of review jobs enqueued per review-all call (prevents queue flooding on large roadmaps)', defaultValue: '50', inputType: 'number', min: 1, max: 500 },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -320,6 +340,7 @@ const TABS: TabDef[] = [
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'roadmap',         label: 'Roadmap',          groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'security',        label: 'Security',         groupIds: ['security'] },
 ]

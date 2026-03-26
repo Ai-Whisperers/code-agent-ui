@@ -36,7 +36,20 @@ function SegmentedControl({
 
 // ── Job types ─────────────────────────────────────────────────────────────────
 
-const JOB_TYPES = [
+interface JobTypeDef {
+  id: string
+  label: string
+  description: string
+  /** When set, saving uses this as actionType instead of 'execute_job'. */
+  reviewAction?: string
+  separator?: never
+}
+
+interface SeparatorDef { separator: true; id: string; label?: never; description?: never; reviewAction?: never }
+
+type JobTypeEntry = JobTypeDef | SeparatorDef
+
+const JOB_TYPES: JobTypeEntry[] = [
   {
     id: 'QUALITY_REPORT',
     label: 'Quality Report',
@@ -56,6 +69,25 @@ const JOB_TYPES = [
     id: 'FIX',
     label: 'Code Fix',
     description: 'Apply a code fix driven by a Jira issue or custom prompt, then open a PR',
+  },
+  { id: 'sep-review', separator: true },
+  {
+    id: 'review_epic',
+    label: 'Review Epic',
+    description: 'AI readiness review for a Jira Epic — triggered by a Jira issue event',
+    reviewAction: 'review_epic',
+  },
+  {
+    id: 'review_feature',
+    label: 'Review Feature',
+    description: 'AI readiness review for a Jira Feature — triggered by a Jira issue event',
+    reviewAction: 'review_feature',
+  },
+  {
+    id: 'review_userstory',
+    label: 'Review User Story',
+    description: 'AI readiness review for a Jira User Story — triggered by a Jira issue event',
+    reviewAction: 'review_userstory',
   },
 ]
 
@@ -160,7 +192,19 @@ export function WizardStep3Actions({ form, setForm, selectedActions, toggleActio
             Job Type
           </h5>
           <div className="space-y-1.5">
-            {JOB_TYPES.map(job => {
+            {JOB_TYPES.map(entry => {
+              if ('separator' in entry) {
+                return (
+                  <div key={entry.id} className="flex items-center gap-2 py-1">
+                    <div className="flex-1 h-px bg-[var(--color-inputs-input-border)]" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+                      Roadmap Reviews
+                    </span>
+                    <div className="flex-1 h-px bg-[var(--color-inputs-input-border)]" />
+                  </div>
+                )
+              }
+              const job = entry
               const isSelected = form.jobName === job.id
               return (
                 <button

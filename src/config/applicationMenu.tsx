@@ -18,6 +18,7 @@ import {
   GitPullRequest,
   BotMessageSquare,
   ScrollText,
+  MapPin,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -88,7 +89,7 @@ export function ApplicationMenuItems(
       label: 'Metrics',
       type: 'parent',
       icon: <BarChart3 size={18} />,
-      isActive: currentPath.startsWith('/metrics') || currentPath.startsWith('/stats'),
+      isActive: currentPath.startsWith('/metrics') || currentPath.startsWith('/stats') || currentPath.startsWith('/metrics/roadmap'),
       children: [
         {
           id: 'quality-reports',
@@ -125,6 +126,16 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/stats',
           type: 'item',
           onClick: () => go('/stats'),
+        },
+        {
+          id: 'roadmap',
+          label: 'Roadmap',
+          icon: <MapPin size={16} />,
+          path: '/metrics/roadmap',
+          isActive: currentPath.startsWith('/metrics/roadmap'),
+          type: 'item',
+          requiredPermission: 'VIEW_ROADMAP',
+          onClick: () => go('/metrics/roadmap'),
         },
       ],
     },

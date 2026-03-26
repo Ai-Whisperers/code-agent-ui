@@ -36,6 +36,8 @@ import ChatPage from '@/pages/Chat'
 import McpProfilesPage from '@/pages/McpProfiles'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
+import RoadmapsPage from '@/pages/Roadmaps'
+import RoadmapDetail from '@/pages/RoadmapDetail'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
 
@@ -248,6 +250,23 @@ const auditLogRoute = createRoute({
   component: AuditLogPage,
 })
 
+const roadmapsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/roadmap',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: RoadmapsPage,
+})
+
+const roadmapDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/roadmap/$id',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function RoadmapDetailRoute() {
+    const { id } = roadmapDetailRoute.useParams()
+    return <RoadmapDetail roadmapId={id} />
+  },
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -285,6 +304,8 @@ const routeTree = rootRoute.addChildren([
     mcpProfilesRoute,
     webhookAuditRoute,
     auditLogRoute,
+    roadmapsRoute,
+    roadmapDetailRoute,
   ]),
   accessDeniedRoute,
   unauthenticatedRoute,

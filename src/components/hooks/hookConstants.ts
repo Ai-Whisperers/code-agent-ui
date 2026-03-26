@@ -62,13 +62,13 @@ export type ActionTypeDef = {
 }
 
 export const ACTION_TYPES: ActionTypeDef[] = [
-  { id: 'ai_prompt',       label: 'AI Prompt',              description: 'Run AI with a custom prompt',             icon: Sparkles },
-  { id: 'execute_job',     label: 'Execute Job',            description: 'Trigger a CI/CD job or pipeline',         icon: Play },
-  { id: 'code_embeddings', label: 'Code Embeddings',        description: 'Update code embeddings index',            icon: Database },
-  { id: 'codegraph',       label: 'Code Graph',             description: 'Refresh the code knowledge graph',        icon: Share2 },
-  { id: 'generate_docs',   label: 'Generate Documentation', description: 'Auto-generate repository documentation',  icon: BookOpen },
-  { id: 'n8n_event',       label: 'n8n Event',              description: 'Trigger an n8n workflow event',           icon: Zap },
-  { id: 'teams_event',     label: 'Teams Event',            description: 'Send a Microsoft Teams notification',     icon: Users },
+  { id: 'ai_prompt',        label: 'AI Prompt',              description: 'Run AI with a custom prompt',                    icon: Sparkles },
+  { id: 'execute_job',      label: 'Execute Job',            description: 'Trigger a CI/CD job or pipeline',               icon: Play },
+  { id: 'code_embeddings',  label: 'Code Embeddings',        description: 'Update code embeddings index',                  icon: Database },
+  { id: 'codegraph',        label: 'Code Graph',             description: 'Refresh the code knowledge graph',              icon: Share2 },
+  { id: 'generate_docs',    label: 'Generate Documentation', description: 'Auto-generate repository documentation',        icon: BookOpen },
+  { id: 'n8n_event',        label: 'n8n Event',              description: 'Trigger an n8n workflow event',                 icon: Zap },
+  { id: 'teams_event',      label: 'Teams Event',            description: 'Send a Microsoft Teams notification',           icon: Users },
 ]
 
 // ── Prompt templates ───────────────────────────────────────────────────────

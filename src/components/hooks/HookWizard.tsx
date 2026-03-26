@@ -17,8 +17,18 @@ interface Props {
 }
 
 export function HookWizard({ hook, initialCategory, onSave, onCancel, isSaving }: Props) {
+  const REVIEW_ACTIONS = ['review_epic', 'review_feature', 'review_userstory']
+
   const [step, setStep] = useState<WizardStep>(1)
-  const [form, setForm] = useState<AutomationHook>(hook)
+
+  // When editing a hook whose actionType is a review type, treat it as execute_job
+  // and pre-populate jobName so the correct radio is selected inside the panel.
+  const [form, setForm] = useState<AutomationHook>(() => {
+    if (REVIEW_ACTIONS.includes(hook.actionType ?? '')) {
+      return { ...hook, jobName: hook.actionType! }
+    }
+    return hook
+  })
 
   const [selectedCategory] = useState(() => {
     if (initialCategory) return initialCategory
@@ -30,7 +40,11 @@ export function HookWizard({ hook, initialCategory, onSave, onCancel, isSaving }
   })
 
   const [selectedActions, setSelectedActions] = useState<string[]>(() => {
-    if (form.actionType) return form.actionType.split(',').map(s => s.trim()).filter(Boolean)
+    if (form.actionType) {
+      // Review action types are displayed as execute_job + a job-type sub-option
+      const types = form.actionType.split(',').map(s => s.trim()).filter(Boolean)
+      return types.map(t => REVIEW_ACTIONS.includes(t) ? 'execute_job' : t)
+    }
     if (form.prompt) return ['ai_prompt']
     return []
   })
@@ -54,7 +68,14 @@ export function HookWizard({ hook, initialCategory, onSave, onCancel, isSaving }
     (!selectedActions.includes('ai_prompt') || !!form.prompt?.trim())
 
   function handleSave() {
-    onSave({ ...form, actionType: selectedActions.join(',') })
+    // When execute_job is selected and the chosen job type is a review action,
+    // persist the review type as actionType so the backend can route correctly.
+    const isReviewJobSelected = selectedActions.includes('execute_job')
+      && REVIEW_ACTIONS.includes(form.jobName ?? '')
+    const finalActionType = isReviewJobSelected
+      ? form.jobName!
+      : selectedActions.join(',')
+    onSave({ ...form, actionType: finalActionType })
   }
 
   const prevStep = () => setStep(s => Math.max(1, s - 1) as WizardStep)
