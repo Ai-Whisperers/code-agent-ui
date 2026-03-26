@@ -22,6 +22,7 @@ import {
   Table2,
   CalendarDays,
   Wand2,
+  Info,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -30,7 +31,7 @@ import { SprintGanttView } from '@/components/roadmap/SprintGanttView'
 import { ProposalModal } from '@/components/roadmap/ProposalModal'
 import api from '@/lib/api'
 import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
-import type { Roadmap, RoadmapTreeItem, ItemOverrideStatus, RoadmapProposal } from '@/types/api'
+import type { Roadmap, RoadmapTreeItem, ItemOverrideStatus, RoadmapProposal, SystemSetting, ReviewTokenStats } from '@/types/api'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -42,6 +43,8 @@ interface FilterState {
   issueType: string
   readiness: string
   summary: string
+  assignee: string
+  reporter: string
 }
 
 interface TreeNode extends RoadmapTreeItem {
@@ -148,6 +151,228 @@ function ScoreBar({ score, title, reversed }: { score?: number; title?: string; 
 function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
   if (sortField !== field) return <ArrowUpDown size={12} className="opacity-30" />
   return sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />
+}
+
+// ── Review Confirmation Dialog ────────────────────────────────────────────────
+
+// Approximate token budgets per item (low / high bounds)
+const INPUT_TOKENS_LOW  = 1_500   // system prompt + compact context
+const INPUT_TOKENS_HIGH = 3_000   // system prompt + rich description + attachments
+const OUTPUT_TOKENS     = 400     // JSON response with scores + improvement text
+
+// Fallback pricing when settings haven't loaded yet
+const DEFAULT_INPUT_COST_PER_M  = 3.00
+const DEFAULT_OUTPUT_COST_PER_M = 15.00
+
+function formatCost(usd: number): string {
+  if (usd < 0.01) return '<$0.01'
+  return `$${usd.toFixed(2)}`
+}
+
+// Minimum sample count before we trust actual averages over hardcoded estimates
+const MIN_SAMPLE_TRUST = 5
+
+function ReviewConfirmDialog({
+  force,
+  targets,
+  modelName,
+  inputCostPerM,
+  outputCostPerM,
+  tokenStats,
+  isPending,
+  onConfirm,
+  onCancel,
+}: {
+  force: boolean
+  targets: RoadmapTreeItem[]
+  modelName: string
+  inputCostPerM: number
+  outputCostPerM: number
+  tokenStats: ReviewTokenStats | undefined
+  isPending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const epics    = targets.filter((i) => i.issueType === 'EPIC').length
+  const features = targets.filter((i) => i.issueType === 'FEATURE').length
+  const stories  = targets.filter((i) => i.issueType === 'USERSTORY').length
+  const total    = targets.length
+
+  // Per-type token resolution: use actual avg when we have enough samples, else use bounds
+  const resolve = (type: 'REVIEW_EPIC' | 'REVIEW_FEATURE' | 'REVIEW_USERSTORY') => {
+    const stat = tokenStats?.[type]
+    const trusted = stat && stat.sampleCount >= MIN_SAMPLE_TRUST
+    return {
+      input:  trusted ? stat.avgInputTokens  : null,
+      output: trusted ? stat.avgOutputTokens : null,
+      sampleCount: stat?.sampleCount ?? 0,
+    }
+  }
+  const epicStat    = resolve('REVIEW_EPIC')
+  const featureStat = resolve('REVIEW_FEATURE')
+  const storyStat   = resolve('REVIEW_USERSTORY')
+
+  // Use actual averages where available; otherwise fall back to low/high bounds
+  const computeCost = (inputAvg: number | null, count: number) => {
+    if (inputAvg === null) return null
+    return count * (inputAvg * inputCostPerM + OUTPUT_TOKENS * outputCostPerM) / 1_000_000
+  }
+  const computeTokens = (inputAvg: number | null, count: number) =>
+    inputAvg === null ? null : count * (inputAvg + OUTPUT_TOKENS)
+
+  const epicCost    = computeCost(epicStat.input, epics)
+  const featureCost = computeCost(featureStat.input, features)
+  const storyCost   = computeCost(storyStat.input, stories)
+  const epicTokens  = computeTokens(epicStat.input, epics)
+  const featureTokens = computeTokens(featureStat.input, features)
+  const storyTokens = computeTokens(storyStat.input, stories)
+
+  // Totals: if all types have actual data, show a single number; otherwise show a range
+  const allActual = [epicCost, featureCost, storyCost].filter((_, i) => [epics, features, stories][i] > 0)
+                      .every((v) => v !== null)
+  const actualTotalTokens = allActual
+    ? (epicTokens ?? 0) + (featureTokens ?? 0) + (storyTokens ?? 0)
+    : null
+  const actualTotalCost   = allActual
+    ? (epicCost ?? 0) + (featureCost ?? 0) + (storyCost ?? 0)
+    : null
+
+  const lowTokens  = total * (INPUT_TOKENS_LOW  + OUTPUT_TOKENS)
+  const highTokens = total * (INPUT_TOKENS_HIGH + OUTPUT_TOKENS)
+  const lowCost    = total * (INPUT_TOKENS_LOW  * inputCostPerM + OUTPUT_TOKENS * outputCostPerM) / 1_000_000
+  const highCost   = total * (INPUT_TOKENS_HIGH * inputCostPerM + OUTPUT_TOKENS * outputCostPerM) / 1_000_000
+
+  const totalSamples = (tokenStats?.['REVIEW_EPIC']?.sampleCount ?? 0) +
+                       (tokenStats?.['REVIEW_FEATURE']?.sampleCount ?? 0) +
+                       (tokenStats?.['REVIEW_USERSTORY']?.sampleCount ?? 0)
+
+  const fmtTokens = (n: number) =>
+    n >= 1_000_000 ? `~${(n / 1_000_000).toFixed(1)}M` : `~${(n / 1_000).toFixed(0)}k`
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-6">
+
+        {/* Header */}
+        <div className="flex items-start gap-3 mb-5">
+          <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+            <Layers size={16} />
+          </div>
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+              {force ? 'Review all items?' : 'Review changed items?'}
+            </h2>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+              {force
+                ? 'Every item will be sent to the AI model, regardless of changes.'
+                : 'Only stale or unreviewed items will be sent to the AI model.'}
+            </p>
+          </div>
+        </div>
+
+        {total === 0 ? (
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-5">
+            No items qualify for review.
+          </p>
+        ) : (
+          <>
+            {/* Item breakdown */}
+            <div className="mb-4 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-[var(--color-cards-card-background-hover)] border-b border-[var(--color-borders-border-primary)]">
+                    <th className="px-3 py-1.5 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Type</th>
+                    <th className="px-3 py-1.5 text-right text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Items</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {epics > 0 && (
+                    <tr className="border-b border-[var(--color-borders-border-primary)]">
+                      <td className="px-3 py-1.5">
+                        <span className="inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">Epic</span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-[var(--color-fonts-font-color-primary)] font-medium">{epics}</td>
+                    </tr>
+                  )}
+                  {features > 0 && (
+                    <tr className="border-b border-[var(--color-borders-border-primary)]">
+                      <td className="px-3 py-1.5">
+                        <span className="inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Feature</span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-[var(--color-fonts-font-color-primary)] font-medium">{features}</td>
+                    </tr>
+                  )}
+                  {stories > 0 && (
+                    <tr className="border-b border-[var(--color-borders-border-primary)]">
+                      <td className="px-3 py-1.5">
+                        <span className="inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">Story</span>
+                      </td>
+                      <td className="px-3 py-1.5 text-right text-[var(--color-fonts-font-color-primary)] font-medium">{stories}</td>
+                    </tr>
+                  )}
+                  <tr className="bg-[var(--color-cards-card-background-hover)]">
+                    <td className="px-3 py-1.5 font-semibold text-[var(--color-fonts-font-color-primary)]">Total</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-[var(--color-fonts-font-color-primary)]">{total}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Cost estimate */}
+            <div className="mb-5 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] p-3 space-y-1.5">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">
+                {allActual ? 'Projected cost' : 'Estimated cost'} ({modelName})
+              </p>
+              <div className="flex justify-between text-xs">
+                <span className="text-[var(--color-fonts-font-color-support)]">Tokens</span>
+                <span className="text-[var(--color-fonts-font-color-primary)] font-medium">
+                  {actualTotalTokens !== null
+                    ? fmtTokens(actualTotalTokens)
+                    : `${fmtTokens(lowTokens)} – ${fmtTokens(highTokens)}`}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[var(--color-fonts-font-color-support)]">Cost</span>
+                <span className="text-[var(--color-fonts-font-color-primary)] font-medium">
+                  {actualTotalCost !== null
+                    ? formatCost(actualTotalCost)
+                    : `${formatCost(lowCost)} – ${formatCost(highCost)}`}
+                </span>
+              </div>
+              <div className="flex items-start gap-1.5 mt-2 pt-2 border-t border-[var(--color-borders-border-primary)]">
+                <Info size={11} className="shrink-0 mt-0.5 text-[var(--color-fonts-font-color-support)]" />
+                <p className="text-[10px] text-[var(--color-fonts-font-color-support)] leading-relaxed">
+                  {totalSamples >= MIN_SAMPLE_TRUST
+                    ? `Based on averages from ${totalSamples} past review${totalSamples !== 1 ? 's' : ''}.`
+                    : `Estimate based on ~${INPUT_TOKENS_LOW.toLocaleString()}–${INPUT_TOKENS_HIGH.toLocaleString()} input + ~${OUTPUT_TOKENS} output tokens per item.`}
+                  {' '}Actual cost varies with issue description length.
+                </p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Buttons */}
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={isPending}
+            className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending || total === 0}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
+          >
+            {isPending && <Loader2 size={14} className="animate-spin" />}
+            {isPending ? 'Queueing…' : `Review ${total} item${total !== 1 ? 's' : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ── Item Detail Panel ─────────────────────────────────────────────────────────
@@ -508,8 +733,9 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
   const [sortField, setSortField] = useState<SortField>('issueKey')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
-  const [filters, setFilters] = useState<FilterState>({ issueKey: '', issueType: '', readiness: '', summary: '' })
+  const [filters, setFilters] = useState<FilterState>({ issueKey: '', issueType: '', readiness: '', summary: '', assignee: '', reporter: '' })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [reviewConfirm, setReviewConfirm] = useState<{ force: boolean } | null>(null)
 
   const { data: roadmap } = useQuery<Roadmap>({
     queryKey: ['roadmap', roadmapId],
@@ -523,6 +749,23 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
   })
   const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
 
+  const { data: allSettings } = useQuery<SystemSetting[]>({
+    queryKey: ['settings'],
+    queryFn: () => api.get('/settings').then((r) => r.data).catch(() => []),
+    staleTime: 5 * 60 * 1000,
+  })
+  const getSetting = (key: string, fallback: string) =>
+    allSettings?.find((s) => s.key === key)?.value ?? fallback
+  const aiModelName    = getSetting('anthropic.model', 'claude-sonnet-4-20250514')
+  const inputCostPerM  = parseFloat(getSetting('anthropic.pricing.input-per-million',  String(DEFAULT_INPUT_COST_PER_M)))
+  const outputCostPerM = parseFloat(getSetting('anthropic.pricing.output-per-million', String(DEFAULT_OUTPUT_COST_PER_M)))
+
+  const { data: tokenStats } = useQuery<ReviewTokenStats>({
+    queryKey: ['roadmap-review-token-stats'],
+    queryFn: () => api.get('/roadmap/review-token-stats').then((r) => r.data).catch(() => ({})),
+    staleTime: 5 * 60 * 1000,
+  })
+
   const { data: treeItems, isLoading } = useQuery<RoadmapTreeItem[]>({
     queryKey: ['roadmap-tree', roadmapId],
     queryFn: () => api.get(`/roadmap/${roadmapId}/tree`).then((r) => r.data).catch(() => []),
@@ -535,6 +778,25 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
 
   const items = Array.isArray(treeItems) ? treeItems : []
   const tree = useMemo(() => buildTree(items), [items])
+
+  const reviewTargets = useMemo(() => {
+    if (!reviewConfirm) return []
+    return reviewConfirm.force
+      ? items.filter((i) => !i.overrideStatus)
+      : items.filter((i) => !i.overrideStatus && (i.isStale || !i.reviewedAt))
+  }, [reviewConfirm, items])
+
+  const assigneeOptions = useMemo(() => {
+    const s = new Set<string>()
+    items.forEach((i) => { if (i.assignee) s.add(i.assignee) })
+    return Array.from(s).sort()
+  }, [items])
+
+  const reporterOptions = useMemo(() => {
+    const s = new Set<string>()
+    items.forEach((i) => { if (i.reporter) s.add(i.reporter) })
+    return Array.from(s).sort()
+  }, [items])
 
   // Expand all by default when data arrives
   useEffect(() => {
@@ -586,6 +848,8 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
       if (filters.issueType && node.issueType !== filters.issueType) return false
       if (filters.readiness && node.readinessLabel !== filters.readiness) return false
       if (filters.summary && !node.summary.toLowerCase().includes(filters.summary.toLowerCase())) return false
+      if (filters.assignee && node.assignee !== filters.assignee) return false
+      if (filters.reporter && node.reporter !== filters.reporter) return false
       return true
     })
   }, [flatRows, filters])
@@ -659,7 +923,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
             <div className="flex rounded-[var(--border-radius-button-small)] overflow-hidden">
               <Tooltip text={items.length === 0 ? 'Sync from Jira first' : 'Queue AI reviews for items changed since last review'}>
                 <button
-                  onClick={() => reviewAllMutation.mutate(false)}
+                  onClick={() => setReviewConfirm({ force: false })}
                   disabled={reviewAllMutation.isPending || items.length === 0}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
                 >
@@ -669,7 +933,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
               </Tooltip>
               <Tooltip text="Force re-review of ALL items regardless of changes">
                 <button
-                  onClick={() => reviewAllMutation.mutate(true)}
+                  onClick={() => setReviewConfirm({ force: true })}
                   disabled={reviewAllMutation.isPending || items.length === 0}
                   className="px-2 py-1.5 text-xs bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors border-l border-white/30"
                 >
@@ -742,6 +1006,26 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
           onChange={(e) => setFilter('summary', e.target.value)}
           className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)] flex-1 min-w-40"
         />
+        {assigneeOptions.length > 0 && (
+          <select
+            value={filters.assignee}
+            onChange={(e) => setFilter('assignee', e.target.value)}
+            className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
+          >
+            <option value="">All assignees</option>
+            {assigneeOptions.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
+        {reporterOptions.length > 0 && (
+          <select
+            value={filters.reporter}
+            onChange={(e) => setFilter('reporter', e.target.value)}
+            className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
+          >
+            <option value="">All reporters</option>
+            {reporterOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+        )}
       </div>
 
       {/* Sprint Gantt view */}
@@ -940,6 +1224,24 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
           </table>
         </div>
       </div>}
+
+      {/* Review confirmation dialog */}
+      {reviewConfirm && (
+        <ReviewConfirmDialog
+          force={reviewConfirm.force}
+          targets={reviewTargets}
+          modelName={aiModelName}
+          inputCostPerM={inputCostPerM}
+          outputCostPerM={outputCostPerM}
+          tokenStats={tokenStats}
+          isPending={reviewAllMutation.isPending}
+          onConfirm={() => {
+            reviewAllMutation.mutate(reviewConfirm.force)
+            setReviewConfirm(null)
+          }}
+          onCancel={() => setReviewConfirm(null)}
+        />
+      )}
 
       {/* Detail panel */}
       {selectedKey && selectedNode && (

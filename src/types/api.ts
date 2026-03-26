@@ -429,6 +429,16 @@ export interface UpsertCloudAccountRequest {
   credentials?: Record<string, string>
 }
 
+// ---- Roadmap review token stats ----
+
+export interface ReviewTypeTokenStats {
+  avgInputTokens: number
+  avgOutputTokens: number
+  sampleCount: number
+}
+
+export type ReviewTokenStats = Partial<Record<'REVIEW_EPIC' | 'REVIEW_FEATURE' | 'REVIEW_USERSTORY', ReviewTypeTokenStats>>
+
 // ---- System Settings ----
 
 export interface SystemSetting {
