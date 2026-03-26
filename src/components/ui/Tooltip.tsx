@@ -1,33 +1,70 @@
 import { useState } from 'react'
 
+type TooltipPosition = 'top' | 'bottom' | 'left' | 'right'
+
+interface TooltipProps {
+  text: string
+  children: React.ReactNode
+  position?: TooltipPosition
+}
+
 /**
  * Lightweight tooltip using fixed positioning so it is never clipped by
  * overflow-x-auto containers (e.g. table wrappers).
  */
-export function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+export function Tooltip({ text, children, position = 'top' }: TooltipProps) {
   const [visible, setVisible] = useState(false)
-  const [pos, setPos] = useState({ x: 0, y: 0 })
+  const [rect, setRect] = useState<DOMRect | null>(null)
+
+  function getStyle(r: DOMRect): React.CSSProperties {
+    const GAP = 6
+    switch (position) {
+      case 'bottom':
+        return {
+          position: 'fixed',
+          left: r.left + r.width / 2,
+          top: r.bottom + GAP,
+          transform: 'translateX(-50%)',
+        }
+      case 'left':
+        return {
+          position: 'fixed',
+          left: r.left - GAP,
+          top: r.top + r.height / 2,
+          transform: 'translate(-100%, -50%)',
+        }
+      case 'right':
+        return {
+          position: 'fixed',
+          left: r.right + GAP,
+          top: r.top + r.height / 2,
+          transform: 'translateY(-50%)',
+        }
+      case 'top':
+      default:
+        return {
+          position: 'fixed',
+          left: r.left + r.width / 2,
+          top: r.top - GAP,
+          transform: 'translate(-50%, -100%)',
+        }
+    }
+  }
 
   return (
     <div
       className="inline-flex"
       onMouseEnter={(e) => {
-        const rect = e.currentTarget.getBoundingClientRect()
-        setPos({ x: rect.left + rect.width / 2, y: rect.top })
+        setRect(e.currentTarget.getBoundingClientRect())
         setVisible(true)
       }}
       onMouseLeave={() => setVisible(false)}
     >
       {children}
-      {visible && (
+      {visible && rect && (
         <span
-          style={{
-            position: 'fixed',
-            left: pos.x,
-            top: pos.y - 6,
-            transform: 'translate(-50%, -100%)',
-          }}
-          className="z-[9999] px-2 py-1 text-[10px] leading-tight rounded-md bg-gray-900 text-gray-100 whitespace-pre-line pointer-events-none shadow-md max-w-xs text-left"
+          style={getStyle(rect)}
+          className="z-[9999] px-2.5 py-1.5 text-[11px] font-normal normal-case leading-relaxed tracking-normal rounded-md bg-gray-900 text-gray-100 whitespace-pre-line pointer-events-none shadow-lg max-w-[240px] text-left"
         >
           {text}
         </span>

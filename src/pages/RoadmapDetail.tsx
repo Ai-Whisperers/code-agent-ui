@@ -23,9 +23,14 @@ import {
   CalendarDays,
   Wand2,
   Info,
+  Download,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { FilterSelect } from '@/components/ui/FilterSelect'
+import { Input } from '@/components/ui/Input'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { TableCard } from '@/components/ui/TableCard'
 import { ReadinessBadge } from '@/components/roadmap/ReadinessBadge'
 import { SprintGanttView } from '@/components/roadmap/SprintGanttView'
 import { ProposalModal } from '@/components/roadmap/ProposalModal'
@@ -35,7 +40,7 @@ import type { Roadmap, RoadmapTreeItem, ItemOverrideStatus, RoadmapProposal, Sys
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type SortField = 'issueKey' | 'issueType' | 'readinessScore' | 'summary'
+type SortField = 'issueKey' | 'issueType' | 'readinessScore' | 'summary' | 'jiraStatus' | 'complexityScore' | 'aggregateScore'
 type SortDir = 'asc' | 'desc'
 
 interface FilterState {
@@ -251,7 +256,7 @@ function ReviewConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-6">
+      <div className="w-full max-w-md rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
 
         {/* Header */}
         <div className="flex items-start gap-3 mb-5">
@@ -277,7 +282,7 @@ function ReviewConfirmDialog({
         ) : (
           <>
             {/* Item breakdown */}
-            <div className="mb-4 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] overflow-hidden">
+            <div className="mb-4 rounded-lg border border-[var(--color-borders-border-primary)] overflow-hidden">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-[var(--color-cards-card-background-hover)] border-b border-[var(--color-borders-border-primary)]">
@@ -319,7 +324,7 @@ function ReviewConfirmDialog({
             </div>
 
             {/* Cost estimate */}
-            <div className="mb-5 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] p-3 space-y-1.5">
+            <div className="mb-5 rounded-lg border border-[var(--color-borders-border-primary)] p-3 space-y-1.5">
               <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">
                 {allActual ? 'Projected cost' : 'Estimated cost'} ({modelName})
               </p>
@@ -357,14 +362,14 @@ function ReviewConfirmDialog({
           <button
             onClick={onCancel}
             disabled={isPending}
-            className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
+            className="px-4 py-2 text-sm rounded bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
             disabled={isPending || total === 0}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 text-sm font-medium rounded bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
           >
             {isPending && <Loader2 size={14} className="animate-spin" />}
             {isPending ? 'Queueing…' : `Review ${total} item${total !== 1 ? 's' : ''}`}
@@ -547,7 +552,7 @@ function ItemDetailPanel({
         {node.improvementSummary && !isOverridden && (
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1.5">AI Suggestions</p>
-            <div className="p-3 rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background-hover)] border border-[var(--color-borders-border-primary)]">
+            <div className="p-3 rounded-lg bg-[var(--color-cards-card-background-hover)] border border-[var(--color-borders-border-primary)]">
               <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-wrap">
                 {node.improvementSummary}
               </p>
@@ -630,44 +635,27 @@ function ItemDetailPanel({
         <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--color-borders-border-primary)]">
           {isOverridden ? (
             <Tooltip text="Remove override and re-enable AI-based scoring">
-              <button
-                onClick={onClearOverride}
-                className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-              >
-                <RotateCcw size={11} />
+              <Button size="xs" variant="secondary" icon={<RotateCcw size={11} />} onClick={onClearOverride}>
                 Undo Override
-              </button>
+              </Button>
             </Tooltip>
           ) : (
             <>
               <Tooltip text="Run AI readiness & complexity review for this issue">
-                <button
-                  onClick={onReview}
-                  disabled={isReviewing}
-                  className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
-                >
-                  {isReviewing ? <Loader2 size={11} className="animate-spin" /> : <RefreshCw size={11} />}
+                <Button size="xs" variant="primary" loading={isReviewing} icon={<RefreshCw size={11} />} onClick={onReview} disabled={isReviewing}>
                   Review
-                </button>
+                </Button>
               </Tooltip>
               <div className="w-px h-4 bg-[var(--color-borders-border-primary)] mx-0.5" />
               <Tooltip text="Mark as Accepted — override AI score, include in delivery metrics">
-                <button
-                  onClick={onAccept}
-                  className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-[var(--color-tags-font-success)] hover:bg-[var(--color-tags-success-background)] transition-colors"
-                >
-                  <CheckCircle2 size={11} />
+                <Button size="xs" variant="success" icon={<CheckCircle2 size={11} />} onClick={onAccept}>
                   Accept
-                </button>
+                </Button>
               </Tooltip>
               <Tooltip text="Mark as Removed — exclude from roadmap metrics">
-                <button
-                  onClick={onRemove}
-                  className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md text-[var(--color-tags-font-critical)] hover:bg-[var(--color-tags-critical-background)] transition-colors"
-                >
-                  <MinusCircle size={11} />
+                <Button size="xs" variant="danger" icon={<MinusCircle size={11} />} onClick={onRemove}>
                   Remove
-                </button>
+                </Button>
               </Tooltip>
             </>
           )}
@@ -676,27 +664,30 @@ function ItemDetailPanel({
         {/* AI row */}
         <div className="flex items-center gap-2 px-3 py-2">
           <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
-            <button
+            <Button
+              size="xs"
+              variant="ai"
+              loading={improveMutation.isPending}
+              icon={<Wand2 size={11} />}
               onClick={() => improveMutation.mutate()}
               disabled={improveMutation.isPending}
-              className="flex items-center gap-1 px-2 py-1 text-[11px] font-medium rounded-md bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 dark:bg-violet-900/20 dark:text-violet-300 dark:border-violet-800 dark:hover:bg-violet-900/40 disabled:opacity-50 transition-colors"
             >
-              {improveMutation.isPending ? <Loader2 size={11} className="animate-spin" /> : <Wand2 size={11} />}
               {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
-            </button>
+            </Button>
           </Tooltip>
 
           {draftCount > 0 && (
             <Tooltip text="View or edit AI-generated improvement proposals">
-              <button
+              <Button
+                size="xs"
+                variant="ai"
                 onClick={() => {
                   const draft = proposals?.find((p) => p.status === 'DRAFT')
                   if (draft) setActiveProposal(draft)
                 }}
-                className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded-md bg-blue-50 text-blue-600 border border-blue-200 hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/40 transition-colors"
               >
                 {draftCount} draft{draftCount !== 1 ? 's' : ''}
-              </button>
+              </Button>
             </Tooltip>
           )}
 
@@ -832,7 +823,9 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
     const compare = (a: TreeNode, b: TreeNode): number => {
       let av: string | number | undefined
       let bv: string | number | undefined
-      if (sortField === 'readinessScore') { av = a.readinessScore ?? -1; bv = b.readinessScore ?? -1 }
+      if (sortField === 'readinessScore')  { av = a.readinessScore  ?? -1; bv = b.readinessScore  ?? -1 }
+      else if (sortField === 'complexityScore') { av = a.complexityScore ?? -1; bv = b.complexityScore ?? -1 }
+      else if (sortField === 'aggregateScore')  { av = a.aggregateScore  ?? -1; bv = b.aggregateScore  ?? -1 }
       else { av = String(a[sortField] ?? ''); bv = String(b[sortField] ?? '') }
       const result = typeof av === 'number' ? av - (bv as number) : String(av).localeCompare(String(bv))
       return sortDir === 'asc' ? result : -result
@@ -853,6 +846,32 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
       return true
     })
   }, [flatRows, filters])
+
+  function handleExport() {
+    const esc = (v: string | number | boolean | undefined | null) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s
+    }
+    const headers = ['Key', 'Type', 'Parent', 'Grandparent', 'Summary', 'Status',
+      'Readiness Label', 'Readiness Score', 'Complexity', 'Aggregate',
+      'Ready for Delivery', 'Assignee', 'Reporter', 'Sprint', 'Override']
+    const rows = filteredRows.map(({ node: n }) =>
+      [n.issueKey, n.issueType, n.parentKey, n.grandparentKey, n.summary,
+       n.jiraStatus, n.readinessLabel, n.readinessScore, n.complexityScore,
+       n.aggregateScore, n.readyForDelivery, n.assignee, n.reporter,
+       n.sprintName, n.overrideStatus].map(esc).join(',')
+    )
+    const csv = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${roadmap?.name ?? 'roadmap'}-export.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const syncMutation = useMutation({
     mutationFn: () => api.post(`/roadmap/${roadmapId}/sync`),
@@ -897,48 +916,29 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
   return (
     <main>
       <PageHeader
-        title={roadmap?.name ?? 'Roadmap'}
-        subtitle={roadmap ? `Jira label: ${roadmap.label}` : undefined}
+        title="Roadmap"
         actions={
           <div className="flex items-center gap-2">
-            <Tooltip text="Back to roadmaps list">
-              <button
-                onClick={() => navigate({ to: '/metrics/roadmap' })}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-              >
-                <ChevronLeft size={14} />
+            <Tooltip text="Back to roadmaps list" position="bottom">
+              <Button size="md" variant="secondary" icon={<ChevronLeft size={13} />} onClick={() => navigate({ to: '/metrics/roadmap' })}>
                 Back
-              </button>
+              </Button>
             </Tooltip>
-            <Tooltip text="Re-fetch all issues from Jira and update the item list">
-              <button
-                onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
-              >
-                {syncMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            <Tooltip text="Re-fetch all issues from Jira and update the item list" position="bottom">
+              <Button size="md" variant="secondary" loading={syncMutation.isPending} icon={<RefreshCw size={13} />} onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending}>
                 Sync from Jira
-              </button>
+              </Button>
             </Tooltip>
-            <div className="flex rounded-[var(--border-radius-button-small)] overflow-hidden">
-              <Tooltip text={items.length === 0 ? 'Sync from Jira first' : 'Queue AI reviews for items changed since last review'}>
-                <button
-                  onClick={() => setReviewConfirm({ force: false })}
-                  disabled={reviewAllMutation.isPending || items.length === 0}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors"
-                >
-                  {reviewAllMutation.isPending ? <Loader2 size={13} className="animate-spin" /> : <Layers size={13} />}
+            <div className="flex rounded overflow-hidden">
+              <Tooltip text={items.length === 0 ? 'Sync from Jira first' : 'Queue AI reviews for items changed since last review'} position="bottom">
+                <Button size="md" variant="primary" loading={reviewAllMutation.isPending} icon={<Layers size={13} />} onClick={() => setReviewConfirm({ force: false })} disabled={reviewAllMutation.isPending || items.length === 0} className="rounded-r-none">
                   Review Changed
-                </button>
+                </Button>
               </Tooltip>
-              <Tooltip text="Force re-review of ALL items regardless of changes">
-                <button
-                  onClick={() => setReviewConfirm({ force: true })}
-                  disabled={reviewAllMutation.isPending || items.length === 0}
-                  className="px-2 py-1.5 text-xs bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 transition-colors border-l border-white/30"
-                >
+              <Tooltip text="Force re-review of ALL items regardless of changes" position="bottom">
+                <Button size="md" variant="primary" onClick={() => setReviewConfirm({ force: true })} disabled={reviewAllMutation.isPending || items.length === 0} className="rounded-l-none border-l border-white/30 px-2">
                   All
-                </button>
+                </Button>
               </Tooltip>
             </div>
           </div>
@@ -960,7 +960,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
 
       {/* Empty state */}
       {!isLoading && items.length === 0 && (
-        <div className="mb-4 flex items-start gap-3 p-4 rounded-[var(--border-radius-card)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm">
+        <div className="mb-4 flex items-start gap-3 p-4 rounded-lg bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm">
           <RefreshCw size={16} className="mt-0.5 shrink-0" />
           <div>
             <p className="font-medium">No items synced yet</p>
@@ -972,136 +972,114 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        <input
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <Input
           placeholder="Filter by issue key…"
           value={filters.issueKey}
           onChange={(e) => setFilter('issueKey', e.target.value)}
-          className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)] w-44"
+          className="w-44"
         />
-        <select
+        <FilterSelect
           value={filters.issueType}
-          onChange={(e) => setFilter('issueType', e.target.value)}
-          className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
-        >
-          <option value="">All types</option>
-          <option value="EPIC">Epic</option>
-          <option value="FEATURE">Feature</option>
-          <option value="USERSTORY">User Story</option>
-        </select>
-        <select
+          onChange={(v) => setFilter('issueType', v)}
+          placeholder="All types"
+          options={[
+            { value: 'EPIC',      label: 'Epic',       dotClass: 'bg-violet-500' },
+            { value: 'FEATURE',   label: 'Feature',    dotClass: 'bg-blue-500' },
+            { value: 'USERSTORY', label: 'User Story', dotClass: 'bg-gray-400' },
+          ]}
+        />
+        <FilterSelect
           value={filters.readiness}
-          onChange={(e) => setFilter('readiness', e.target.value)}
-          className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
-        >
-          <option value="">All readiness</option>
-          <option value="poor">Poor</option>
-          <option value="needs_refinement">Needs Refinement</option>
-          <option value="ready_with_minor_improvements">Minor Improvements</option>
-          <option value="fully_ready">Fully Ready</option>
-        </select>
-        <input
+          onChange={(v) => setFilter('readiness', v)}
+          placeholder="All readiness"
+          options={[
+            { value: 'poor',                              label: 'Poor',              dotClass: 'bg-red-500' },
+            { value: 'needs_refinement',                  label: 'Needs Refinement',  dotClass: 'bg-orange-500' },
+            { value: 'ready_with_minor_improvements',     label: 'Minor Improvements', dotClass: 'bg-yellow-500' },
+            { value: 'fully_ready',                       label: 'Fully Ready',       dotClass: 'bg-green-500' },
+          ]}
+        />
+        <Input
           placeholder="Filter by name…"
           value={filters.summary}
           onChange={(e) => setFilter('summary', e.target.value)}
-          className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)] flex-1 min-w-40"
+          className="flex-1 min-w-40"
         />
         {assigneeOptions.length > 0 && (
-          <select
+          <FilterSelect
             value={filters.assignee}
-            onChange={(e) => setFilter('assignee', e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
-          >
-            <option value="">All assignees</option>
-            {assigneeOptions.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+            onChange={(v) => setFilter('assignee', v)}
+            placeholder="All assignees"
+            options={assigneeOptions.map((a) => ({ value: a, label: a }))}
+          />
         )}
         {reporterOptions.length > 0 && (
-          <select
+          <FilterSelect
             value={filters.reporter}
-            onChange={(e) => setFilter('reporter', e.target.value)}
-            className="px-3 py-1.5 text-xs rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
-          >
-            <option value="">All reporters</option>
-            {reporterOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-          </select>
+            onChange={(v) => setFilter('reporter', v)}
+            placeholder="All reporters"
+            options={reporterOptions.map((r) => ({ value: r, label: r }))}
+          />
         )}
+        {/* View mode toggle */}
+        <div className="ml-auto flex rounded overflow-hidden border border-[var(--color-cards-card-stroke)]">
+          <Tooltip text="Show issues as a hierarchical tree table" position="bottom">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs transition-colors ${
+                isTableView
+                  ? 'bg-[var(--color-buttons-button-primary)] text-white'
+                  : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
+              }`}
+            >
+              <Table2 size={11} />
+              Table
+            </button>
+          </Tooltip>
+          <Tooltip text="Show features and user stories as a Gantt chart grouped by sprint" position="bottom">
+            <button
+              onClick={() => setViewMode('sprint')}
+              className={`flex items-center gap-1 px-2.5 py-1 text-xs transition-colors border-l border-[var(--color-cards-card-stroke)] ${
+                isSprintView
+                  ? 'bg-[var(--color-buttons-button-primary)] text-white'
+                  : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
+              }`}
+            >
+              <CalendarDays size={11} />
+              Sprint
+            </button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Sprint Gantt view */}
       {isSprintView && <SprintGanttView roadmapId={roadmapId} />}
 
       {/* Table */}
-      {isTableView && <div className="rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] bg-[var(--color-cards-card-background)]">
-
-        {/* Title bar */}
-        <div className="flex items-center justify-between px-3 py-1.5 border-b border-[var(--color-tables-table-header-stroke)]">
-          <div className="flex items-center gap-2">
-            {roadmap?.name && (
-              <span className="font-semibold text-[var(--color-fonts-font-color-primary)]">
-                {roadmap.name}
-              </span>
-            )}
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
-              {filteredRows.length} item{filteredRows.length !== 1 ? 's' : ''}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {/* View mode toggle */}
-            <div className="flex rounded-[var(--border-radius-button-small)] overflow-hidden border border-[var(--color-borders-border-primary)]">
-              <Tooltip text="Show issues as a hierarchical tree table">
-                <button
-                  onClick={() => setViewMode('table')}
-                  className={`flex items-center gap-1 px-2.5 py-1 text-xs transition-colors ${
-                    isTableView
-                      ? 'bg-[var(--color-buttons-button-primary)] text-white'
-                      : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
-                  }`}
-                >
-                  <Table2 size={11} />
-                  Table
-                </button>
-              </Tooltip>
-              <Tooltip text="Show features and user stories as a Gantt chart grouped by sprint">
-                <button
-                  onClick={() => setViewMode('sprint')}
-                  className={`flex items-center gap-1 px-2.5 py-1 text-xs transition-colors border-l border-[var(--color-borders-border-primary)] ${
-                    isSprintView
-                      ? 'bg-[var(--color-buttons-button-primary)] text-white'
-                      : 'bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)]'
-                  }`}
-                >
-                  <CalendarDays size={11} />
-                  Sprint
-                </button>
-              </Tooltip>
-            </div>
-            {isTableView && (
-              <>
-                <Tooltip text="Expand all Epics and Features to show full hierarchy">
-                  <button
-                    onClick={() => setExpandedKeys(new Set(allKeys(sortedRoots)))}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-                  >
-                    <ChevronsDown size={12} />
-                    Expand All
-                  </button>
-                </Tooltip>
-                <Tooltip text="Collapse all rows to show only top-level Epics">
-                  <button
-                    onClick={() => setExpandedKeys(new Set())}
-                    className="flex items-center gap-1 px-2.5 py-1 text-xs rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-                  >
-                    <ChevronsUp size={12} />
-                    Collapse All
-                  </button>
-                </Tooltip>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="overflow-auto max-h-[calc(100vh-18rem)]">
+      {isTableView && <TableCard
+        title={roadmap?.name ?? '…'}
+        subtitle={`${filteredRows.length} item${filteredRows.length !== 1 ? 's' : ''}`}
+        toolbar={
+          <>
+            <Tooltip text="Expand all Epics and Features to show full hierarchy" position="bottom">
+              <Button size="sm" variant="secondary" icon={<ChevronsDown size={12} />} onClick={() => setExpandedKeys(new Set(allKeys(sortedRoots)))}>
+                Expand All
+              </Button>
+            </Tooltip>
+            <Tooltip text="Collapse all rows to show only top-level Epics" position="bottom">
+              <Button size="sm" variant="secondary" icon={<ChevronsUp size={12} />} onClick={() => setExpandedKeys(new Set())}>
+                Collapse All
+              </Button>
+            </Tooltip>
+            <Tooltip text="Export visible rows to CSV" position="bottom">
+              <Button size="sm" variant="secondary" icon={<Download size={12} />} onClick={handleExport}>
+                Export
+              </Button>
+            </Tooltip>
+          </>
+        }
+      >
           <table className="w-full text-xs">
             <thead className="sticky top-0 z-10">
               <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
@@ -1109,7 +1087,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
                   onClick={() => toggleSort('issueKey')}
                 >
-                  <Tooltip text="Jira issue key">
+                  <Tooltip text="Jira issue key" position="bottom">
                     <span className="flex items-center gap-1">
                       Issue <SortIcon field="issueKey" sortField={sortField} sortDir={sortDir} />
                     </span>
@@ -1119,7 +1097,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none"
                   onClick={() => toggleSort('issueType')}
                 >
-                  <Tooltip text="Epic → Feature → User Story hierarchy level">
+                  <Tooltip text="Epic → Feature → User Story hierarchy level" position="bottom">
                     <span className="flex items-center gap-1">
                       Type <SortIcon field="issueType" sortField={sortField} sortDir={sortDir} />
                     </span>
@@ -1129,39 +1107,54 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none"
                   onClick={() => toggleSort('summary')}
                 >
-                  <Tooltip text="Issue title from Jira">
+                  <Tooltip text="Issue title from Jira" position="bottom">
                     <span className="flex items-center gap-1">
                       Name <SortIcon field="summary" sortField={sortField} sortDir={sortDir} />
                     </span>
                   </Tooltip>
                 </th>
-                <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
-                  <Tooltip text="Jira workflow status mapped to: New / In Progress / QA / Closed">
-                    <span>Status</span>
+                <th
+                  className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
+                  onClick={() => toggleSort('jiraStatus')}
+                >
+                  <Tooltip text="Jira workflow status mapped to: New / In Progress / QA / Closed" position="bottom">
+                    <span className="flex items-center gap-1">
+                      Status <SortIcon field="jiraStatus" sortField={sortField} sortDir={sortDir} />
+                    </span>
                   </Tooltip>
                 </th>
                 <th
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
                   onClick={() => toggleSort('readinessScore')}
                 >
-                  <Tooltip text="AI readiness score (0–100) — measures how well-defined this item is for its hierarchy level">
+                  <Tooltip text="AI readiness score (0–100) — measures how well-defined this item is for its hierarchy level" position="bottom">
                     <span className="flex items-center gap-1">
                       Readiness <SortIcon field="readinessScore" sortField={sortField} sortDir={sortDir} />
                     </span>
                   </Tooltip>
                 </th>
-                <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
-                  <Tooltip text="AI complexity estimate (0–100). Lower = simpler and less risky. Higher = more effort, uncertainty, or cross-team dependencies.">
-                    <span>Complexity</span>
+                <th
+                  className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
+                  onClick={() => toggleSort('complexityScore')}
+                >
+                  <Tooltip text="AI complexity estimate (0–100). Lower = simpler and less risky. Higher = more effort, uncertainty, or cross-team dependencies." position="bottom">
+                    <span className="flex items-center gap-1">
+                      Complexity <SortIcon field="complexityScore" sortField={sortField} sortDir={sortDir} />
+                    </span>
+                  </Tooltip>
+                </th>
+                <th
+                  className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
+                  onClick={() => toggleSort('aggregateScore')}
+                >
+                  <Tooltip text={"Weighted rollup of child readiness scores.\nFormula: Σ(child.readiness × child.complexity) / Σ(child.complexity)\nFalls back to simple average when all complexity = 0.\n0 when item has no children."} position="bottom">
+                    <span className="flex items-center gap-1">
+                      Aggregate <SortIcon field="aggregateScore" sortField={sortField} sortDir={sortDir} />
+                    </span>
                   </Tooltip>
                 </th>
                 <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
-                  <Tooltip text={"Weighted rollup of child readiness scores.\nFormula: Σ(child.readiness × child.complexity) / Σ(child.complexity)\nFalls back to simple average when all complexity = 0.\n0 when item has no children."}>
-                    <span>Aggregate</span>
-                  </Tooltip>
-                </th>
-                <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
-                  <Tooltip text="Ready when aggregate score ≥ threshold (default 70). Configured in system settings.">
+                  <Tooltip text="Ready when aggregate score ≥ threshold (default 70). Configured in system settings." position="bottom">
                     <span className="flex items-center gap-1">
                       <Truck size={11} />
                       Delivery
@@ -1169,12 +1162,12 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
                   </Tooltip>
                 </th>
                 <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
-                  <Tooltip text="Manual ACCEPTED or REMOVED status set by a user, bypassing the AI score">
+                  <Tooltip text="Manual ACCEPTED or REMOVED status set by a user, bypassing the AI score" position="bottom">
                     <span>Override</span>
                   </Tooltip>
                 </th>
                 <th className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
-                  <Tooltip text="Run AI review · Accept · Mark as removed">
+                  <Tooltip text="Run AI review · Accept · Mark as removed" position="bottom">
                     <span>Actions</span>
                   </Tooltip>
                 </th>
@@ -1222,8 +1215,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
               )}
             </tbody>
           </table>
-        </div>
-      </div>}
+      </TableCard>}
 
       {/* Review confirmation dialog */}
       {reviewConfirm && (

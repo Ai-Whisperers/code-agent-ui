@@ -20,7 +20,7 @@ interface RoadmapFormValues {
 }
 
 const INPUT_CLS =
-  'w-full px-3 py-2 text-sm rounded-[var(--border-radius-input)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-2 focus:ring-[var(--color-buttons-button-primary)]'
+  'w-full px-3 py-2 text-sm rounded bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-2 focus:ring-[var(--color-buttons-button-primary)]'
 
 const LABEL_CLS = 'block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1'
 
@@ -64,7 +64,7 @@ function RoadmapFormDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-6">
+      <div className="w-full max-w-md rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[var(--color-fonts-font-color-headings)] font-semibold">
             {initial?.name ? 'Edit Roadmap' : 'New Roadmap'}
@@ -118,7 +118,7 @@ function RoadmapFormDialog({
           <Tooltip text="Discard changes and close">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
+              className="px-4 py-2 text-sm rounded bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
             >
               Cancel
             </button>
@@ -130,7 +130,7 @@ function RoadmapFormDialog({
                 name: name.trim(), label: label.trim(),
                 epicIssuetype: epic.trim(), featureIssuetype: feature.trim(), userstoryIssuetype: story.trim(),
               })}
-              className="flex items-center gap-2 px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm rounded bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isPending && <Loader2 size={14} className="animate-spin" />}
               {initial?.name ? 'Save' : 'Create'}
@@ -184,7 +184,7 @@ function ProductLinkerDialog({ roadmap, onClose }: { roadmap: Roadmap; onClose: 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-5">
+      <div className="w-full max-w-md rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
@@ -328,10 +328,10 @@ export default function RoadmapsPage() {
         title="Roadmap"
         subtitle="Manage product roadmaps linked to Jira labels."
         actions={
-          <Tooltip text="Create a new roadmap linked to a Jira label">
+          <Tooltip text="Create a new roadmap linked to a Jira label" position="bottom">
             <button
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
+              className="flex items-center gap-2 px-4 py-2 rounded bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors"
             >
               <Plus size={15} />
               New Roadmap
@@ -343,7 +343,7 @@ export default function RoadmapsPage() {
       {isLoading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-20 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+            <div key={i} className="h-20 skeleton-shimmer rounded-lg" />
           ))}
         </div>
       ) : list.length === 0 ? (
@@ -357,7 +357,7 @@ export default function RoadmapsPage() {
           {list.map((rm) => (
             <div
               key={rm.id}
-              className="flex items-center justify-between gap-4 px-4 py-3 rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] hover:border-[var(--color-buttons-button-primary)] transition-colors cursor-pointer group"
+              className="flex items-center justify-between gap-4 px-4 py-3 rounded-lg bg-[var(--color-cards-card-background)] border border-[var(--color-borders-border-primary)] hover:border-[var(--color-buttons-button-primary)] transition-colors cursor-pointer group"
               onClick={() => navigate({ to: `/metrics/roadmap/${rm.id}` })}
             >
               <div className="flex items-center gap-3 min-w-0">
@@ -380,7 +380,7 @@ export default function RoadmapsPage() {
                 <Tooltip text="Link products — AI improvements will use the products' knowledge base & code index">
                   <button
                     onClick={() => setLinkTarget(rm)}
-                    className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-1.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Link2 size={14} />
                   </button>
@@ -388,7 +388,7 @@ export default function RoadmapsPage() {
                 <Tooltip text="Edit roadmap name, label and issue type mappings">
                   <button
                     onClick={() => setEditTarget(rm)}
-                    className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-1.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Pencil size={14} />
                   </button>
@@ -397,7 +397,7 @@ export default function RoadmapsPage() {
                 <Tooltip text="Delete this roadmap and all its synced items">
                   <button
                     onClick={() => setDeleteTarget(rm)}
-                    className="p-1.5 rounded-[var(--border-radius-button-small)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] hover:bg-[var(--color-tags-critical-background)] transition-colors opacity-0 group-hover:opacity-100"
+                    className="p-1.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] hover:bg-[var(--color-tags-critical-background)] transition-colors opacity-0 group-hover:opacity-100"
                   >
                     <Trash2 size={14} />
                   </button>
@@ -454,7 +454,7 @@ export default function RoadmapsPage() {
       )}
 
       {createMutation.isError && (
-        <div className="mt-4 flex items-center gap-2 p-3 rounded-[var(--border-radius-card)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm">
+        <div className="mt-4 flex items-center gap-2 p-3 rounded-lg bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm">
           <AlertTriangle size={15} />
           Failed to create roadmap. Please try again.
         </div>

@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/Button'
 
 interface ConfirmDialogProps {
   /** Dialog heading */
@@ -33,7 +33,7 @@ export function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-sm rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] shadow-xl p-6">
+      <div className="w-full max-w-sm rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
         <div className="flex items-start gap-3 mb-5">
           {icon && (
             <div
@@ -57,25 +57,18 @@ export function ConfirmDialog({
         </div>
 
         <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            disabled={isPending}
-            className="px-4 py-2 text-sm rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
-          >
+          <Button size="sm" variant="secondary" onClick={onCancel} disabled={isPending}>
             {cancelLabel}
-          </button>
-          <button
+          </Button>
+          <Button
+            size="sm"
+            variant={isDanger ? 'danger' : 'primary'}
+            loading={isPending}
             onClick={onConfirm}
             disabled={isPending}
-            className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-[var(--border-radius-button-small)] disabled:opacity-50 transition-opacity ${
-              isDanger
-                ? 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] hover:opacity-80'
-                : 'bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)]'
-            }`}
           >
-            {isPending && <Loader2 size={14} className="animate-spin" />}
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
