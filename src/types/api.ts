@@ -134,7 +134,7 @@ export interface PromptTemplate {
 
 // ---- Execution Plans ----
 
-export type PlanStatus = 'DRAFT' | 'APPROVED' | 'RUNNING' | 'EXECUTING' | 'COMPLETED' | 'FAILED'
+export type PlanStatus = 'DRAFT' | 'APPROVED' | 'EXECUTING' | 'PAUSED' | 'CANCELLED' | 'COMPLETED' | 'FAILED'
 
 export interface PlanStep {
   stepId: string
@@ -168,6 +168,8 @@ export interface ExecutionPlan {
   conversationId?: string
   markdownContent?: string
   workspacePath?: string
+  archived?: boolean
+  createdBy?: string
   planData?: {
     phases?: PlanPhase[]
   }

@@ -21,7 +21,7 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
     if (!phase.steps || phase.steps.length === 0) return 'pending'
     
     const stepStatuses = phase.steps.map(step => step.status)
-    const hasRunning = stepStatuses.some(status => status === 'RUNNING')
+    const hasRunning = stepStatuses.some(status => status === 'EXECUTING')
     const hasFailed = stepStatuses.some(status => status === 'FAILED')
     const allCompleted = stepStatuses.every(status => status === 'SUCCESS' || status === 'COMPLETED')
     
@@ -36,7 +36,7 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
       case 'SUCCESS':
       case 'COMPLETED':
         return <CheckCircle className="text-[var(--color-status-border-success)]" size={16} />
-      case 'RUNNING':
+      case 'EXECUTING':
         return <RefreshCw className="text-[var(--color-buttons-button-primary)] animate-spin" size={16} />
       case 'FAILED':
         return <XCircle className="text-[var(--color-status-border-critical)]" size={16} />
@@ -73,7 +73,7 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
         <h3 className="text-lg font-medium text-[var(--color-fonts-font-color-primary)]">
           Execution Progress
         </h3>
-        {isLive && plan.status === 'RUNNING' && (
+        {isLive && plan.status === 'EXECUTING' && (
           <div className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)]">
             <RefreshCw size={12} className="animate-spin" />
             Live updates
@@ -166,7 +166,7 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
                               )}
                               <span className={`text-xs font-medium ${
                                 step.status === 'SUCCESS' || step.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
-                                step.status === 'RUNNING' ? 'text-[var(--color-buttons-button-primary)]' :
+                                step.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
                                 step.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
                                 'text-[var(--color-fonts-font-color-support)]'
                               }`}>
@@ -192,12 +192,12 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
             Overall Progress
           </span>
           <div className="flex items-center gap-2">
-            {plan.status === 'RUNNING' && (
+            {plan.status === 'EXECUTING' && (
               <RefreshCw size={12} className="text-[var(--color-buttons-button-primary)] animate-spin" />
             )}
             <span className={`font-medium ${
               plan.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
-              plan.status === 'RUNNING' ? 'text-[var(--color-buttons-button-primary)]' :
+              plan.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
               plan.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
               'text-[var(--color-fonts-font-color-support)]'
             }`}>

@@ -32,8 +32,7 @@ export default function ExecutionControls({ planId, status, onAction }: Executio
     }
   }
 
-  // Only show controls for RUNNING or PAUSED plans
-  if (status !== 'RUNNING' && status !== 'PAUSED') {
+  if (status !== 'EXECUTING' && status !== 'PAUSED') {
     return null
   }
 
@@ -47,7 +46,7 @@ export default function ExecutionControls({ planId, status, onAction }: Executio
       </div>
 
       <div className="flex items-center gap-2">
-        {status === 'RUNNING' && (
+        {status === 'EXECUTING' && (
           <>
             <button
               onClick={() => handleAction('pause')}
@@ -147,7 +146,7 @@ export default function ExecutionControls({ planId, status, onAction }: Executio
 
       {/* Status Info */}
       <div className="text-xs text-[var(--color-fonts-font-color-support)]">
-        {status === 'RUNNING' && 'Plan is currently executing. You can pause or cancel at any time.'}
+        {status === 'EXECUTING' && 'Plan is currently executing. You can pause or cancel at any time.'}
         {status === 'PAUSED' && 'Plan execution is paused. Resume to continue or cancel to stop permanently.'}
       </div>
     </div>

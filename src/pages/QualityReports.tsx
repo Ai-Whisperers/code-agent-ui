@@ -359,7 +359,7 @@ function ReportDialog({
 
   const hasActivePlan = (Array.isArray(plans) ? plans : []).some(
     (p) =>
-      (p.status === 'RUNNING' || p.status === 'APPROVED') &&
+      (p.status === 'EXECUTING' || p.status === 'APPROVED') &&
       p.repoUrl === repoUrl,
   )
 

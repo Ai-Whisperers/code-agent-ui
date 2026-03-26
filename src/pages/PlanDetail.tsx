@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
-import { ArrowLeft, CheckCircle, Play, RefreshCw, ExternalLink, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Play, RefreshCw, ExternalLink, XCircle, FileText } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import ProgressTimeline from '@/components/plans/ProgressTimeline'
 import ExecutionControls from '@/components/plans/ExecutionControls'
+import { PlanStatusBadge } from '@/components/plans/PlanStatusBadge'
 import api from '@/lib/api'
 import type { ExecutionPlan } from '@/types/api'
 
@@ -17,12 +18,26 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
   const qc = useQueryClient()
   const [isLiveUpdating, setIsLiveUpdating] = useState(false)
   const eventSourceRef = useRef<EventSource | null>(null)
+  const [markdownDraft, setMarkdownDraft] = useState<string | null>(null)
 
   const { data: plan, isLoading } = useQuery<ExecutionPlan>({
     queryKey: ['plan', planId],
     queryFn: () => api.get(`/plans/${planId}`).then((r) => r.data),
-    refetchInterval: (q) => (q.state.data?.status === 'RUNNING' ? 5_000 : false),
+    refetchInterval: (q) => {
+      const status = q.state.data?.status
+      return status === 'EXECUTING' || status === 'PAUSED' ? 5_000 : false
+    },
   })
+
+  // Initialise markdown draft when plan loads or status changes to PAUSED
+  useEffect(() => {
+    if (plan?.status === 'PAUSED' && markdownDraft === null) {
+      setMarkdownDraft(plan.markdownContent ?? '')
+    }
+    if (plan?.status !== 'PAUSED') {
+      setMarkdownDraft(null)
+    }
+  }, [plan?.status, plan?.markdownContent, markdownDraft])
 
   const approveMutation = useMutation({
     mutationFn: () => api.post(`/plans/${planId}/approve`),
@@ -44,52 +59,50 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['plan', planId] }),
   })
 
-  // Handle execution control actions
+  const saveMarkdownMutation = useMutation({
+    mutationFn: (content: string) =>
+      api.patch(`/plans/${planId}/markdown`, { markdownContent: content }),
+  })
+
+  const replanMutation = useMutation({
+    mutationFn: async () => {
+      if (markdownDraft !== null) {
+        await api.patch(`/plans/${planId}/markdown`, { markdownContent: markdownDraft })
+      }
+      return api.post(`/plans/${planId}/replan`).then((r) => r.data)
+    },
+    onSuccess: () => {
+      setMarkdownDraft(null)
+      qc.invalidateQueries({ queryKey: ['plan', planId] })
+    },
+  })
+
   const handleExecutionAction = (_action: 'pause' | 'resume' | 'cancel', success: boolean) => {
     if (success) {
-      // Invalidate queries to refresh plan status
       qc.invalidateQueries({ queryKey: ['plan', planId] })
     }
   }
 
-  // SSE connection for real-time updates
+  // SSE for real-time updates while EXECUTING
   useEffect(() => {
-    const isExecuting = plan?.status === 'RUNNING' || plan?.status === 'EXECUTING'
-    
+    const isExecuting = plan?.status === 'EXECUTING'
+
     if (!plan || !isExecuting) {
-      // Clean up existing connection if plan is not executing
       if (eventSourceRef.current) {
         eventSourceRef.current.close()
         eventSourceRef.current = null
+        setIsLiveUpdating(false)
       }
       return
     }
 
-    // Only create SSE connection for executing plans
     if (!eventSourceRef.current) {
-      const eventSource = new EventSource(`/api/plans/${planId}/events`)
-      eventSourceRef.current = eventSource
-
-      eventSource.onopen = () => {
-        console.log('SSE connection opened for plan:', planId)
-        setIsLiveUpdating(true)
-      }
-
-      eventSource.onmessage = (event) => {
-        try {
-          const progressEvent = JSON.parse(event.data)
-          console.log('Plan progress event:', progressEvent)
-          
-          // Invalidate queries to refresh the plan data
-          qc.invalidateQueries({ queryKey: ['plan', planId] })
-        } catch (error) {
-          console.error('Failed to parse SSE event:', error)
-        }
-      }
-
-      eventSource.onerror = (error) => {
-        console.error('SSE connection error:', error)
-        eventSource.close()
+      const es = new EventSource(`/api/plans/${planId}/events`)
+      eventSourceRef.current = es
+      es.onopen = () => setIsLiveUpdating(true)
+      es.onmessage = () => qc.invalidateQueries({ queryKey: ['plan', planId] })
+      es.onerror = () => {
+        es.close()
         eventSourceRef.current = null
         setIsLiveUpdating(false)
       }
@@ -102,13 +115,6 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
       }
     }
   }, [plan, planId, qc])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      setIsLiveUpdating(false)
-    }
-  }, [])
 
   return (
     <main>
@@ -173,13 +179,23 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
           ))}
         </div>
       ) : plan ? (
-        <div className="space-y-5">
+        <div className="space-y-4">
           {/* Meta */}
-          <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Detail label="Status" value={plan.status} />
+          <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <Detail label="Status" value={<PlanStatusBadge status={plan.status} />} />
+              {plan.createdBy && <Detail label="Author" value={plan.createdBy} />}
               {plan.sourceRef && <Detail label="Source" value={plan.sourceRef} />}
-              {plan.repoUrl && <Detail label="Repository" value={plan.repoUrl} />}
+              {plan.repoUrl && (
+                <Detail
+                  label="Repository"
+                  value={
+                    <span className="truncate block max-w-[180px]" title={plan.repoUrl}>
+                      {plan.repoUrl.replace(/^https?:\/\//, '').replace(/\.git$/, '')}
+                    </span>
+                  }
+                />
+              )}
               {plan.targetBranch && <Detail label="Target Branch" value={plan.targetBranch} />}
               <Detail label="Created" value={new Date(plan.createdAt).toLocaleString()} />
               {plan.approvedAt && (
@@ -187,7 +203,7 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
               )}
             </div>
             {plan.summary && (
-              <div className="mt-4 pt-4 border-t border-[var(--color-cards-card-stroke)]">
+              <div className="mt-3 pt-3 border-t border-[var(--color-cards-card-stroke)]">
                 <p className="text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap">
                   {plan.summary}
                 </p>
@@ -197,111 +213,134 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
 
           {/* PR link */}
           {plan.prUrl && (
-            <div className="bg-[var(--color-status-neutral-background)] border border-[var(--color-status-border-neutral)] rounded-[var(--border-radius-card)] p-4">
+            <div className="bg-[var(--color-status-neutral-background)] border border-[var(--color-status-border-neutral)] rounded-[var(--border-radius-card)] p-3">
               <a
                 href={plan.prUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-2 text-sm font-medium text-[var(--color-fonts-font-color-brand)] hover:underline"
               >
-                <ExternalLink size={15} />
+                <ExternalLink size={14} />
                 View Pull Request
               </a>
             </div>
           )}
 
-          {/* Markdown content — shown when no structured phases exist */}
-          {(!plan.planData?.phases || plan.planData.phases.length === 0) && plan.markdownContent && (
-            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-              <div className="px-5 py-3 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
-                <h3>Plan</h3>
+          {/* PAUSED: markdown editor + replan */}
+          {plan.status === 'PAUSED' && (
+            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-tags-attention-background)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <FileText size={15} className="text-[var(--color-tags-font-attention)]" />
+                  <h3 className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+                    Edit Plan (Paused)
+                  </h3>
+                </div>
+                <button
+                  onClick={() => replanMutation.mutate()}
+                  disabled={replanMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-xs font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-60 transition-colors"
+                >
+                  {replanMutation.isPending ? (
+                    <RefreshCw size={12} className="animate-spin" />
+                  ) : (
+                    <Play size={12} />
+                  )}
+                  {replanMutation.isPending ? 'Replanning…' : 'Save & Replan'}
+                </button>
               </div>
-              <pre className="px-5 py-4 text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-mono overflow-x-auto">
-                {plan.markdownContent}
-              </pre>
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-2">
+                Edit the plan checklist below. Click "Save & Replan" to regenerate the execution steps and transition to APPROVED.
+              </p>
+              <textarea
+                value={markdownDraft ?? ''}
+                onChange={(e) => setMarkdownDraft(e.target.value)}
+                onBlur={() => {
+                  if (markdownDraft !== null) {
+                    saveMarkdownMutation.mutate(markdownDraft)
+                  }
+                }}
+                rows={12}
+                className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm font-mono text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-y"
+              />
+              {replanMutation.isError && (
+                <p className="text-xs text-[var(--color-status-border-critical)] mt-1">
+                  Replan failed — check that your markdown has at least one checklist item (<code>- [ ] …</code>).
+                </p>
+              )}
             </div>
           )}
 
-          {/* Enhanced Progress Timeline */}
+          {/* Progress / controls */}
           {plan.planData?.phases && plan.planData.phases.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2">
-                <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-6 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-                  <ProgressTimeline plan={plan} isLive={isLiveUpdating} />
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2 bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+                <ProgressTimeline plan={plan} isLive={isLiveUpdating} />
               </div>
-              <div className="lg:col-span-1 space-y-4">
-                {/* Execution Controls */}
+              <div className="lg:col-span-1 space-y-3">
                 <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-                  <ExecutionControls 
-                    planId={planId} 
-                    status={plan.status} 
+                  <ExecutionControls
+                    planId={planId}
+                    status={plan.status}
                     onAction={handleExecutionAction}
                   />
                 </div>
-                
-                {/* Plan Status Info */}
                 <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-                  <h4 className="text-sm font-medium text-[var(--color-fonts-font-color-primary)] mb-3">
-                    Status Information
+                  <h4 className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide mb-2">
+                    Stats
                   </h4>
-                  <div className="space-y-2 text-xs">
+                  <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-[var(--color-fonts-font-color-support)]">Current Status:</span>
-                      <span className={`font-medium ${
-                        plan.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
-                        plan.status === 'RUNNING' || plan.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
-                        plan.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
-                        'text-[var(--color-fonts-font-color-support)]'
-                      }`}>
-                        {plan.status}
-                      </span>
+                      <span className="text-[var(--color-fonts-font-color-support)]">Phases</span>
+                      <span>{plan.planData?.phases?.length ?? 0}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-[var(--color-fonts-font-color-support)]">Total Phases:</span>
-                      <span className="text-[var(--color-fonts-font-color-primary)]">
-                        {plan.planData?.phases?.length || 0}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-[var(--color-fonts-font-color-support)]">Total Steps:</span>
-                      <span className="text-[var(--color-fonts-font-color-primary)]">
-                        {plan.planData?.phases?.reduce((total, phase) => total + (phase.steps?.length || 0), 0) || 0}
+                      <span className="text-[var(--color-fonts-font-color-support)]">Steps</span>
+                      <span>
+                        {plan.planData?.phases?.reduce(
+                          (t, p) => t + (p.steps?.length ?? 0), 0,
+                        ) ?? 0}
                       </span>
                     </div>
                     {isLiveUpdating && (
-                      <div className="flex items-center gap-1.5 pt-2 border-t border-[var(--color-cards-card-stroke)]">
-                        <RefreshCw size={12} className="text-[var(--color-buttons-button-primary)] animate-spin" />
-                        <span className="text-[var(--color-buttons-button-primary)]">
-                          Live updates active
-                        </span>
+                      <div className="flex items-center gap-1 pt-1.5 border-t border-[var(--color-cards-card-stroke)]">
+                        <RefreshCw size={10} className="animate-spin text-[var(--color-buttons-button-primary)]" />
+                        <span className="text-[var(--color-buttons-button-primary)]">Live</span>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
             </div>
-          ) : (
-            /* Fallback for plans without structured phases */
-            <div className="space-y-4">
-              <ExecutionControls 
-                planId={planId} 
-                status={plan.status} 
+          ) : plan.markdownContent && plan.status !== 'PAUSED' ? (
+            <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+              <div className="px-4 py-2.5 bg-[var(--color-cards-small-section-background)] border-b border-[var(--color-cards-card-stroke)]">
+                <h3 className="text-sm font-medium">Plan</h3>
+              </div>
+              <pre className="px-4 py-3 text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-mono overflow-x-auto">
+                {plan.markdownContent}
+              </pre>
+            </div>
+          ) : plan.status !== 'PAUSED' ? (
+            <div className="space-y-3">
+              <ExecutionControls
+                planId={planId}
+                status={plan.status}
                 onAction={handleExecutionAction}
               />
             </div>
-          )}
+          ) : null}
 
-          {plan.status === 'RUNNING' && (
+          {plan.status === 'EXECUTING' && (
             <p className="text-xs text-[var(--color-fonts-font-color-support)] flex items-center gap-1.5">
-              <RefreshCw size={12} className="animate-spin" />
+              <RefreshCw size={11} className="animate-spin" />
               Plan is executing — auto-refreshing…
             </p>
           )}
 
           {plan.errorMessage && (
-            <div className="bg-[var(--color-status-critical-background)] border border-[var(--color-status-border-critical)] rounded-[var(--border-radius-card)] p-5">
-              <h3 className="mb-2 text-[var(--color-tags-font-critical)]">Error</h3>
+            <div className="bg-[var(--color-status-critical-background)] border border-[var(--color-status-border-critical)] rounded-[var(--border-radius-card)] p-4">
+              <h3 className="mb-2 text-sm font-medium text-[var(--color-tags-font-critical)]">Error</h3>
               <p className="text-sm text-[var(--color-tags-font-critical)] whitespace-pre-wrap font-mono">
                 {plan.errorMessage}
               </p>
@@ -318,7 +357,7 @@ export default function PlanDetail({ planId }: PlanDetailProps) {
 function Detail({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-1">{label}</p>
+      <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-0.5">{label}</p>
       <div className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">{value}</div>
     </div>
   )

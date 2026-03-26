@@ -66,7 +66,7 @@ export function PlanIndicator({
         return 'text-blue-600 dark:text-blue-400'
       case 'APPROVED':
         return 'text-green-600 dark:text-green-400'
-      case 'RUNNING':
+      case 'EXECUTING':
         return 'text-orange-600 dark:text-orange-400'
       case 'COMPLETED':
         return 'text-green-700 dark:text-green-300'
@@ -83,7 +83,7 @@ export function PlanIndicator({
         return 'Ready to implement'
       case 'APPROVED':
         return 'Approved - ready to execute'
-      case 'RUNNING':
+      case 'EXECUTING':
         return 'Executing...'
       case 'COMPLETED':
         return 'Completed'
@@ -160,7 +160,7 @@ export function PlanIndicator({
                 </button>
               )}
 
-              {(plan.status === 'RUNNING' || plan.status === 'APPROVED') && (
+              {(plan.status === 'EXECUTING' || plan.status === 'APPROVED') && (
                 <button
                   disabled
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-orange-100 dark:bg-orange-900/30 border border-orange-200 dark:border-orange-700 text-orange-700 dark:text-orange-300 text-xs font-medium opacity-75 cursor-not-allowed"
