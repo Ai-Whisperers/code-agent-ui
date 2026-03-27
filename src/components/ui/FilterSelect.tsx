@@ -25,10 +25,26 @@ export function FilterSelect({
   className,
 }: FilterSelectProps) {
   const [open, setOpen] = useState(false)
+  const [flip, setFlip] = useState({ x: false, y: false })
   const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
 
   const selected = options.find((o) => o.value === value)
   const isActive = Boolean(value)
+
+  function handleToggle() {
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      // Rough estimates: 220 px wide, 28 px per row + padding
+      const estW = 220
+      const estH = (options.length + 1) * 26 + 12
+      setFlip({
+        x: rect.left + estW > window.innerWidth,
+        y: rect.bottom + estH > window.innerHeight,
+      })
+    }
+    setOpen((v) => !v)
+  }
 
   // Close on outside click
   useEffect(() => {
@@ -48,12 +64,18 @@ export function FilterSelect({
 
   const hasDots = options.some((o) => o.dotClass)
 
+  const dropdownPositionClass = [
+    flip.y ? 'bottom-full mb-1' : 'top-full mt-1',
+    flip.x ? 'right-0'         : 'left-0',
+  ].join(' ')
+
   return (
     <div ref={ref} className={`relative ${className ?? ''}`}>
       {/* Trigger */}
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={handleToggle}
         className={`flex items-center gap-1 px-2 py-1 text-xs rounded border transition-all ${
           isActive
             ? 'bg-[var(--color-buttons-button-primary)] text-white border-transparent'
@@ -72,7 +94,7 @@ export function FilterSelect({
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 w-max min-w-full rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-hidden py-0.5">
+        <div className={`absolute ${dropdownPositionClass} z-50 w-max min-w-full rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-hidden py-0.5`}>
           {/* "All" / clear option */}
           <button
             type="button"
