@@ -39,6 +39,8 @@ export interface JobStatusResponse {
   filesChanged?: number
   linesChanged?: number
   queuePosition?: number
+  priority?: number
+  jiraKey?: string
 }
 
 export interface RunFixRequest {

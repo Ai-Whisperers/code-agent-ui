@@ -210,8 +210,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     id: 'agent',
     label: 'Agent Behaviour',
     settings: [
-      { key: 'run-fix.max-concurrent-jobs', label: 'Max Concurrent Jobs', description: 'Maximum number of fix/generate jobs running in parallel', defaultValue: '3', inputType: 'number', min: 1 },
-      { key: 'run-fix.max-queue-size', label: 'Max Queue Size', description: 'Maximum number of jobs that can wait in queue', defaultValue: '20', inputType: 'number', min: 1 },
+      { key: 'run-fix.max-queue-size', label: 'Max Queue Size', description: 'Maximum non-review jobs that can wait in the in-memory queue before being failed. Review jobs are always backed by the DB.', defaultValue: '20', inputType: 'number', min: 1 },
       { key: 'run-fix.blocked-paths', label: 'Blocked Paths', description: 'Comma-separated paths the agent is not allowed to modify', defaultValue: 'src/main/security,src/main/billing,.github,.env', inputType: 'textarea' },
       { key: 'run-fix.allowed-commands', label: 'Allowed Commands', description: 'Comma-separated shell commands the agent is permitted to run', inputType: 'textarea' },
       { key: 'run-fix.max-files-changed', label: 'Max Files Changed', description: 'Maximum number of files the agent may modify per job', defaultValue: '10', inputType: 'number', min: 1 },
@@ -306,7 +305,38 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'roadmap.jira.status-map.closed', label: 'Status Map: Closed', description: 'Comma-separated Jira statuses mapped to "Closed"', defaultValue: 'Done,Closed,Resolved', inputType: 'textarea' },
       { key: 'roadmap.delivery.readiness-threshold', label: 'Delivery Readiness Threshold', description: 'Minimum aggregate score (0–100) for an item to be marked "Ready for Delivery Team"', defaultValue: '70', inputType: 'number', min: 0, max: 100 },
       { key: 'roadmap.delivery.complexity-weight-enabled', label: 'Complexity-Weighted Aggregation', description: 'When enabled, child scores are weighted by their complexity score when rolling up to parent. Disable to use a simple average.', defaultValue: 'true', inputType: 'boolean' },
-      { key: 'roadmap.review.max-jobs-per-review-all', label: 'Max Jobs per Review-All', description: 'Maximum number of review jobs enqueued per review-all call (prevents queue flooding on large roadmaps)', defaultValue: '50', inputType: 'number', min: 1, max: 500 },
+    ],
+  },
+
+  // ── Job Queue ─────────────────────────────────────────────────────────────────
+  {
+    id: 'job-queue',
+    label: 'Job Queue',
+    settings: [
+      // Per-category concurrency
+      { key: 'job.concurrency.chat',        label: 'Chat: Max Concurrent',           defaultValue: '10', inputType: 'number', min: 1, description: 'Max parallel CHAT jobs' },
+      { key: 'job.concurrency.interactive', label: 'Interactive: Max Concurrent',     defaultValue: '10', inputType: 'number', min: 1, description: 'Max parallel REPLY / FIX_COMMENT / HOOK jobs' },
+      { key: 'job.concurrency.pr-work',     label: 'PR Work: Max Concurrent',         defaultValue: '8',  inputType: 'number', min: 1, description: 'Max parallel REVIEW / FIX_PR / FIX jobs' },
+      { key: 'job.concurrency.background',  label: 'Background: Max Concurrent',      defaultValue: '5',  inputType: 'number', min: 1, description: 'Max parallel METRICS / QUALITY_REPORT / SYNC_CONFLUENCE / GENERATE_* jobs' },
+      { key: 'job.concurrency.roadmap',     label: 'Roadmap Review: Max Concurrent',  defaultValue: '20', inputType: 'number', min: 1, description: 'Max parallel REVIEW_EPIC / REVIEW_FEATURE / REVIEW_USERSTORY jobs' },
+      // Per-type dispatch priorities
+      { key: 'job.priority.chat',            label: 'Priority: CHAT',            defaultValue: '100', inputType: 'number', min: 1, max: 100, description: 'Dispatch priority 1–100 (higher = first). CHAT: interactive user session.' },
+      { key: 'job.priority.reply',           label: 'Priority: REPLY',           defaultValue: '80',  inputType: 'number', min: 1, max: 100, description: 'Developer waiting on comment thread reply.' },
+      { key: 'job.priority.fix_comment',     label: 'Priority: FIX_COMMENT',     defaultValue: '75',  inputType: 'number', min: 1, max: 100, description: 'Similar to REPLY, user-facing.' },
+      { key: 'job.priority.review',          label: 'Priority: PR REVIEW',       defaultValue: '70',  inputType: 'number', min: 1, max: 100, description: 'PR review — developer blocked waiting.' },
+      { key: 'job.priority.fix_pr',          label: 'Priority: FIX_PR',          defaultValue: '70',  inputType: 'number', min: 1, max: 100, description: 'PR fix — developer blocked waiting.' },
+      { key: 'job.priority.fix',             label: 'Priority: FIX',             defaultValue: '60',  inputType: 'number', min: 1, max: 100, description: 'Developer-initiated code fix.' },
+      { key: 'job.priority.hook',            label: 'Priority: HOOK',            defaultValue: '50',  inputType: 'number', min: 1, max: 100, description: 'Automation trigger — async, webhook caller does not wait for result.' },
+      { key: 'job.priority.metrics',         label: 'Priority: METRICS',         defaultValue: '40',  inputType: 'number', min: 1, max: 100, description: 'Background analytics, no user waiting.' },
+      { key: 'job.priority.quality_report',  label: 'Priority: QUALITY_REPORT',  defaultValue: '35',  inputType: 'number', min: 1, max: 100, description: 'Scheduled background report.' },
+      { key: 'job.priority.sync_confluence', label: 'Priority: SYNC_CONFLUENCE', defaultValue: '30',  inputType: 'number', min: 1, max: 100, description: 'Background knowledge sync.' },
+      { key: 'job.priority.generate_tests',  label: 'Priority: GENERATE_TESTS',  defaultValue: '25',  inputType: 'number', min: 1, max: 100, description: 'Background test generation.' },
+      { key: 'job.priority.generate_docs',   label: 'Priority: GENERATE_DOCS',   defaultValue: '20',  inputType: 'number', min: 1, max: 100, description: 'Background doc generation.' },
+      { key: 'job.priority.review_epic',     label: 'Priority: REVIEW_EPIC',     defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
+      { key: 'job.priority.review_feature',  label: 'Priority: REVIEW_FEATURE',  defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
+      { key: 'job.priority.review_userstory',label: 'Priority: REVIEW_USERSTORY',defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
+      // Roadmap review queue refill
+      { key: 'roadmap.review.refill-batch-size', label: 'Roadmap Review: Refill Batch Size', defaultValue: '10', inputType: 'number', min: 1, description: 'Jobs submitted to in-memory queue per scheduler tick (10 s).' },
     ],
   },
 
@@ -340,7 +370,7 @@ const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
-  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Roadmap',          groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'security',        label: 'Security',         groupIds: ['security'] },

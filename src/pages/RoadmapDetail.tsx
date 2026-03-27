@@ -103,9 +103,6 @@ function findNode(nodes: TreeNode[], key: string): TreeNode | null {
   return null
 }
 
-function hasActiveJobs(items: RoadmapTreeItem[]): boolean {
-  return items.some((item) => !item.reviewedAt && !item.overrideStatus)
-}
 
 // ── Small reusable display components ────────────────────────────────────────
 
@@ -766,14 +763,17 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
     staleTime: 5 * 60 * 1000,
   })
 
+  const { data: activeReviewCount = 0 } = useQuery<number>({
+    queryKey: ['roadmap-active-reviews', roadmapId],
+    queryFn: () =>
+      api.get(`/roadmap/${roadmapId}/active-review-count`).then((r) => r.data?.count ?? 0).catch(() => 0),
+    refetchInterval: (q) => ((q.state.data ?? 0) > 0 ? 5_000 : 30_000),
+  })
+
   const { data: treeItems, isLoading } = useQuery<RoadmapTreeItem[]>({
     queryKey: ['roadmap-tree', roadmapId],
     queryFn: () => api.get(`/roadmap/${roadmapId}/tree`).then((r) => r.data).catch(() => []),
-    refetchInterval: (query) => {
-      const items = query.state.data
-      if (Array.isArray(items) && hasActiveJobs(items)) return 5_000
-      return 30_000
-    },
+    refetchInterval: activeReviewCount > 0 ? 5_000 : 30_000,
   })
 
   const items = Array.isArray(treeItems) ? treeItems : []
@@ -893,12 +893,18 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
   const reviewAllMutation = useMutation<unknown, Error, boolean>({
     mutationFn: (force: boolean) =>
       api.post(`/roadmap/${roadmapId}/review-all${force ? '?force=true' : ''}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roadmap-tree', roadmapId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roadmap-tree', roadmapId] })
+      qc.invalidateQueries({ queryKey: ['roadmap-active-reviews', roadmapId] })
+    },
   })
 
   const reviewOneMutation = useMutation({
     mutationFn: (issueKey: string) => api.post(`/roadmap/${roadmapId}/review/${issueKey}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['roadmap-tree', roadmapId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['roadmap-tree', roadmapId] })
+      qc.invalidateQueries({ queryKey: ['roadmap-active-reviews', roadmapId] })
+    },
   })
 
   const overrideMutation = useMutation({
@@ -919,8 +925,8 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
 
   const isTableView = viewMode === 'table'
   const isSprintView = viewMode === 'sprint'
-  const isPolling = items.length > 0 && hasActiveJobs(items)
-  const activeReviews = items.filter((i) => !i.reviewedAt && !i.overrideStatus).length
+  const isPolling = activeReviewCount > 0
+  const activeReviews = activeReviewCount
 
   return (
     <main>
