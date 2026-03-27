@@ -37,6 +37,8 @@ import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
 import RoadmapsPage from '@/pages/Roadmaps'
 import RoadmapDetail from '@/pages/RoadmapDetail'
+import ScopesPage from '@/pages/Scopes'
+import ScopeDetail from '@/pages/ScopeDetail'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
 
@@ -246,17 +248,32 @@ const auditLogRoute = createRoute({
 const roadmapsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/roadmap',
-  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
   component: RoadmapsPage,
 })
 
 const roadmapDetailRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/roadmap/$id',
-  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
   component: function RoadmapDetailRoute() {
     const { id } = roadmapDetailRoute.useParams()
     return <RoadmapDetail roadmapId={id} />
+  },
+})
+
+const scopesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/scope',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: ScopesPage,
+})
+
+const scopeDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/scope/$id',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function ScopeDetailRoute() {
+    const { id } = scopeDetailRoute.useParams()
+    return <ScopeDetail scopeId={id} />
   },
 })
 
@@ -298,6 +315,8 @@ const routeTree = rootRoute.addChildren([
     auditLogRoute,
     roadmapsRoute,
     roadmapDetailRoute,
+    scopesRoute,
+    scopeDetailRoute,
   ]),
   accessDeniedRoute,
   unauthenticatedRoute,

@@ -660,15 +660,18 @@ export interface WebhookAuditEntry {
   receivedAt: string
 }
 
-// ---- Roadmap ----
+// ---- Scope (formerly Roadmap) ----
 
 export type JiraReadinessStatus = 'New' | 'In Progress' | 'QA' | 'Closed'
 export type ItemOverrideStatus = 'ACCEPTED' | 'REMOVED'
 export type ReadinessLabel = 'poor' | 'needs_refinement' | 'ready_with_minor_improvements' | 'fully_ready'
 
-export interface Roadmap {
+export interface Scope {
   id: string
   name: string
+  /** Ordered list of Jira labels for this scope. */
+  labels: string[]
+  /** First label — backward compat convenience field returned by the API. */
   label: string
   epicIssuetype: string
   featureIssuetype: string
@@ -676,7 +679,17 @@ export interface Roadmap {
   createdAt: string
 }
 
-export interface RoadmapTreeItem {
+/** A single row in the live preview table returned by GET /scope/preview-labels */
+export interface LabelPreviewItem {
+  issueKey: string
+  summary: string
+  status?: string
+}
+
+/** @deprecated Use Scope */
+export type Roadmap = Scope
+
+export interface ScopeTreeItem {
   issueKey: string
   issueType: 'EPIC' | 'FEATURE' | 'USERSTORY'
   parentKey?: string
@@ -701,9 +714,14 @@ export interface RoadmapTreeItem {
   sprintName?: string
   sprintStart?: string
   sprintEnd?: string
+  /** True for virtual epics injected to group unparented features */
+  isVirtual?: boolean
 }
 
-export interface RoadmapSprintItem {
+/** @deprecated Use ScopeTreeItem */
+export type RoadmapTreeItem = ScopeTreeItem
+
+export interface ScopeSprintItem {
   issueKey: string
   issueType: 'FEATURE' | 'USERSTORY'
   summary: string
@@ -715,25 +733,37 @@ export interface RoadmapSprintItem {
   sprintEnd?: string
 }
 
-export interface RoadmapSprintGroup {
+/** @deprecated Use ScopeSprintItem */
+export type RoadmapSprintItem = ScopeSprintItem
+
+export interface ScopeSprintGroup {
   sprintName: string
   sprintStart?: string
   sprintEnd?: string
-  items: RoadmapSprintItem[]
+  items: ScopeSprintItem[]
 }
 
-export type RoadmapSprintView = RoadmapSprintGroup[]
+/** @deprecated Use ScopeSprintGroup */
+export type RoadmapSprintGroup = ScopeSprintGroup
 
-/** Minimal shape returned by GET /roadmap/{id}/products */
-export interface RoadmapLinkedProduct {
+export type ScopeSprintView = ScopeSprintGroup[]
+
+/** @deprecated Use ScopeSprintView */
+export type RoadmapSprintView = ScopeSprintView
+
+/** Minimal shape returned by GET /scope/{id}/products */
+export interface ScopeLinkedProduct {
   productId: string
   displayName: string
   customerId?: string
 }
 
-export interface RoadmapProposal {
+/** @deprecated Use ScopeLinkedProduct */
+export type RoadmapLinkedProduct = ScopeLinkedProduct
+
+export interface ScopeProposal {
   id: string
-  roadmapId: string
+  scopeId: string
   issueKey: string
   issueType: 'EPIC' | 'FEATURE' | 'USERSTORY'
   parentKey?: string
@@ -747,3 +777,6 @@ export interface RoadmapProposal {
   createdAt: string
   updatedAt: string
 }
+
+/** @deprecated Use ScopeProposal */
+export type RoadmapProposal = ScopeProposal

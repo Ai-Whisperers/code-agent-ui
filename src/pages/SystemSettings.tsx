@@ -295,10 +295,10 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
-  // ── Roadmap ───────────────────────────────────────────────────────────────────
+  // ── Scope (formerly Roadmap) ──────────────────────────────────────────────────
   {
     id: 'roadmap',
-    label: 'Roadmap Reviews',
+    label: 'Scope Reviews',
     settings: [
       { key: 'roadmap.review.model', label: 'Review Model', description: 'Claude model for Jira readiness reviews (leave blank to use primary model)', inputType: 'select', options: ['', ...CLAUDE_MODELS] },
       { key: 'roadmap.review.max-tokens', label: 'Max Tokens', description: 'Max output tokens for review responses', defaultValue: '4096', inputType: 'number', min: 512 },
@@ -324,7 +324,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'job.concurrency.interactive', label: 'Interactive: Max Concurrent',     defaultValue: '10', inputType: 'number', min: 1, description: 'Max parallel REPLY / FIX_COMMENT / HOOK jobs' },
       { key: 'job.concurrency.pr-work',     label: 'PR Work: Max Concurrent',         defaultValue: '8',  inputType: 'number', min: 1, description: 'Max parallel REVIEW / FIX_PR / FIX jobs' },
       { key: 'job.concurrency.background',  label: 'Background: Max Concurrent',      defaultValue: '5',  inputType: 'number', min: 1, description: 'Max parallel METRICS / QUALITY_REPORT / SYNC_CONFLUENCE / GENERATE_* jobs' },
-      { key: 'job.concurrency.roadmap',     label: 'Roadmap Review: Max Concurrent',  defaultValue: '20', inputType: 'number', min: 1, description: 'Max parallel REVIEW_EPIC / REVIEW_FEATURE / REVIEW_USERSTORY jobs' },
+      { key: 'job.concurrency.roadmap',     label: 'Scope Review: Max Concurrent',  defaultValue: '20', inputType: 'number', min: 1, description: 'Max parallel REVIEW_EPIC / REVIEW_FEATURE / REVIEW_USERSTORY jobs' },
       // Per-type dispatch priorities
       { key: 'job.priority.chat',            label: 'Priority: CHAT',            defaultValue: '100', inputType: 'number', min: 1, max: 100, description: 'Dispatch priority 1–100 (higher = first). CHAT: interactive user session.' },
       { key: 'job.priority.reply',           label: 'Priority: REPLY',           defaultValue: '80',  inputType: 'number', min: 1, max: 100, description: 'Developer waiting on comment thread reply.' },
@@ -338,11 +338,11 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'job.priority.sync_confluence', label: 'Priority: SYNC_CONFLUENCE', defaultValue: '30',  inputType: 'number', min: 1, max: 100, description: 'Background knowledge sync.' },
       { key: 'job.priority.generate_tests',  label: 'Priority: GENERATE_TESTS',  defaultValue: '25',  inputType: 'number', min: 1, max: 100, description: 'Background test generation.' },
       { key: 'job.priority.generate_docs',   label: 'Priority: GENERATE_DOCS',   defaultValue: '20',  inputType: 'number', min: 1, max: 100, description: 'Background doc generation.' },
-      { key: 'job.priority.review_epic',     label: 'Priority: REVIEW_EPIC',     defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
-      { key: 'job.priority.review_feature',  label: 'Priority: REVIEW_FEATURE',  defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
-      { key: 'job.priority.review_userstory',label: 'Priority: REVIEW_USERSTORY',defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch roadmap review — low urgency background work.' },
-      // Roadmap review queue refill
-      { key: 'roadmap.review.refill-batch-size', label: 'Roadmap Review: Refill Batch Size', defaultValue: '10', inputType: 'number', min: 1, description: 'Jobs submitted to in-memory queue per scheduler tick (10 s).' },
+      { key: 'job.priority.review_epic',     label: 'Priority: REVIEW_EPIC',     defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch scope review — low urgency background work.' },
+      { key: 'job.priority.review_feature',  label: 'Priority: REVIEW_FEATURE',  defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch scope review — low urgency background work.' },
+      { key: 'job.priority.review_userstory',label: 'Priority: REVIEW_USERSTORY',defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch scope review — low urgency background work.' },
+      // Scope review queue refill
+      { key: 'roadmap.review.refill-batch-size', label: 'Scope Review: Refill Batch Size', defaultValue: '10', inputType: 'number', min: 1, description: 'Jobs submitted to in-memory queue per scheduler tick (10 s).' },
     ],
   },
 
@@ -377,7 +377,7 @@ const TABS: TabDef[] = [
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
-  { id: 'roadmap',         label: 'Roadmap',          groupIds: ['roadmap'] },
+  { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'security',        label: 'Security',         groupIds: ['security'] },
 ]

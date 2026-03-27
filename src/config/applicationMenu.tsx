@@ -18,7 +18,7 @@ import {
   GitPullRequest,
   BotMessageSquare,
   ScrollText,
-  MapPin,
+  Target,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -85,21 +85,21 @@ export function ApplicationMenuItems(
       onClick: () => go('/plans'),
     },
     {
-      id: 'roadmap',
-      label: 'Roadmaps',
-      icon: <MapPin size={18} />,
-      path: '/metrics/roadmap',
-      isActive: currentPath.startsWith('/metrics/roadmap'),
+      id: 'scope',
+      label: 'Scopes',
+      icon: <Target size={18} />,
+      path: '/metrics/scope',
+      isActive: currentPath.startsWith('/metrics/scope'),
       type: 'item',
-      requiredPermission: 'VIEW_ROADMAP',
-      onClick: () => go('/metrics/roadmap'),
+      requiredPermission: 'VIEW_SCOPE',
+      onClick: () => go('/metrics/scope'),
     },
     {
       id: 'metrics-section',
       label: 'Metrics',
       type: 'parent',
       icon: <BarChart3 size={18} />,
-      isActive: currentPath.startsWith('/metrics') && !currentPath.startsWith('/metrics/roadmap') || currentPath.startsWith('/stats'),
+      isActive: currentPath.startsWith('/metrics') && !currentPath.startsWith('/metrics/scope') || currentPath.startsWith('/stats'),
       children: [
         {
           id: 'quality-reports',
