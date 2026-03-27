@@ -17,6 +17,7 @@ export interface LinkedAccountResponse {
 export interface SystemConfig {
   jira: { baseUrl: string; username: string }
   confluence: { baseUrl: string; username: string }
+  xray: { baseUrl: string }
 }
 
 export const mcpProfilesApi = {

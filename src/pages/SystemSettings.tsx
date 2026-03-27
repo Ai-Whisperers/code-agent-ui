@@ -157,6 +157,15 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'xray',
+    label: 'Xray Cloud (QA)',
+    settings: [
+      { key: 'xray.base-url', label: 'Base URL', description: 'Xray Cloud API base URL — US: https://xray.cloud.getxray.app, EU: https://eu.xray.cloud.getxray.app', defaultValue: 'https://xray.cloud.getxray.app' },
+      { key: 'xray.client-id', label: 'Client ID', description: 'Xray Cloud OAuth2 client ID (from Xray → API Keys)' },
+      { key: 'xray.client-secret', label: 'Client Secret', description: 'Xray Cloud OAuth2 client secret — used by schedulers and background jobs that run without a user context', isSecret: true },
+    ],
+  },
+  {
     id: 'mcp',
     label: 'MCP / Linked Accounts',
     settings: [
@@ -199,9 +208,6 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'AWS Tools',
     settings: [
       { key: 'tools.aws.enabled', label: 'AWS Tools Enabled', description: 'Enable AWS CloudWatch, ECS, and Metrics tools for the agent', defaultValue: 'true', inputType: 'boolean' },
-      { key: 'aws.region', label: 'Default Region', description: 'Default AWS region used when no region is specified in the product environment config', defaultValue: 'eu-central-1' },
-      { key: 'aws.access-key-id', label: 'Access Key ID', description: 'Explicit AWS access key for local development. Leave blank to use the ECS task role or default credential chain.', isSecret: true },
-      { key: 'aws.secret-access-key', label: 'Secret Access Key', description: 'Explicit AWS secret key for local development. Leave blank to use the ECS task role or default credential chain.', isSecret: true },
     ],
   },
 
@@ -369,7 +375,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Roadmap',          groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },

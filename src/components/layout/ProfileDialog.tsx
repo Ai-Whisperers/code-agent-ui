@@ -214,18 +214,254 @@ function RolesSection({ user }: { user: AuthUser }) {
 
 // ── Linked Accounts tab ───────────────────────────────────────────────────────
 
+const XRAY_REGIONS = [
+  { label: 'US (xray.cloud.getxray.app)', value: 'https://xray.cloud.getxray.app' },
+  { label: 'EU (eu.xray.cloud.getxray.app)', value: 'https://eu.xray.cloud.getxray.app' },
+]
+
 interface LinkFormState {
   baseUrl: string
   username: string
   apiToken: string
 }
 
-function LinkedAccountsSection({ user }: { user: AuthUser }) {
+// ── Per-provider card ─────────────────────────────────────────────────────────
+
+interface ProviderCardProps {
+  provider: 'jira' | 'xray'
+  linked: LinkedAccountResponse | null
+  user: AuthUser
+  systemConfig: SystemConfig | undefined
+}
+
+function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProps) {
   const qc = useQueryClient()
   const [isEditing, setIsEditing] = useState(false)
   const [form, setForm] = useState<LinkFormState>({ baseUrl: '', username: '', apiToken: '' })
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
 
+  const isXray = provider === 'xray'
+
+  const upsertMutation = useMutation({
+    mutationFn: (data: LinkFormState) =>
+      mcpProfilesApi.upsert(provider, { provider, ...data }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mcp-profiles'] })
+      setIsEditing(false)
+      setTestResult(null)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => mcpProfilesApi.delete(provider),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['mcp-profiles'] }),
+  })
+
+  const testMutation = useMutation({
+    mutationFn: () => mcpProfilesApi.testConnection(provider),
+    onSuccess: (result) => setTestResult(result),
+  })
+
+  const openEdit = () => {
+    setForm(
+      isXray
+        ? { baseUrl: linked?.baseUrl ?? XRAY_REGIONS[0].value, username: linked?.username ?? '', apiToken: '' }
+        : { baseUrl: linked?.baseUrl ?? systemConfig?.jira?.baseUrl ?? '', username: linked?.username ?? user.email ?? '', apiToken: '' },
+    )
+    setTestResult(null)
+    setIsEditing(true)
+  }
+
+  const linkedSummary = linked
+    ? isXray
+      ? `${XRAY_REGIONS.find((r) => r.value === linked.baseUrl)?.label.split(' ')[0] ?? 'Custom'} · ${linked.username}`
+      : `${linked.username} · ${linked.baseUrl}`
+    : null
+
+  const inputCls =
+    'w-full text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] bg-[var(--color-navigation-menu-card)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]'
+
+  return (
+    <div className="rounded-lg border border-[var(--color-navigation-menu-border)] overflow-hidden">
+      <div className="flex items-center gap-3 px-4 py-3">
+        {/* Logo */}
+        <div
+          className="w-8 h-8 shrink-0 rounded flex items-center justify-center"
+          style={{ backgroundColor: isXray ? '#6554C0' : '#0052CC' }}
+        >
+          <span className="text-white text-sm font-bold leading-none">{isXray ? 'X' : 'A'}</span>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+            {isXray ? 'Xray Cloud' : 'Atlassian'}
+          </p>
+          {linkedSummary ? (
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate">{linkedSummary}</p>
+          ) : (
+            <p className="text-xs text-[var(--color-fonts-font-color-support)]">Not linked</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {linked && !isEditing && (
+            <button
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--color-navigation-menu-border)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors disabled:opacity-50"
+            >
+              {testMutation.isPending ? <Loader2 size={11} className="animate-spin inline" /> : 'Test'}
+            </button>
+          )}
+          <button
+            onClick={() => (isEditing ? setIsEditing(false) : openEdit())}
+            className="p-1.5 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-[var(--color-icons-icon)]"
+            title={linked ? 'Edit' : 'Link account'}
+          >
+            <Link size={14} />
+          </button>
+          {linked && (
+            <button
+              onClick={() => deleteMutation.mutate()}
+              disabled={deleteMutation.isPending}
+              className="p-1.5 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-[var(--color-status-text-critical)] disabled:opacity-50"
+              title="Unlink"
+            >
+              <Unlink size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Test result */}
+      {testResult && !isEditing && (
+        <div
+          className={`border-t border-[var(--color-navigation-menu-border)] px-4 py-2 text-xs flex items-center gap-1.5 ${
+            testResult.success ? 'text-[var(--color-status-text-active)]' : 'text-[var(--color-status-text-critical)]'
+          }`}
+        >
+          {testResult.success ? <Check size={12} /> : <AlertCircle size={12} />}
+          {testResult.message}
+        </div>
+      )}
+
+      {/* Edit form */}
+      {isEditing && (
+        <div className="border-t border-[var(--color-navigation-menu-border)] px-4 py-4 space-y-3 bg-[var(--color-page-background)]">
+          {isXray ? (
+            <>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Region</label>
+                <select
+                  value={form.baseUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                  className={inputCls}
+                >
+                  {XRAY_REGIONS.map((r) => (
+                    <option key={r.value} value={r.value}>{r.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Client ID</label>
+                <input
+                  type="text"
+                  placeholder="Xray Cloud Client ID"
+                  value={form.username}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Client Secret</label>
+                <input
+                  type="password"
+                  placeholder={linked ? '(leave blank to keep existing)' : 'Xray Cloud Client Secret'}
+                  value={form.apiToken}
+                  onChange={(e) => setForm((f) => ({ ...f, apiToken: e.target.value }))}
+                  className={inputCls}
+                />
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                  Generate at{' '}
+                  <a
+                    href="https://docs.getxray.app/display/XRAYCLOUD/Global+Settings%3A+API+Keys"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:text-[var(--color-fonts-font-color-primary)]"
+                  >
+                    Xray API Keys settings
+                  </a>
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Base URL</label>
+                <input
+                  type="url"
+                  placeholder="https://yourcompany.atlassian.net"
+                  value={form.baseUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Username / email</label>
+                <input
+                  type="text"
+                  placeholder="you@yourcompany.com"
+                  value={form.username}
+                  onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">API token</label>
+                <input
+                  type="password"
+                  placeholder="Atlassian API token"
+                  value={form.apiToken}
+                  onChange={(e) => setForm((f) => ({ ...f, apiToken: e.target.value }))}
+                  className={inputCls}
+                />
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                  Generate one at{' '}
+                  <a
+                    href="https://id.atlassian.com/manage-profile/security/api-tokens"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline hover:text-[var(--color-fonts-font-color-primary)]"
+                  >
+                    id.atlassian.com
+                  </a>
+                </p>
+              </div>
+            </>
+          )}
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              onClick={() => setIsEditing(false)}
+              className="text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => upsertMutation.mutate(form)}
+              disabled={upsertMutation.isPending || !form.baseUrl || !form.username || (!linked && !form.apiToken)}
+              className="text-sm px-3 py-1.5 rounded bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {upsertMutation.isPending && <Loader2 size={12} className="animate-spin" />}
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LinkedAccountsSection({ user }: { user: AuthUser }) {
   const { data: accounts = [], isLoading } = useQuery<LinkedAccountResponse[]>({
     queryKey: ['mcp-profiles'],
     queryFn: () => mcpProfilesApi.list().catch(() => []),
@@ -237,37 +473,8 @@ function LinkedAccountsSection({ user }: { user: AuthUser }) {
     staleTime: 5 * 60 * 1000,
   })
 
-  const upsertMutation = useMutation({
-    mutationFn: (data: LinkFormState) =>
-      mcpProfilesApi.upsert('jira', { provider: 'jira', ...data }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['mcp-profiles'] })
-      setIsEditing(false)
-      setTestResult(null)
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: () => mcpProfilesApi.delete('jira'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['mcp-profiles'] }),
-  })
-
-  const testMutation = useMutation({
-    mutationFn: () => mcpProfilesApi.testConnection('jira'),
-    onSuccess: (result) => setTestResult(result),
-  })
-
-  const linked = accounts.find((a) => a.provider === 'jira') ?? null
-
-  const openEdit = () => {
-    setForm({
-      baseUrl: linked?.baseUrl ?? systemConfig?.jira?.baseUrl ?? '',
-      username: linked?.username ?? user.email ?? '',
-      apiToken: '',
-    })
-    setTestResult(null)
-    setIsEditing(true)
-  }
+  const jiraLinked = accounts.find((a) => a.provider === 'jira') ?? null
+  const xrayLinked = accounts.find((a) => a.provider === 'xray') ?? null
 
   if (isLoading) {
     return (
@@ -280,127 +487,10 @@ function LinkedAccountsSection({ user }: { user: AuthUser }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--color-fonts-font-color-support)]">
-        Link your Atlassian account so the AI can search, create and update Jira issues on your behalf.
+        Link your personal accounts so the AI can interact with Jira, Confluence, and Xray on your behalf.
       </p>
-
-      {/* Status card */}
-      <div className="rounded-lg border border-[var(--color-navigation-menu-border)] overflow-hidden">
-        <div className="flex items-center gap-3 px-4 py-3">
-          {/* Atlassian "A" logomark */}
-          <div className="w-8 h-8 shrink-0 rounded bg-[#0052CC] flex items-center justify-center">
-            <span className="text-white text-sm font-bold leading-none">A</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">Atlassian</p>
-            {linked ? (
-              <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate">
-                {linked.username} · {linked.baseUrl}
-              </p>
-            ) : (
-              <p className="text-xs text-[var(--color-fonts-font-color-support)]">Not linked</p>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 shrink-0">
-            {linked && !isEditing && (
-              <button
-                onClick={() => testMutation.mutate()}
-                disabled={testMutation.isPending}
-                className="text-xs px-2.5 py-1 rounded border border-[var(--color-navigation-menu-border)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors disabled:opacity-50"
-              >
-                {testMutation.isPending ? <Loader2 size={11} className="animate-spin inline" /> : 'Test'}
-              </button>
-            )}
-            <button
-              onClick={() => isEditing ? setIsEditing(false) : openEdit()}
-              className="p-1.5 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-[var(--color-icons-icon)]"
-              title={linked ? 'Edit' : 'Link account'}
-            >
-              <Link size={14} />
-            </button>
-            {linked && (
-              <button
-                onClick={() => deleteMutation.mutate()}
-                disabled={deleteMutation.isPending}
-                className="p-1.5 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-[var(--color-status-text-critical)] disabled:opacity-50"
-                title="Unlink"
-              >
-                <Unlink size={14} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Test result */}
-        {testResult && !isEditing && (
-          <div className={`border-t border-[var(--color-navigation-menu-border)] px-4 py-2 text-xs flex items-center gap-1.5 ${testResult.success ? 'text-[var(--color-status-text-active)]' : 'text-[var(--color-status-text-critical)]'}`}>
-            {testResult.success ? <Check size={12} /> : <AlertCircle size={12} />}
-            {testResult.message}
-          </div>
-        )}
-
-        {/* Edit form */}
-        {isEditing && (
-          <div className="border-t border-[var(--color-navigation-menu-border)] px-4 py-4 space-y-3 bg-[var(--color-page-background)]">
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Base URL</label>
-              <input
-                type="url"
-                placeholder="https://yourcompany.atlassian.net"
-                value={form.baseUrl}
-                onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                className="w-full text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] bg-[var(--color-navigation-menu-card)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Username / email</label>
-              <input
-                type="text"
-                placeholder="you@yourcompany.com"
-                value={form.username}
-                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
-                className="w-full text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] bg-[var(--color-navigation-menu-card)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">API token</label>
-              <input
-                type="password"
-                placeholder="Atlassian API token"
-                value={form.apiToken}
-                onChange={(e) => setForm((f) => ({ ...f, apiToken: e.target.value }))}
-                className="w-full text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] bg-[var(--color-navigation-menu-card)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-              />
-              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
-                Generate one at{' '}
-                <a
-                  href="https://id.atlassian.com/manage-profile/security/api-tokens"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="underline hover:text-[var(--color-fonts-font-color-primary)]"
-                >
-                  id.atlassian.com
-                </a>
-              </p>
-            </div>
-            <div className="flex gap-2 justify-end pt-1">
-              <button
-                onClick={() => setIsEditing(false)}
-                className="text-sm px-3 py-1.5 rounded border border-[var(--color-navigation-menu-border)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => upsertMutation.mutate(form)}
-                disabled={upsertMutation.isPending || !form.baseUrl || !form.username || !form.apiToken}
-                className="text-sm px-3 py-1.5 rounded bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {upsertMutation.isPending && <Loader2 size={12} className="animate-spin" />}
-                Save
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <ProviderCard provider="jira" linked={jiraLinked} user={user} systemConfig={systemConfig} />
+      <ProviderCard provider="xray" linked={xrayLinked} user={user} systemConfig={systemConfig} />
     </div>
   )
 }

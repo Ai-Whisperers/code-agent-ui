@@ -33,7 +33,6 @@ import SystemSettingsPage from '@/pages/SystemSettings'
 import KnowledgeIndexPage from '@/pages/KnowledgeIndex'
 import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
-import McpProfilesPage from '@/pages/McpProfiles'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
 import RoadmapsPage from '@/pages/Roadmaps'
@@ -230,12 +229,6 @@ const chatConvRoute = createRoute({
   component: ChatPage,
 })
 
-const mcpProfilesRoute = createRoute({
-  getParentRoute: () => layoutRoute,
-  path: '/settings/mcp-profiles',
-  component: McpProfilesPage,
-})
-
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
@@ -301,7 +294,6 @@ const routeTree = rootRoute.addChildren([
     customersRoute,
     chatRoute,
     chatConvRoute,
-    mcpProfilesRoute,
     webhookAuditRoute,
     auditLogRoute,
     roadmapsRoute,
