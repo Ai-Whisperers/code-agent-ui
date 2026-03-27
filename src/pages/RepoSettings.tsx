@@ -208,7 +208,7 @@ export default function RepoSettingsPage() {
         }
       >
         <table className="w-full text-xs">
-          <thead className="sticky top-[33px] z-10 bg-[var(--color-cards-card-background)]">
+          <thead className="sticky top-0 z-10 bg-[var(--color-cards-card-background)]">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)]">
               {([
                 { label: 'Workspace',   tip: 'Git workspace slug' },

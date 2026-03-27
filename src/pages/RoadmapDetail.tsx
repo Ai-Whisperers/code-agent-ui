@@ -31,6 +31,8 @@ import { FilterSelect } from '@/components/ui/FilterSelect'
 import { Input } from '@/components/ui/Input'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { TableCard } from '@/components/ui/TableCard'
+import { Breadcrumb } from '@/components/ui/Breadcrumb'
+import type { BreadcrumbItem } from '@/components/ui/Breadcrumb'
 import { ReadinessBadge } from '@/components/roadmap/ReadinessBadge'
 import { SprintGanttView } from '@/components/roadmap/SprintGanttView'
 import { ProposalModal } from '@/components/roadmap/ProposalModal'
@@ -140,14 +142,15 @@ function ScoreBar({ score, title, reversed }: { score?: number; title?: string; 
   const color = reversed
     ? (score >= 70 ? 'bg-red-500' : score >= 40 ? 'bg-yellow-500' : 'bg-green-500')
     : (score >= 70 ? 'bg-green-500' : score >= 40 ? 'bg-yellow-500' : 'bg-red-500')
-  return (
-    <div className="flex items-center gap-1.5" title={title}>
+  const bar = (
+    <div className="flex items-center gap-1.5">
       <div className="w-12 h-1 rounded-full bg-[var(--color-borders-border-primary)]">
         <div className={`h-1 rounded-full ${color}`} style={{ width: `${score}%` }} />
       </div>
       <span>{score}</span>
     </div>
   )
+  return title ? <Tooltip text={title} position="bottom">{bar}</Tooltip> : bar
 }
 
 function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
@@ -389,6 +392,7 @@ const TYPE_BG: Record<string, string> = {
 function ItemDetailPanel({
   node,
   roadmapId,
+  items,
   onClose,
   onReview,
   onAccept,
@@ -399,6 +403,7 @@ function ItemDetailPanel({
 }: {
   node: TreeNode
   roadmapId: string
+  items: RoadmapTreeItem[]
   onClose: () => void
   onReview: () => void
   onAccept: () => void
@@ -439,42 +444,79 @@ function ItemDetailPanel({
   return (
     <aside className="fixed inset-y-0 right-0 z-50 w-[420px] flex flex-col bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] shadow-2xl overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)] shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {jiraLink(node.issueKey) ? (
-            <a
-              href={jiraLink(node.issueKey)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)] hover:underline"
-              onClick={(e) => e.stopPropagation()}
+      <div className="shrink-0 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)]">
+        {/* Main row: key · type · stale · close */}
+        <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {jiraLink(node.issueKey) ? (
+              <a
+                href={jiraLink(node.issueKey)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)] hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {node.issueKey}
+              </a>
+            ) : (
+              <span className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">
+                {node.issueKey}
+              </span>
+            )}
+            {isRefreshing && <Loader2 size={11} className="animate-spin text-[var(--color-fonts-font-color-support)] shrink-0" />}
+            <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[node.issueType] ?? ''}`}>
+              {TYPE_LABEL[node.issueType] ?? node.issueType}
+            </span>
+            {node.isStale && !isOverridden && (
+              <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+                stale
+              </span>
+            )}
+          </div>
+          <Tooltip text="Close panel (Esc)">
+            <button
+              onClick={onClose}
+              className="shrink-0 p-1 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background)] transition-colors"
+              aria-label="Close"
             >
-              {node.issueKey}
-            </a>
-          ) : (
-            <span className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">
-              {node.issueKey}
-            </span>
-          )}
-          {isRefreshing && <Loader2 size={11} className="animate-spin text-[var(--color-fonts-font-color-support)] shrink-0" />}
-          <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[node.issueType] ?? ''}`}>
-            {TYPE_LABEL[node.issueType] ?? node.issueType}
-          </span>
-          {node.isStale && !isOverridden && (
-            <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
-              stale
-            </span>
-          )}
+              <X size={15} />
+            </button>
+          </Tooltip>
         </div>
-        <Tooltip text="Close panel (Esc)">
-          <button
-            onClick={onClose}
-            className="shrink-0 p-1 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background)] transition-colors"
-            aria-label="Close"
-          >
-            <X size={15} />
-          </button>
-        </Tooltip>
+
+        {/* Hierarchy breadcrumb — current → parent → grandparent (most specific first) */}
+        {(() => {
+          const gpNode     = node.grandparentKey ? items.find((i) => i.issueKey === node.grandparentKey) : undefined
+          const pNode      = node.parentKey      ? items.find((i) => i.issueKey === node.parentKey)      : undefined
+          const parentType = node.issueType === 'USERSTORY' ? 'FEATURE' : 'EPIC'
+
+          const crumbs: BreadcrumbItem[] = [
+            {
+              label:   node.issueKey,
+              badge:   { text: TYPE_LABEL[node.issueType] ?? node.issueType, className: TYPE_BG[node.issueType] ?? '' },
+              tooltip: node.summary,
+              href:    jiraLink(node.issueKey) ?? undefined,
+            },
+            ...(node.parentKey ? [{
+              label:   node.parentKey,
+              badge:   { text: TYPE_LABEL[parentType], className: TYPE_BG[parentType] },
+              tooltip: pNode?.summary,
+              href:    jiraLink(node.parentKey) ?? undefined,
+            }] : []),
+            ...(node.grandparentKey ? [{
+              label:   node.grandparentKey,
+              badge:   { text: TYPE_LABEL['EPIC'], className: TYPE_BG['EPIC'] },
+              tooltip: gpNode?.summary,
+              href:    jiraLink(node.grandparentKey) ?? undefined,
+            }] : []),
+          ]
+
+          return (
+            <div className="px-4 pb-2.5">
+              <Breadcrumb items={crumbs} />
+            </div>
+          )
+        })()}
       </div>
 
       {/* Scrollable body */}
@@ -524,23 +566,35 @@ function ItemDetailPanel({
           </div>
         </section>
 
-        {/* Scores */}
+        {/* Scores — three columns side by side */}
         <section>
           <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">Scores</p>
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--color-fonts-font-color-support)] w-20 shrink-0">Readiness</span>
-              {node.readinessScore != null
-                ? <ReadinessBadge label={node.readinessLabel} score={node.readinessScore} showScore />
-                : <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Readiness</p>
+              <ScoreBar
+                score={node.readinessScore}
+                title={[
+                  { poor: 'Poor', needs_refinement: 'Needs Refinement', ready_with_minor_improvements: 'Minor Improvements', fully_ready: 'Fully Ready' }[node.readinessLabel as string],
+                  node.readinessScore != null && `Score: ${node.readinessScore}`,
+                  'Higher is better',
+                ].filter(Boolean).join('\n')}
+              />
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--color-fonts-font-color-support)] w-20 shrink-0">Complexity</span>
-              <ScoreBar score={node.complexityScore} reversed />
+            <div>
+              <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Complexity</p>
+              <ScoreBar
+                score={node.complexityScore}
+                reversed
+                title={node.complexityScore != null ? `Complexity: ${node.complexityScore}\nHigher means more complex` : undefined}
+              />
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-[var(--color-fonts-font-color-support)] w-20 shrink-0">Aggregate</span>
-              <ScoreBar score={node.aggregateScore} />
+            <div>
+              <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Aggregate</p>
+              <ScoreBar
+                score={node.aggregateScore}
+                title={node.aggregateScore != null ? `Aggregate: ${node.aggregateScore}\nOverall readiness score` : undefined}
+              />
             </div>
           </div>
         </section>
@@ -588,42 +642,6 @@ function ItemDetailPanel({
           </section>
         )}
 
-        {/* Hierarchy */}
-        {(node.parentKey || node.grandparentKey) && (
-          <section>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1.5">Hierarchy</p>
-            <div className="space-y-1.5">
-              {node.grandparentKey && (
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG['EPIC']}`}>
-                    {TYPE_LABEL['EPIC']}
-                  </span>
-                  {jiraLink(node.grandparentKey) ? (
-                    <a href={jiraLink(node.grandparentKey)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-[var(--color-fonts-font-color-brand)] hover:underline">
-                      {node.grandparentKey}
-                    </a>
-                  ) : (
-                    <span className="font-mono text-xs text-[var(--color-fonts-font-color-brand)]">{node.grandparentKey}</span>
-                  )}
-                </div>
-              )}
-              {node.parentKey && (
-                <div className="flex items-center gap-2">
-                  <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[node.issueType === 'USERSTORY' ? 'FEATURE' : 'EPIC']}`}>
-                    {TYPE_LABEL[node.issueType === 'USERSTORY' ? 'FEATURE' : 'EPIC']}
-                  </span>
-                  {jiraLink(node.parentKey) ? (
-                    <a href={jiraLink(node.parentKey)} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-[var(--color-fonts-font-color-brand)] hover:underline">
-                      {node.parentKey}
-                    </a>
-                  ) : (
-                    <span className="font-mono text-xs text-[var(--color-fonts-font-color-brand)]">{node.parentKey}</span>
-                  )}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
       </div>
 
       {/* Footer actions */}
@@ -1068,6 +1086,10 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
         </div>
       </div>
 
+      {/* Content area: table/gantt + non-modal detail panel side by side */}
+      <div className="flex items-start">
+        <div className="flex-1 min-w-0">
+
       {/* Sprint Gantt view */}
       {isSprintView && <SprintGanttView roadmapId={roadmapId} />}
 
@@ -1096,7 +1118,7 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
         }
       >
           <table className="w-full text-xs">
-            <thead className="sticky top-[33px] z-10">
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
                 <th
                   className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
@@ -1232,6 +1254,27 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
           </table>
       </TableCard>}
 
+        </div>{/* end flex-1 table column */}
+
+        {/* Non-modal detail panel — sticky alongside the table */}
+        {selectedKey && selectedNode && (
+          <div className="w-[420px] shrink-0 sticky top-0 self-start h-screen overflow-hidden">
+            <ItemDetailPanel
+              node={selectedNode}
+              roadmapId={roadmapId}
+              items={items}
+              onClose={() => setSelectedKey(null)}
+              onReview={() => reviewOneMutation.mutate(selectedNode.issueKey)}
+              onAccept={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'ACCEPTED' })}
+              onRemove={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'REMOVED' })}
+              onClearOverride={() => clearOverrideMutation.mutate(selectedNode.issueKey)}
+              isReviewing={reviewOneMutation.isPending && reviewOneMutation.variables === selectedNode.issueKey}
+              isRefreshing={refreshMutation.isPending && refreshMutation.variables === selectedNode.issueKey}
+            />
+          </div>
+        )}
+      </div>{/* end flex row */}
+
       {/* Review confirmation dialog */}
       {reviewConfirm && (
         <ReviewConfirmDialog
@@ -1248,27 +1291,6 @@ export default function RoadmapDetail({ roadmapId }: { roadmapId: string }) {
           }}
           onCancel={() => setReviewConfirm(null)}
         />
-      )}
-
-      {/* Detail panel */}
-      {selectedKey && selectedNode && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/20"
-            onClick={() => setSelectedKey(null)}
-          />
-          <ItemDetailPanel
-            node={selectedNode}
-            roadmapId={roadmapId}
-            onClose={() => setSelectedKey(null)}
-            onReview={() => reviewOneMutation.mutate(selectedNode.issueKey)}
-            onAccept={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'ACCEPTED' })}
-            onRemove={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'REMOVED' })}
-            onClearOverride={() => clearOverrideMutation.mutate(selectedNode.issueKey)}
-            isReviewing={reviewOneMutation.isPending && reviewOneMutation.variables === selectedNode.issueKey}
-            isRefreshing={refreshMutation.isPending && refreshMutation.variables === selectedNode.issueKey}
-          />
-        </>
       )}
     </main>
   )

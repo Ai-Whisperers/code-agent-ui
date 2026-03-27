@@ -221,7 +221,7 @@ export default function MemoriesPage() {
         subtitle={isLoading ? '…' : `${filtered.length} of ${list.length} entries`}
       >
         <table className="w-full text-xs">
-          <thead className="sticky top-[33px] z-10">
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               <th className="text-left px-4 py-2 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide w-36">
                 <Tooltip text="Git workspace slug" position="bottom">Workspace</Tooltip>

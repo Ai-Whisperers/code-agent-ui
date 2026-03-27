@@ -104,7 +104,7 @@ export default function QualityReportsPage() {
         subtitle={`${rows.length} repo${rows.length !== 1 ? 's' : ''}`}
       >
         <table className="w-full text-xs">
-          <thead className="sticky top-[33px] z-10">
+          <thead className="sticky top-0 z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {([
                 { label: 'Workspace',        tip: 'Git workspace slug' },
