@@ -165,7 +165,7 @@ export default function DeveloperScorecardPage() {
   const chartHeight = Math.max(120, aggregated.length * 32)
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Developer Scorecard"
         subtitle="Per-developer PR review quality metrics across repositories."
@@ -218,6 +218,7 @@ export default function DeveloperScorecardPage() {
 
       {/* Table */}
       <TableCard
+        className="flex-1 min-h-0"
         title="Developers"
         subtitle={`${allRows.length} developer${allRows.length !== 1 ? 's' : ''}`}
       >

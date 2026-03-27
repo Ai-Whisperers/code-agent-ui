@@ -5,7 +5,12 @@ interface TableCardProps {
   subtitle?: string
   /** Toolbar content rendered on the right of the title bar */
   toolbar?: React.ReactNode
-  /** Max height CSS value for the scrollable body (default: calc(100vh - 18rem)) */
+  /**
+   * Controls the scrollable body height.
+   * - `'none'` (default): fills available flex space when the card is a flex child;
+   *   renders at natural height otherwise.
+   * - Any CSS length string (e.g. `'400px'`): applied as `max-height`.
+   */
   maxHeight?: string
   className?: string
   children: React.ReactNode
@@ -15,18 +20,20 @@ export function TableCard({
   title,
   subtitle,
   toolbar,
-  maxHeight = 'calc(100vh - 18rem)',
+  maxHeight = 'none',
   className = '',
   children,
 }: TableCardProps) {
+  const isFill = maxHeight === 'none'
+
   return (
     <div
-      className={`rounded-lg border border-[var(--color-cards-card-stroke)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] bg-[var(--color-cards-card-background)] ${className}`}
+      className={`rounded-lg border border-[var(--color-cards-card-stroke)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] bg-[var(--color-cards-card-background)] ${isFill ? 'flex flex-col' : ''} ${className}`}
     >
       {/* Title bar — intentionally outside the scroll container so it always spans
           the card width and is never displaced by horizontal table scrolling.
           Consumers that add a sticky <thead> should use top-0 (no offset needed). */}
-      <div className="flex items-center gap-3 px-3 py-1.5 border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
+      <div className="shrink-0 flex items-center gap-3 px-3 py-1.5 border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
         <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] truncate">
             {title}
@@ -46,8 +53,13 @@ export function TableCard({
       </div>
 
       {/* Scrollable body — title bar is above this container, so horizontal
-          scrolling of wide tables never affects the toolbar position. */}
-      <div className="overflow-auto" style={{ maxHeight }}>
+          scrolling of wide tables never affects the toolbar position.
+          In fill mode (maxHeight === 'none') the body stretches to consume all
+          remaining flex space; in explicit-height mode a max-height is applied. */}
+      <div
+        className={`overflow-auto ${isFill ? 'flex-1 min-h-0' : ''}`}
+        style={!isFill ? { maxHeight } : undefined}
+      >
         {children}
       </div>
     </div>

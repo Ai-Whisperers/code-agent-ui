@@ -190,7 +190,7 @@ export default function WebhookAuditLogPage() {
   const actions = [...new Set(entries.map((e) => e.action))].sort()
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Webhook Audit Log"
         subtitle="All incoming webhook events received by the agent."
@@ -243,6 +243,7 @@ export default function WebhookAuditLogPage() {
 
       {/* Table */}
       <TableCard
+        className="flex-1 min-h-0"
         title="Webhook Events"
         subtitle={isLoading ? '…' : `${filtered.length}${filtered.length !== entries.length ? ` of ${entries.length}` : ''} event${filtered.length !== 1 ? 's' : ''}`}
       >

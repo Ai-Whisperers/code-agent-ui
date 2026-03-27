@@ -53,10 +53,11 @@ export default function ReviewMetricsPage() {
   const isLoading = reposLoading || metricQueries.some((q) => q.isLoading)
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader title="Review Metrics" subtitle="AI code review quality metrics per repository." />
 
       <TableCard
+        className="flex-1 min-h-0"
         title="Repositories"
         subtitle={`${rows.length} repo${rows.length !== 1 ? 's' : ''}`}
       >

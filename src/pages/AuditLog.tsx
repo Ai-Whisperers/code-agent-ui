@@ -199,7 +199,7 @@ export default function AuditLogPage() {
     'px-2 py-1 text-sm rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]'
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Audit Log"
         subtitle="Record of administrative and operational actions performed within the application."
@@ -256,6 +256,7 @@ export default function AuditLogPage() {
 
       {/* Table */}
       <TableCard
+        className="flex-1 min-h-0"
         title="Audit Log"
         subtitle={isLoading ? '…' : `${filtered.length}${filtered.length !== entries.length ? ` of ${entries.length}` : ''} event${filtered.length !== 1 ? 's' : ''}`}
       >

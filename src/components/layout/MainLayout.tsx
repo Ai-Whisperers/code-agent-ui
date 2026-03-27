@@ -58,8 +58,8 @@ export default function MainLayout() {
       {/* Desktop layout */}
       <div className="hidden md:flex h-screen overflow-hidden">
         <SideBar user={user} />
-        <main className="flex-1 overflow-y-auto bg-[var(--color-page-background)]">
-          <div className="px-8 py-6">
+        <main className="flex-1 flex flex-col overflow-hidden bg-[var(--color-page-background)]">
+          <div className="flex-1 min-h-0 overflow-y-auto flex flex-col px-8 py-6">
             <Outlet />
           </div>
         </main>

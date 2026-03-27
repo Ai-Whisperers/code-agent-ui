@@ -51,7 +51,7 @@ export default function Jobs() {
   const list = Array.isArray(jobs) ? jobs : []
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Jobs"
         subtitle="Monitor and manage all agent jobs."
@@ -71,6 +71,7 @@ export default function Jobs() {
 
       {/* Table */}
       <TableCard
+        className="flex-1 min-h-0"
         title="Jobs"
         subtitle={list.length > 0 ? `${list.length} ${list.length === 1 ? 'job' : 'jobs'}` : undefined}
         toolbar={

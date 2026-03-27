@@ -173,7 +173,7 @@ export default function MemoriesPage() {
   })
 
   return (
-    <main>
+    <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Memories"
         subtitle="Agent-generated memories used to personalise AI behaviour per repository."
@@ -217,6 +217,7 @@ export default function MemoriesPage() {
 
       {/* Table */}
       <TableCard
+        className="flex-1 min-h-0"
         title="Memories"
         subtitle={isLoading ? '…' : `${filtered.length} of ${list.length} entries`}
       >
