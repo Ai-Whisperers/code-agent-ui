@@ -256,7 +256,7 @@ function ReviewConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
+      <div className="w-full max-w-[548px] rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
 
         {/* Header */}
         <div className="flex items-start gap-3 mb-5">
@@ -631,14 +631,27 @@ function ItemDetailPanel({
 
       {/* Footer actions */}
       <div className="shrink-0 border-t border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)]">
-        {/* Primary action row */}
-        <div className="flex items-center gap-1 px-3 py-2 border-b border-[var(--color-borders-border-primary)]">
+        <div className="flex items-center gap-1 px-3 py-2">
           {isOverridden ? (
-            <Tooltip text="Remove override and re-enable AI-based scoring">
-              <Button size="xs" variant="secondary" icon={<RotateCcw size={11} />} onClick={onClearOverride}>
-                Undo Override
-              </Button>
-            </Tooltip>
+            <>
+              <Tooltip text="Remove override and re-enable AI-based scoring">
+                <Button size="xs" variant="secondary" icon={<RotateCcw size={11} />} onClick={onClearOverride}>
+                  Undo Override
+                </Button>
+              </Tooltip>
+              <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Button
+                  size="xs"
+                  variant="ai"
+                  loading={improveMutation.isPending}
+                  icon={<Wand2 size={11} />}
+                  onClick={() => improveMutation.mutate()}
+                  disabled={improveMutation.isPending}
+                >
+                  {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                </Button>
+              </Tooltip>
+            </>
           ) : (
             <>
               <Tooltip text="Run AI readiness & complexity review for this issue">
@@ -646,7 +659,19 @@ function ItemDetailPanel({
                   Review
                 </Button>
               </Tooltip>
-              <div className="w-px h-4 bg-[var(--color-borders-border-primary)] mx-0.5" />
+              <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Button
+                  size="xs"
+                  variant="ai"
+                  loading={improveMutation.isPending}
+                  icon={<Wand2 size={11} />}
+                  onClick={() => improveMutation.mutate()}
+                  disabled={improveMutation.isPending}
+                >
+                  {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                </Button>
+              </Tooltip>
+              <div className="ml-auto w-px h-4 bg-[var(--color-borders-border-primary)] mx-0.5" />
               <Tooltip text="Mark as Accepted — override AI score, include in delivery metrics">
                 <Button size="xs" variant="success" icon={<CheckCircle2 size={11} />} onClick={onAccept}>
                   Accept
@@ -659,22 +684,6 @@ function ItemDetailPanel({
               </Tooltip>
             </>
           )}
-        </div>
-
-        {/* AI row */}
-        <div className="flex items-center gap-2 px-3 py-2">
-          <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
-            <Button
-              size="xs"
-              variant="ai"
-              loading={improveMutation.isPending}
-              icon={<Wand2 size={11} />}
-              onClick={() => improveMutation.mutate()}
-              disabled={improveMutation.isPending}
-            >
-              {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
-            </Button>
-          </Tooltip>
 
           {draftCount > 0 && (
             <Tooltip text="View or edit AI-generated improvement proposals">

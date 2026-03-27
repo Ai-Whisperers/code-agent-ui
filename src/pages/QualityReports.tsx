@@ -8,7 +8,7 @@ import {
   PointElement,
   LineElement,
   Title,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
   Filler,
 } from 'chart.js'
@@ -22,7 +22,7 @@ import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
 import type { QualityReport, RepoSettings, LatestVersionsResponse, ExecutionPlan } from '@/types/api'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
 
 const CHART_OPTIONS = {
   responsive: true,

@@ -5,7 +5,7 @@ import {
   LinearScale,
   BarElement,
   Title,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
 } from 'chart.js'
 import { Bar } from 'react-chartjs-2'
@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 import type { AiCallSummary, AiCallDailyStat, AiCallRecord } from '@/types/api'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend)
 
 // Pricing per million tokens (USD). Matches Anthropic's published rates.
 const MODEL_PRICING: Record<string, { input: number; output: number; cacheWrite: number; cacheRead: number }> = {

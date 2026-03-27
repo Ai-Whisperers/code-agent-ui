@@ -9,7 +9,7 @@ import {
   LinearScale,
   BarElement,
   ArcElement,
-  Tooltip,
+  Tooltip as ChartTooltip,
   Legend,
 } from 'chart.js'
 import { Bar, Doughnut } from 'react-chartjs-2'
@@ -17,7 +17,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import api from '@/lib/api'
 import type { DeveloperScorecard, DeveloperEntry, RepoSettings } from '@/types/api'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, ChartTooltip, Legend)
 
 const PERIOD_OPTIONS = [
   { label: '7 days',   value: 7   },
