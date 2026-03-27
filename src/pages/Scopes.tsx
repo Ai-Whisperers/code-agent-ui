@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   Plus, Trash2, Target, Loader2, AlertTriangle, Pencil, X, Settings2, Link2,
-  ExternalLink, Info,
+  ExternalLink,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
