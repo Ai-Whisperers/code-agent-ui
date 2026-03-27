@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
 import { Button } from '@/components/ui/Button'
@@ -35,6 +35,19 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['job', jobId] }),
   })
 
+  const cancelMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${jobId}/cancel`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['job', jobId] }),
+  })
+
+  const rerunMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${jobId}/rerun`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      navigate({ to: '/jobs' })
+    },
+  })
+
   return (
     <main>
       <PageHeader
@@ -62,6 +75,28 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                   Reject
                 </Button>
               </>
+            )}
+            {(job?.status === 'PENDING' || job?.status === 'QUEUED') && (
+              <Button
+                variant="danger"
+                size="lg"
+                icon={<Ban size={15} />}
+                loading={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate()}
+              >
+                Cancel
+              </Button>
+            )}
+            {(job?.status === 'FAILED' || job?.status === 'SUCCESS') && (
+              <Button
+                variant="primary"
+                size="lg"
+                icon={<RotateCcw size={15} />}
+                loading={rerunMutation.isPending}
+                onClick={() => rerunMutation.mutate()}
+              >
+                Rerun
+              </Button>
             )}
             <Button
               variant="ghost"

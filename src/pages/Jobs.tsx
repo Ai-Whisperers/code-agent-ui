@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Plus, RefreshCw, ExternalLink, CheckCircle, XCircle } from 'lucide-react'
+import { Plus, RefreshCw, ExternalLink, CheckCircle, XCircle, Ban, RotateCcw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
 import { Button } from '@/components/ui/Button'
@@ -57,10 +57,14 @@ export default function Jobs() {
         subtitle="Monitor and manage all agent jobs."
         actions={
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="md" icon={<RefreshCw size={16} />} onClick={() => refetch()} title="Refresh" />
-            <Button variant="primary" size="lg" icon={<Plus size={15} />} onClick={() => navigate({ to: '/jobs/new' })}>
-              New Job
-            </Button>
+            <Tooltip text="Refresh job list">
+              <Button variant="ghost" size="md" icon={<RefreshCw size={16} />} onClick={() => refetch()} />
+            </Tooltip>
+            <Tooltip text="Submit a new agent job">
+              <Button variant="primary" size="lg" icon={<Plus size={15} />} onClick={() => navigate({ to: '/jobs/new' })}>
+                New Job
+              </Button>
+            </Tooltip>
           </div>
         }
       />
@@ -148,6 +152,16 @@ function JobRow({ job, isEven }: { job: JobStatusResponse; isEven: boolean }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
   })
 
+  const cancelMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${job.jobId}/cancel`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+
+  const rerunMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${job.jobId}/rerun`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+  })
+
   return (
     <tr
       className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
@@ -191,26 +205,52 @@ function JobRow({ job, isEven }: { job: JobStatusResponse; isEven: boolean }) {
         ) : null}
       </td>
       <td className="px-3 py-1.5 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-        {job.status === 'AWAITING_APPROVAL' && (
-          <div className="flex items-center gap-1">
-            <Button
-              variant="success"
-              size="xs"
-              icon={<CheckCircle size={14} />}
-              loading={approveMutation.isPending}
-              onClick={() => approveMutation.mutate()}
-              title="Approve"
-            />
-            <Button
-              variant="danger"
-              size="xs"
-              icon={<XCircle size={14} />}
-              loading={rejectMutation.isPending}
-              onClick={() => rejectMutation.mutate()}
-              title="Reject"
-            />
-          </div>
-        )}
+        <div className="flex items-center gap-1">
+          {job.status === 'AWAITING_APPROVAL' && (
+            <>
+              <Tooltip text="Approve and merge PR">
+                <Button
+                  variant="success"
+                  size="xs"
+                  icon={<CheckCircle size={14} />}
+                  loading={approveMutation.isPending}
+                  onClick={() => approveMutation.mutate()}
+                />
+              </Tooltip>
+              <Tooltip text="Reject and decline PR">
+                <Button
+                  variant="danger"
+                  size="xs"
+                  icon={<XCircle size={14} />}
+                  loading={rejectMutation.isPending}
+                  onClick={() => rejectMutation.mutate()}
+                />
+              </Tooltip>
+            </>
+          )}
+          {(job.status === 'PENDING' || job.status === 'QUEUED') && (
+            <Tooltip text="Cancel this job">
+              <Button
+                variant="danger"
+                size="xs"
+                icon={<Ban size={14} />}
+                loading={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate()}
+              />
+            </Tooltip>
+          )}
+          {(job.status === 'FAILED' || job.status === 'SUCCESS') && (
+            <Tooltip text="Rerun this job">
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={<RotateCcw size={14} />}
+                loading={rerunMutation.isPending}
+                onClick={() => rerunMutation.mutate()}
+              />
+            </Tooltip>
+          )}
+        </div>
       </td>
     </tr>
   )
