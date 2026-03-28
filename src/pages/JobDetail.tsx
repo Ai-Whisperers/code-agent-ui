@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -271,6 +271,29 @@ function fmtTokens(n: number) {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 }
 
+function truncateText(text: string | null, len: number): string {
+  if (!text) return '—'
+  const s = text.replace(/\s+/g, ' ').trim()
+  return s.length > len ? s.slice(0, len) + '…' : s
+}
+
+const TOOL_COLORS = [
+  'text-blue-400 bg-blue-400/10',
+  'text-violet-400 bg-violet-400/10',
+  'text-amber-400 bg-amber-400/10',
+  'text-emerald-400 bg-emerald-400/10',
+  'text-rose-400 bg-rose-400/10',
+  'text-cyan-400 bg-cyan-400/10',
+  'text-orange-400 bg-orange-400/10',
+  'text-indigo-400 bg-indigo-400/10',
+]
+
+function toolColor(name: string): string {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  return TOOL_COLORS[h % TOOL_COLORS.length]
+}
+
 function fmtDuration(ms: number) {
   if (ms < 1000) return `${ms}ms`
   return `${(ms / 1000).toFixed(1)}s`
@@ -352,53 +375,92 @@ function AiCallsCard({ aiData, isLoading, isActive, onViewCall }: AiCallsCardPro
               </tr>
             )
             : calls.map((call, i) => (
-              <tr
-                key={call.id}
-                className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors ${
-                  i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
-                }`}
-              >
-                <td className="px-3 py-1.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
-                  {call.iteration}
-                </td>
-                <td className="px-3 py-1.5 font-mono text-[11px]">{call.model}</td>
-                <td className="px-3 py-1.5 tabular-nums">{fmtTokens(call.inputTokens)}</td>
-                <td className="px-3 py-1.5 tabular-nums">{fmtTokens(call.outputTokens)}</td>
-                <td className="px-3 py-1.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
-                  {fmtTokens(call.cacheReadInputTokens ?? call.cacheReadTokens ?? 0)}
-                </td>
-                <td className="px-3 py-1.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
-                  {fmtTokens(call.cacheCreationInputTokens ?? call.cacheWriteTokens ?? 0)}
-                </td>
-                <td className="px-3 py-1.5 max-w-[160px] truncate text-[var(--color-fonts-font-color-support)]">
-                  {call.toolNames ?? '—'}
-                </td>
-                <td className="px-3 py-1.5 tabular-nums">{fmtDuration(call.durationMs)}</td>
-                <td className="px-3 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                  {call.stopReason ?? '—'}
-                </td>
-                <td className="px-3 py-1.5">
-                  {call.isError ? (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]">
-                      Error
-                    </span>
-                  ) : (
-                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
-                      OK
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-1.5">
-                  <Tooltip text="View prompt & response">
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      icon={<Eye size={13} />}
-                      onClick={() => onViewCall(call)}
-                    />
-                  </Tooltip>
-                </td>
-              </tr>
+              <Fragment key={call.id}>
+                <tr
+                  className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors ${
+                    i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
+                  }`}
+                >
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
+                    {call.iteration}
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5 font-mono text-[11px]">{call.model}</td>
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums">{fmtTokens(call.inputTokens)}</td>
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums">{fmtTokens(call.outputTokens)}</td>
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
+                    {fmtTokens(call.cacheReadInputTokens ?? call.cacheReadTokens ?? 0)}
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums text-[var(--color-fonts-font-color-support)]">
+                    {fmtTokens(call.cacheCreationInputTokens ?? call.cacheWriteTokens ?? 0)}
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5">
+                    {call.toolNames
+                      ? (
+                        <div className="flex flex-wrap gap-0.5">
+                          {call.toolNames.split(',').map(t => t.trim()).filter(Boolean).map(tool => (
+                            <span key={tool} className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${toolColor(tool)}`}>
+                              {tool}
+                            </span>
+                          ))}
+                        </div>
+                      )
+                      : <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+                    }
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5 tabular-nums">{fmtDuration(call.durationMs)}</td>
+                  <td className="px-3 pt-1.5 pb-0.5 text-[var(--color-fonts-font-color-support)]">
+                    {call.stopReason ?? '—'}
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5">
+                    {call.isError ? (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]">
+                        Error
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+                        OK
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 pt-1.5 pb-0.5">
+                    <Tooltip text="View prompt & response">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Eye size={13} />}
+                        onClick={() => onViewCall(call)}
+                      />
+                    </Tooltip>
+                  </td>
+                </tr>
+                <tr
+                  className={`border-b border-[var(--color-tables-table-cell-stroke)] ${
+                    i % 2 === 0 ? 'bg-[var(--color-tables-table-row-a)]' : ''
+                  }`}
+                >
+                  <td colSpan={AI_CALL_HEADERS.length} className="px-3 pb-1.5 pt-0 overflow-hidden max-w-0 w-full">
+                    {call.isError && call.errorMessage ? (
+                      <div className="flex items-center gap-2 w-full pl-4">
+                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-tags-font-critical)]">
+                          Error
+                        </span>
+                        <span className="truncate text-[11px] font-mono text-[var(--color-tags-font-critical)] opacity-80">
+                          {call.errorMessage}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 w-full pl-4 opacity-55">
+                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+                          Output
+                        </span>
+                        <span className="truncate text-[11px] font-mono text-[var(--color-fonts-font-color-primary)]">
+                          {call.responseText ?? '—'}
+                        </span>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              </Fragment>
             ))}
         </tbody>
       </table>
