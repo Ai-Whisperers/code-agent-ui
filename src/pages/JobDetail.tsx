@@ -1,65 +1,36 @@
-import { useState, useCallback, useRef, Fragment, useMemo, useEffect } from 'react'
+import { useState, useCallback, useRef, Fragment, useMemo, useEffect, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-// Language registrations (tree-shaken — only loaded languages are bundled)
-import langTypescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
-import langJsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
-import langJava from 'react-syntax-highlighter/dist/esm/languages/prism/java'
-import langCsharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp'
-import langPython from 'react-syntax-highlighter/dist/esm/languages/prism/python'
-import langPhp from 'react-syntax-highlighter/dist/esm/languages/prism/php'
-import langGo from 'react-syntax-highlighter/dist/esm/languages/prism/go'
-import langRust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
-import langKotlin from 'react-syntax-highlighter/dist/esm/languages/prism/kotlin'
-import langSwift from 'react-syntax-highlighter/dist/esm/languages/prism/swift'
-import langRuby from 'react-syntax-highlighter/dist/esm/languages/prism/ruby'
-import langScala from 'react-syntax-highlighter/dist/esm/languages/prism/scala'
-import langCpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp'
-import langC from 'react-syntax-highlighter/dist/esm/languages/prism/c'
-import langBash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
-import langSql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
-import langJson from 'react-syntax-highlighter/dist/esm/languages/prism/json'
-import langYaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
-import langMarkdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
-import langCss from 'react-syntax-highlighter/dist/esm/languages/prism/css'
-import langXml from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
-SyntaxHighlighter.registerLanguage('typescript', langTypescript)
-SyntaxHighlighter.registerLanguage('tsx', langJsx)
-SyntaxHighlighter.registerLanguage('jsx', langJsx)
-SyntaxHighlighter.registerLanguage('javascript', langJsx)
-SyntaxHighlighter.registerLanguage('java', langJava)
-SyntaxHighlighter.registerLanguage('csharp', langCsharp)
-SyntaxHighlighter.registerLanguage('python', langPython)
-SyntaxHighlighter.registerLanguage('php', langPhp)
-SyntaxHighlighter.registerLanguage('go', langGo)
-SyntaxHighlighter.registerLanguage('rust', langRust)
-SyntaxHighlighter.registerLanguage('kotlin', langKotlin)
-SyntaxHighlighter.registerLanguage('swift', langSwift)
-SyntaxHighlighter.registerLanguage('ruby', langRuby)
-SyntaxHighlighter.registerLanguage('scala', langScala)
-SyntaxHighlighter.registerLanguage('cpp', langCpp)
-SyntaxHighlighter.registerLanguage('c', langC)
-SyntaxHighlighter.registerLanguage('bash', langBash)
-SyntaxHighlighter.registerLanguage('sql', langSql)
-SyntaxHighlighter.registerLanguage('json', langJson)
-SyntaxHighlighter.registerLanguage('yaml', langYaml)
-SyntaxHighlighter.registerLanguage('markdown', langMarkdown)
-SyntaxHighlighter.registerLanguage('css', langCss)
-SyntaxHighlighter.registerLanguage('xml', langXml)
-SyntaxHighlighter.registerLanguage('html', langXml)
-
-const HIGHLIGHT_STYLE = {
-  ...oneDark,
-  'pre[class*="language-"]': { ...oneDark['pre[class*="language-"]'], background: 'transparent', margin: 0, padding: 0 },
-  'code[class*="language-"]': { ...oneDark['code[class*="language-"]'], background: 'transparent' },
-}
+import Prism from 'prismjs'
+// Language registrations — load base/dependency grammars first
+import 'prismjs/components/prism-markup'   // must precede php, markdown (embeds HTML)
+import 'prismjs/components/prism-css'      // must precede markup-templating dependents
+import 'prismjs/components/prism-c'        // must precede cpp
+import 'prismjs/components/prism-javascript' // must precede typescript, jsx, php
+import 'prismjs/components/prism-markup-templating' // must precede php
+import 'prismjs/components/prism-cpp'
+import 'prismjs/components/prism-typescript'
+import 'prismjs/components/prism-jsx'
+import 'prismjs/components/prism-java'
+import 'prismjs/components/prism-csharp'
+import 'prismjs/components/prism-python'
+import 'prismjs/components/prism-php'
+import 'prismjs/components/prism-go'
+import 'prismjs/components/prism-rust'
+import 'prismjs/components/prism-kotlin'
+import 'prismjs/components/prism-swift'
+import 'prismjs/components/prism-ruby'
+import 'prismjs/components/prism-scala'
+import 'prismjs/components/prism-bash'
+import 'prismjs/components/prism-sql'
+import 'prismjs/components/prism-json'
+import 'prismjs/components/prism-yaml'
+import 'prismjs/components/prism-markdown'
 
 function languageFromFilename(filename: string): string | undefined {
   const ext = filename.split('.').pop()?.toLowerCase()
   const map: Record<string, string> = {
-    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
+    ts: 'typescript', tsx: 'jsx', js: 'javascript', jsx: 'jsx',
     java: 'java', cs: 'csharp', py: 'python', php: 'php',
     go: 'go', rs: 'rust', kt: 'kotlin', swift: 'swift',
     rb: 'ruby', scala: 'scala', sc: 'scala',
@@ -67,8 +38,7 @@ function languageFromFilename(filename: string): string | undefined {
     sh: 'bash', bash: 'bash', zsh: 'bash',
     sql: 'sql', json: 'json', yaml: 'yaml', yml: 'yaml',
     md: 'markdown', css: 'css', scss: 'css', less: 'css',
-    xml: 'xml', html: 'html', htm: 'html', svg: 'xml',
-    gradle: 'groovy',
+    xml: 'markup', html: 'markup', htm: 'markup', svg: 'markup',
   }
   return ext ? map[ext] : undefined
 }
@@ -540,12 +510,6 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 Commits
               </TabButton>
             )}
-            <TabButton
-              active={activeTab === 'evidence'}
-              onClick={() => setActiveTab('evidence')}
-            >
-              Evidence
-            </TabButton>
             {job.coverageData && (
               <TabButton
                 active={activeTab === 'coverage'}
@@ -554,6 +518,12 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 Coverage
               </TabButton>
             )}
+            <TabButton
+              active={activeTab === 'evidence'}
+              onClick={() => setActiveTab('evidence')}
+            >
+              Evidence
+            </TabButton>
           </div>
 
           {/* Summary tab */}
@@ -656,6 +626,11 @@ export default function JobDetail({ jobId }: JobDetailProps) {
             />
           )}
 
+          {/* Coverage tab */}
+          {activeTab === 'coverage' && job.coverageData && (
+            <CoverageTab coverageData={job.coverageData} />
+          )}
+
           {/* Evidence tab */}
           {activeTab === 'evidence' && (
             <EvidenceTab
@@ -664,11 +639,6 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               uploadScytalePending={uploadScytaleMutation.isPending}
               onUploadScytale={() => uploadScytaleMutation.mutate()}
             />
-          )}
-
-          {/* Coverage tab */}
-          {activeTab === 'coverage' && job.coverageData && (
-            <CoverageTab coverageData={job.coverageData} />
           )}
         </div>
       ) : (
@@ -763,16 +733,33 @@ function ChangedFilesTab({
   const fileRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set())
 
-  const toggleViewed = (filename: string) =>
+  // Expand/collapse-all: seq increments on each action, target is the desired collapsed state
+  const [expandCollapseSeq, setExpandCollapseSeq] = useState(0)
+  const [expandCollapseTarget, setExpandCollapseTarget] = useState(false)
+
+  // Files start collapsed when the PR has more than 5 files to prevent DOM explosion
+  const initialCollapsed = (diffData?.files.length ?? 0) > 5
+
+  const toggleViewed = useCallback((filename: string) =>
     setViewedFiles((prev) => {
       const next = new Set(prev)
       next.has(filename) ? next.delete(filename) : next.add(filename)
       return next
-    })
+    }), [])
 
-  const scrollTo = (filename: string) => {
+  const scrollTo = useCallback((filename: string) => {
     fileRefs.current[filename]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  }, [])
+
+  const expandAll = useCallback(() => {
+    setExpandCollapseTarget(false)
+    setExpandCollapseSeq(s => s + 1)
+  }, [])
+
+  const collapseAll = useCallback(() => {
+    setExpandCollapseTarget(true)
+    setExpandCollapseSeq(s => s + 1)
+  }, [])
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">
@@ -792,15 +779,29 @@ function ChangedFilesTab({
               <span className="text-rose-400 font-semibold">−{diffData.totalDeletions}</span>
             </span>
           )}
-          {onFixPr && reviewComments.length > 0 && (
-            <span className="ml-auto shrink-0">
+          <span className="flex items-center gap-1 ml-auto shrink-0">
+            <button
+              onClick={expandAll}
+              className="px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+              title="Expand all files"
+            >
+              <ChevronDown size={11} className="inline mr-0.5" />Expand all
+            </button>
+            <button
+              onClick={collapseAll}
+              className="px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+              title="Collapse all files"
+            >
+              <ChevronRight size={11} className="inline mr-0.5" />Collapse all
+            </button>
+            {onFixPr && reviewComments.length > 0 && (
               <FixPrButton
                 pending={fixPrPending}
                 runningJobId={fixPrJobId}
                 onClick={onFixPr}
               />
-            </span>
-          )}
+            )}
+          </span>
         </div>
       )}
 
@@ -856,6 +857,9 @@ function ChangedFilesTab({
                 fixedCommentInfo={fixedCommentInfo}
                 fixCommentPendingId={fixCommentPendingId}
                 onOpenCommit={onOpenCommit}
+                initialCollapsed={initialCollapsed}
+                expandCollapseSeq={expandCollapseSeq}
+                expandCollapseTarget={expandCollapseTarget}
               />
             ))}
           </div>
@@ -895,7 +899,7 @@ function buildTree(files: DiffFileEntry[]): Map<string, DiffFileEntry[]> {
 }
 
 function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onFileClick }: FileTreePanelProps) {
-  const tree = buildTree(files)
+  const tree = useMemo(() => buildTree(files), [files])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
   const toggleDir = (dir: string) =>
@@ -990,12 +994,16 @@ interface FileDiffSectionProps {
   fixedCommentInfo?: Record<number, FixedCommentInfo>
   fixCommentPendingId?: number
   onOpenCommit?: (sha: string) => void
+  initialCollapsed?: boolean
+  expandCollapseSeq?: number
+  expandCollapseTarget?: boolean
 }
 
 const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
   function FileDiffSection({
     file, viewed, onToggleViewed, fileComments = [],
     onFixComment, fixCommentJobIds = {}, fixedCommentInfo = {}, fixCommentPendingId, onOpenCommit,
+    initialCollapsed = false, expandCollapseSeq = 0, expandCollapseTarget,
   }, ref) {
     // Build a line-number → comments map for O(1) lookup
     const commentsByLine = useMemo(() => {
@@ -1014,8 +1022,18 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
       return lines
     }, [file.hunks])
 
-    const orphanComments = fileComments.filter(c => c.line === 0 || !renderedLines.has(c.line))
-    const [collapsed, setCollapsed] = useState(false)
+    const orphanComments = useMemo(
+      () => fileComments.filter(c => c.line === 0 || !renderedLines.has(c.line)),
+      [fileComments, renderedLines]
+    )
+
+    const [collapsed, setCollapsed] = useState(initialCollapsed)
+
+    // Respond to expand-all / collapse-all signals from the parent
+    useEffect(() => {
+      if (expandCollapseSeq === 0) return
+      setCollapsed(expandCollapseTarget ?? false)
+    }, [expandCollapseSeq, expandCollapseTarget])
     const parts = file.filename.split('/')
     const filename = parts.pop() ?? file.filename
     const dirParts = parts
@@ -1149,7 +1167,7 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
   }
 )
 
-function HunkHeaderRow({ header }: { header: string }) {
+const HunkHeaderRow = memo(function HunkHeaderRow({ header }: { header: string }) {
   return (
     <tr className="bg-sky-500/10 border-y border-sky-500/20">
       <td
@@ -1160,9 +1178,9 @@ function HunkHeaderRow({ header }: { header: string }) {
       </td>
     </tr>
   )
-}
+})
 
-function DiffLineRow({ type, oldLine, newLine, content, language }: {
+const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content, language }: {
   type: 'add' | 'del' | 'ctx'
   oldLine: number
   newLine: number
@@ -1187,6 +1205,17 @@ function DiffLineRow({ type, oldLine, newLine, content, language }: {
 
   const prefix = type === 'add' ? '+' : type === 'del' ? '−' : ' '
 
+  const highlightedHtml = useMemo(() => {
+    if (!language || !content.trim()) return null
+    const grammar = Prism.languages[language]
+    if (!grammar) return null
+    try {
+      return Prism.highlight(content, grammar, language)
+    } catch {
+      return null
+    }
+  }, [content, language])
+
   return (
     <tr className={`${rowBg} transition-colors`}>
       {/* Old line number */}
@@ -1203,24 +1232,14 @@ function DiffLineRow({ type, oldLine, newLine, content, language }: {
       </td>
       {/* Code content — syntax highlighted when language is known */}
       <td className="px-3 py-px leading-5 whitespace-pre text-[13px]">
-        {language && content.trim() ? (
-          <SyntaxHighlighter
-            language={language}
-            style={HIGHLIGHT_STYLE}
-            PreTag="span"
-            CodeTag="span"
-            customStyle={{ background: 'transparent', padding: 0, margin: 0, fontSize: 'inherit', fontFamily: 'inherit', lineHeight: 'inherit', display: 'inline' }}
-            wrapLongLines={false}
-          >
-            {content}
-          </SyntaxHighlighter>
-        ) : (
-          <span className="text-[var(--color-fonts-font-color-primary)]">{content}</span>
-        )}
+        {highlightedHtml
+          ? <span dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
+          : <span className="text-[var(--color-fonts-font-color-primary)]">{content}</span>
+        }
       </td>
     </tr>
   )
-}
+})
 
 /**
  * Div-based version of the same floating comment card — used in ReviewTab
@@ -1875,12 +1894,15 @@ interface CoverageMetricCardProps {
 }
 
 function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
-  const afterVal = after ?? 0
+  // Show `after` when available; fall back to `before` when there is no after snapshot
+  const hasAfter = after !== undefined
+  const displayVal = hasAfter ? after! : (before ?? 0)
+  const showFrom = hasAfter && before !== undefined
   const delta = before != null && after != null ? after - before : null
   const color =
-    afterVal >= 80
+    displayVal >= 80
       ? 'var(--color-status-border-success)'
-      : afterVal >= 50
+      : displayVal >= 50
       ? 'var(--color-status-border-attention)'
       : 'var(--color-status-border-critical)'
 
@@ -1889,12 +1911,15 @@ function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
       <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">{label}</p>
       <div className="flex items-end gap-2">
         <span className="text-2xl font-bold" style={{ color }}>
-          {after !== undefined ? `${afterVal.toFixed(1)}%` : '—'}
+          {before !== undefined || after !== undefined ? `${displayVal.toFixed(1)}%` : '—'}
         </span>
-        {before !== undefined && (
+        {showFrom && (
           <span className="text-xs text-[var(--color-fonts-font-color-support)] mb-0.5">
-            from {before.toFixed(1)}%
+            from {before!.toFixed(1)}%
           </span>
+        )}
+        {!hasAfter && before !== undefined && (
+          <span className="text-xs text-[var(--color-fonts-font-color-support)] mb-0.5">baseline</span>
         )}
       </div>
       {delta !== null && (
@@ -1905,7 +1930,7 @@ function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
       <div className="w-full h-1.5 rounded-full bg-[var(--color-neutral-200)] overflow-hidden">
         <div
           className="h-full rounded-full transition-all"
-          style={{ width: `${Math.min(100, afterVal)}%`, backgroundColor: color }}
+          style={{ width: `${Math.min(100, displayVal)}%`, backgroundColor: color }}
         />
       </div>
     </div>
@@ -1914,6 +1939,8 @@ function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
 
 function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
   const { before, after } = coverageData
+  // True when we only have a baseline snapshot (no post-generation measurement)
+  const baselineOnly = after == null
 
   type SortKey = 'name' | 'beforeRate' | 'afterRate' | 'delta'
   type SortDir = 'asc' | 'desc'
@@ -1982,63 +2009,82 @@ function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
             <thead>
               <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
                 <CovSortHeader label="Package / Namespace" sortKey="name"       current={sortKey} dir={sortDir} onSort={handleSort} />
-                <CovSortHeader label="Before"              sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
-                <CovSortHeader label="After"               sortKey="afterRate"  current={sortKey} dir={sortDir} onSort={handleSort} />
-                <CovSortHeader label="Change"              sortKey="delta"      current={sortKey} dir={sortDir} onSort={handleSort} />
+                {baselineOnly ? (
+                  <CovSortHeader label="Coverage (baseline)" sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
+                ) : (
+                  <>
+                    <CovSortHeader label="Before"            sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <CovSortHeader label="After"             sortKey="afterRate"  current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <CovSortHeader label="Change"            sortKey="delta"      current={sortKey} dir={sortDir} onSort={handleSort} />
+                  </>
+                )}
                 <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] w-40">
                   Coverage Bar
                 </th>
               </tr>
             </thead>
             <tbody>
-              {sorted.map(pkg => (
-                <tr
-                  key={pkg.name}
-                  className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
-                >
-                  <td className="px-4 py-1.5 font-mono text-[11px] text-[var(--color-fonts-font-color-primary)] max-w-xs truncate">
-                    {pkg.name.replace(/\//g, '.')}
-                  </td>
-                  <td className="px-4 py-1.5">
-                    {pkg.beforeRate != null
-                      ? <span className={rateBadgeClass(pkg.beforeRate)}>{pkg.beforeRate.toFixed(1)}%</span>
-                      : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
-                  </td>
-                  <td className="px-4 py-1.5">
-                    {pkg.afterRate != null
-                      ? <span className={rateBadgeClass(pkg.afterRate)}>{pkg.afterRate.toFixed(1)}%</span>
-                      : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
-                  </td>
-                  <td className="px-4 py-1.5">
-                    {deltaBadge(pkg.delta)}
-                  </td>
-                  <td className="px-4 py-1.5 w-40">
-                    <div className="relative w-full h-2 rounded-full bg-[var(--color-neutral-200)] overflow-hidden">
-                      {pkg.beforeRate != null && (
-                        <div
-                          className="absolute h-full rounded-full opacity-30"
-                          style={{
-                            width: `${Math.min(100, pkg.beforeRate)}%`,
-                            backgroundColor: 'var(--color-fonts-font-color-support)',
-                          }}
-                        />
-                      )}
-                      {pkg.afterRate != null && (
-                        <div
-                          className="absolute h-full rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(100, pkg.afterRate)}%`,
-                            backgroundColor:
-                              pkg.afterRate >= 80 ? 'var(--color-status-border-success)'
-                              : pkg.afterRate >= 50 ? 'var(--color-status-border-attention)'
-                              : 'var(--color-status-border-critical)',
-                          }}
-                        />
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {sorted.map(pkg => {
+                const displayRate = baselineOnly ? pkg.beforeRate : pkg.afterRate
+                return (
+                  <tr
+                    key={pkg.name}
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+                  >
+                    <td className="px-4 py-1.5 font-mono text-[11px] text-[var(--color-fonts-font-color-primary)] max-w-xs truncate">
+                      {pkg.name.replace(/\//g, '.')}
+                    </td>
+                    {baselineOnly ? (
+                      <td className="px-4 py-1.5">
+                        {pkg.beforeRate != null
+                          ? <span className={rateBadgeClass(pkg.beforeRate)}>{pkg.beforeRate.toFixed(1)}%</span>
+                          : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
+                      </td>
+                    ) : (
+                      <>
+                        <td className="px-4 py-1.5">
+                          {pkg.beforeRate != null
+                            ? <span className={rateBadgeClass(pkg.beforeRate)}>{pkg.beforeRate.toFixed(1)}%</span>
+                            : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
+                        </td>
+                        <td className="px-4 py-1.5">
+                          {pkg.afterRate != null
+                            ? <span className={rateBadgeClass(pkg.afterRate)}>{pkg.afterRate.toFixed(1)}%</span>
+                            : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
+                        </td>
+                        <td className="px-4 py-1.5">
+                          {deltaBadge(pkg.delta)}
+                        </td>
+                      </>
+                    )}
+                    <td className="px-4 py-1.5 w-40">
+                      <div className="relative w-full h-2 rounded-full bg-[var(--color-neutral-200)] overflow-hidden">
+                        {pkg.beforeRate != null && !baselineOnly && (
+                          <div
+                            className="absolute h-full rounded-full opacity-30"
+                            style={{
+                              width: `${Math.min(100, pkg.beforeRate)}%`,
+                              backgroundColor: 'var(--color-fonts-font-color-support)',
+                            }}
+                          />
+                        )}
+                        {displayRate != null && (
+                          <div
+                            className="absolute h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, displayRate)}%`,
+                              backgroundColor:
+                                displayRate >= 80 ? 'var(--color-status-border-success)'
+                                : displayRate >= 50 ? 'var(--color-status-border-attention)'
+                                : 'var(--color-status-border-critical)',
+                            }}
+                          />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </TableCard>
