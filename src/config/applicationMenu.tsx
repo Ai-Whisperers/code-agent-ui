@@ -19,6 +19,7 @@ import {
   BotMessageSquare,
   ScrollText,
   Target,
+  Lock,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -136,6 +137,15 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/stats',
           type: 'item',
           onClick: () => go('/stats'),
+        },
+        {
+          id: 'soc2-audit',
+          label: 'SOC II Audit',
+          icon: <Lock size={16} />,
+          path: '/compliance/soc2',
+          isActive: currentPath === '/compliance/soc2',
+          type: 'item',
+          onClick: () => go('/compliance/soc2'),
         },
       ],
     },

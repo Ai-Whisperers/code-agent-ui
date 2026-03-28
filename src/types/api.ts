@@ -32,6 +32,8 @@ export interface JobCoverageData {
   after?: CoverageSection
 }
 
+export type SlaStatus = 'ON_TRACK' | 'AT_RISK' | 'OVERDUE' | 'MET' | 'MISSED' | 'NOT_APPLICABLE'
+
 export interface JobStatusResponse {
   jobId: string
   jobType: JobType
@@ -49,6 +51,16 @@ export interface JobStatusResponse {
   sourceBranch?: string
   targetBranch?: string
   coverageData?: JobCoverageData
+  // SOC II / SLA fields
+  jiraIssueType?: string
+  jiraPriority?: string
+  jiraCreatedAt?: string
+  slaDeadline?: string
+  slaStatus?: SlaStatus
+  aikidoIssueId?: string
+  soc2Protected?: boolean
+  scytaleEvidenceRef?: string
+  scytaleEnabled?: boolean
 }
 
 // ---- PR Diff ----
@@ -79,6 +91,77 @@ export interface JobDiffResponse {
   totalAdditions: number
   totalDeletions: number
   files: DiffFileEntry[]
+}
+
+// ---- SOC II Review & Evidence ----
+
+export interface ReviewCommentEntry {
+  filePath: string
+  line: number
+  content: string
+}
+
+export interface JobReviewResponse {
+  reviewJobId?: string
+  reviewJobStatus?: string
+  reviewSummary?: string
+  reviewedAt?: string
+  comments: ReviewCommentEntry[]
+}
+
+export interface EvidenceEntry {
+  timestamp: string
+  actor: string
+  action: string
+  detail?: string
+}
+
+export interface ComplianceCheck {
+  name: string
+  passed: boolean
+  detail?: string
+}
+
+export interface JobEvidenceResponse {
+  jobId: string
+  jobType: JobType
+  prUrl?: string
+  sourceBranch?: string
+  targetBranch?: string
+  createdAt: string
+  completedAt?: string
+  jiraKey?: string
+  jiraIssueType?: string
+  reviewJobId?: string
+  reviewJobStatus?: string
+  promotionJobId?: string
+  complianceApplicable: boolean
+  complianceChecks: ComplianceCheck[]
+  auditTrail: EvidenceEntry[]
+  scytaleEvidenceRef?: string
+  scytaleEnabled: boolean
+}
+
+export interface Soc2JobSummary {
+  jobId: string
+  jobType: JobType
+  jiraKey?: string
+  jiraPriority?: string
+  aikidoIssueId?: string
+  slaStatus: SlaStatus
+  slaDeadline?: string
+  reviewStatus: 'NONE' | 'IN_PROGRESS' | 'COMPLETE'
+  jobStatus: JobStatus
+  prUrl?: string
+  scytaleUploaded: boolean
+  createdAt: string
+}
+
+export interface Soc2AuditResponse {
+  items: Soc2JobSummary[]
+  total: number
+  page: number
+  limit: number
 }
 
 export interface RunFixRequest {

@@ -346,6 +346,66 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── SOC II Compliance ─────────────────────────────────────────────────────────
+  {
+    id: 'soc2',
+    label: 'SOC II Compliance',
+    settings: [
+      {
+        key: 'soc2.protected-branches',
+        label: 'Protected Branches',
+        description: 'Comma-separated branches requiring a bot review before a Bug fix can be merged. Include both integration and production branches.',
+        defaultValue: 'develop,main,master,production',
+      },
+      {
+        key: 'soc2.bug-issue-types',
+        label: 'Bug Issue Types',
+        description: 'Comma-separated Jira issue types that trigger SOC II controls (review guard, evidence generation, deletion protection).',
+        defaultValue: 'Bug,Defect',
+      },
+      {
+        key: 'soc2.production-branch',
+        label: 'Production Branch',
+        description: 'The branch representing production. Bug fixes merged to a non-production protected branch will trigger an auto-promotion PR to this branch.',
+        defaultValue: 'main',
+      },
+      {
+        key: 'soc2.sla.critical-days',
+        label: 'SLA: Critical (days)',
+        description: 'Maximum calendar days from Jira ticket creation to merge for Critical priority bugs.',
+        defaultValue: '5',
+        inputType: 'number' as const,
+        min: 1,
+      },
+      {
+        key: 'soc2.sla.high-days',
+        label: 'SLA: High (days)',
+        description: 'Maximum calendar days from Jira ticket creation to merge for High priority bugs.',
+        defaultValue: '20',
+        inputType: 'number' as const,
+        min: 1,
+      },
+      {
+        key: 'scytale.api.key',
+        label: 'Scytale API Key',
+        description: 'API key for Scytale Custom Integration evidence upload.',
+        isSecret: true,
+      },
+      {
+        key: 'scytale.base.url',
+        label: 'Scytale Base URL',
+        description: 'Scytale API base URL (from the Custom Integration developer guide in your Scytale workspace).',
+        defaultValue: '',
+      },
+      {
+        key: 'scytale.cc8-control-id',
+        label: 'Scytale CC8.1 Control ID',
+        description: 'The internal Scytale control ID for CC8.1 (Change Management). Found in your Scytale workspace under Controls.',
+        defaultValue: '',
+      },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -379,6 +439,7 @@ const TABS: TabDef[] = [
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
+  { id: 'compliance',      label: 'Compliance',       groupIds: ['soc2'] },
   { id: 'security',        label: 'Security',         groupIds: ['security'] },
 ]
 

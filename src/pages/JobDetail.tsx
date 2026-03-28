@@ -5,6 +5,7 @@ import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Eye,
   GitBranch, ArrowRight, ChevronDown, ChevronRight,
   FolderOpen, Folder, TrendingUp, TrendingDown, Minus,
+  ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, Printer,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
@@ -18,6 +19,7 @@ import api from '@/lib/api'
 import type {
   JobStatusResponse, JobAiCallsResponse, AiCallRecord,
   JobDiffResponse, DiffFileEntry, JobCoverageData, PackageLineCoverage,
+  JobReviewResponse, ReviewCommentEntry, JobEvidenceResponse,
 } from '@/types/api'
 
 interface JobDetailProps {
@@ -26,7 +28,7 @@ interface JobDetailProps {
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PENDING', 'QUEUED'])
 
-type Tab = 'summary' | 'ai-calls' | 'changed-files' | 'coverage'
+type Tab = 'summary' | 'ai-calls' | 'review' | 'changed-files' | 'evidence' | 'coverage'
 
 export default function JobDetail({ jobId }: JobDetailProps) {
   const navigate = useNavigate()
@@ -58,6 +60,45 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     queryFn: () => api.get(`/jobs/${jobId}/diff`).then((r) => r.data),
     enabled: activeTab === 'changed-files' && !!job?.prUrl,
     retry: false,
+  })
+
+  const { data: reviewData, isLoading: reviewLoading } = useQuery<JobReviewResponse>({
+    queryKey: ['job-review', jobId],
+    queryFn: () => api.get(`/jobs/${jobId}/review`).then((r) => r.data),
+    enabled: (activeTab === 'review' || activeTab === 'changed-files') && !!job?.prUrl,
+    refetchInterval: (q) => {
+      const s = q.state.data?.reviewJobStatus
+      return s === 'RUNNING' || s === 'PENDING' ? 5_000 : false
+    },
+    retry: false,
+  })
+
+  const { data: evidenceData } = useQuery<JobEvidenceResponse>({
+    queryKey: ['job-evidence', jobId],
+    queryFn: () => api.get(`/jobs/${jobId}/evidence`).then((r) => r.data),
+    enabled: activeTab === 'evidence',
+    retry: false,
+  })
+
+  const requestReviewMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${jobId}/request-review`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+      setToast({ variant: 'success', message: 'Bot review requested.' })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to request review.'
+      setToast({ variant: 'error', message: msg })
+    },
+  })
+
+  const uploadScytaleMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${jobId}/evidence/upload-scytale`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['job-evidence', jobId] })
+      setToast({ variant: 'success', message: 'Evidence uploaded to Scytale.' })
+    },
+    onError: () => setToast({ variant: 'error', message: 'Scytale upload failed.' }),
   })
 
   const approveMutation = useMutation({
@@ -96,6 +137,13 @@ export default function JobDetail({ jobId }: JobDetailProps) {
   })
 
   const hasPr = !!job?.prUrl
+
+  // SOC II helpers
+  const isBugJob = !!(job?.jiraIssueType)
+  const hasCompletedReview = reviewData?.reviewJobStatus === 'SUCCESS'
+  const reviewInFlight = reviewData?.reviewJobStatus === 'RUNNING' || reviewData?.reviewJobStatus === 'PENDING'
+  const showSoc2Warning = job?.status === 'AWAITING_APPROVAL' && isBugJob && job?.soc2Protected
+    && reviewData && !hasCompletedReview
 
   const metaStrip = job ? (
     <div className="flex items-center gap-2.5 flex-wrap text-xs text-[var(--color-fonts-font-color-support)] mt-2">
@@ -149,6 +197,29 @@ export default function JobDetail({ jobId }: JobDetailProps) {
         </>
       )}
 
+      {job.aikidoIssueId && (
+        <>
+          <Separator />
+          <a
+            href={`https://app.aikido.dev/issues/${job.aikidoIssueId}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] hover:opacity-80"
+          >
+            <ShieldCheck size={10} />
+            Aikido: {job.aikidoIssueId}
+            <ExternalLink size={9} />
+          </a>
+        </>
+      )}
+
+      {job.slaStatus && job.slaStatus !== 'NOT_APPLICABLE' && job.slaDeadline && (
+        <>
+          <Separator />
+          <SlaBadge priority={job.jiraPriority} deadline={job.slaDeadline} status={job.slaStatus} />
+        </>
+      )}
+
       {isActive && (
         <>
           <Separator />
@@ -173,6 +244,14 @@ export default function JobDetail({ jobId }: JobDetailProps) {
           <div className="flex items-center gap-2">
             {job?.status === 'AWAITING_APPROVAL' && (
               <>
+                {showSoc2Warning ? (
+                  <Tooltip text="No bot review found — merge may be blocked by SOC II guard (CC8.1). Request a review first.">
+                    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-tags-font-attention)] px-2 py-1 rounded bg-[var(--color-tags-attention-background)]">
+                      <AlertTriangle size={12} />
+                      SOC II review required
+                    </span>
+                  </Tooltip>
+                ) : null}
                 <Tooltip text="Approve and merge the pull request">
                   <Button
                     variant="primary"
@@ -198,17 +277,25 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               </>
             )}
             {(job?.status === 'PENDING' || job?.status === 'QUEUED') && (
-              <Tooltip text="Cancel this job">
-                <Button
-                  variant="danger"
-                  size="md"
-                  icon={<Ban size={14} />}
-                  loading={cancelMutation.isPending}
-                  onClick={() => cancelMutation.mutate()}
-                >
-                  Cancel
-                </Button>
-              </Tooltip>
+              job?.soc2Protected ? (
+                <Tooltip text="SOC II compliance record — cancellation is not permitted.">
+                  <Button variant="danger" size="md" icon={<Ban size={14} />} disabled>
+                    Cancel
+                  </Button>
+                </Tooltip>
+              ) : (
+                <Tooltip text="Cancel this job">
+                  <Button
+                    variant="danger"
+                    size="md"
+                    icon={<Ban size={14} />}
+                    loading={cancelMutation.isPending}
+                    onClick={() => cancelMutation.mutate()}
+                  >
+                    Cancel
+                  </Button>
+                </Tooltip>
+              )
             )}
             {(job?.status === 'FAILED' || job?.status === 'SUCCESS') && (
               <Tooltip text="Re-queue this job">
@@ -260,6 +347,15 @@ export default function JobDetail({ jobId }: JobDetailProps) {
             </TabButton>
             {hasPr && (
               <TabButton
+                active={activeTab === 'review'}
+                onClick={() => setActiveTab('review')}
+              >
+                Review
+                {reviewInFlight && <RefreshCw size={10} className="animate-spin" />}
+              </TabButton>
+            )}
+            {hasPr && (
+              <TabButton
                 active={activeTab === 'changed-files'}
                 onClick={() => setActiveTab('changed-files')}
                 badge={totalFiles > 0 ? String(totalFiles) : undefined}
@@ -267,6 +363,12 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 Changed Files
               </TabButton>
             )}
+            <TabButton
+              active={activeTab === 'evidence'}
+              onClick={() => setActiveTab('evidence')}
+            >
+              Evidence
+            </TabButton>
             {job.coverageData && (
               <TabButton
                 active={activeTab === 'coverage'}
@@ -315,6 +417,16 @@ export default function JobDetail({ jobId }: JobDetailProps) {
             />
           )}
 
+          {/* Review tab */}
+          {hasPr && activeTab === 'review' && (
+            <ReviewTab
+              reviewData={reviewData}
+              isLoading={reviewLoading}
+              requestReviewPending={requestReviewMutation.isPending}
+              onRequestReview={() => requestReviewMutation.mutate()}
+            />
+          )}
+
           {/* Changed Files tab */}
           {hasPr && activeTab === 'changed-files' && (
             <ChangedFilesTab
@@ -322,6 +434,17 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               diffData={diffData}
               isLoading={diffLoading}
               isError={diffError}
+              reviewComments={reviewData?.comments ?? []}
+            />
+          )}
+
+          {/* Evidence tab */}
+          {activeTab === 'evidence' && (
+            <EvidenceTab
+              job={job}
+              evidenceData={evidenceData}
+              uploadScytalePending={uploadScytaleMutation.isPending}
+              onUploadScytale={() => uploadScytaleMutation.mutate()}
             />
           )}
 
@@ -381,9 +504,16 @@ interface ChangedFilesTabProps {
   diffData: JobDiffResponse | undefined
   isLoading: boolean
   isError: boolean
+  reviewComments?: ReviewCommentEntry[]
 }
 
-function ChangedFilesTab({ job, diffData, isLoading, isError }: ChangedFilesTabProps) {
+function ChangedFilesTab({ job, diffData, isLoading, isError, reviewComments = [] }: ChangedFilesTabProps) {
+  // Build a file-keyed map of review comments for inline display
+  const commentsByFile = useMemo(() => {
+    const map: Record<string, ReviewCommentEntry[]> = {}
+    reviewComments.forEach(c => { (map[c.filePath] ??= []).push(c) })
+    return map
+  }, [reviewComments])
   const sourceBranch = diffData?.sourceBranch || job.sourceBranch || ''
   const targetBranch = diffData?.targetBranch || job.targetBranch || ''
   const fileRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -466,6 +596,7 @@ function ChangedFilesTab({ job, diffData, isLoading, isError }: ChangedFilesTabP
                 file={file}
                 viewed={viewedFiles.has(file.filename)}
                 onToggleViewed={() => toggleViewed(file.filename)}
+                fileComments={commentsByFile[file.filename] ?? []}
                 ref={(el) => { fileRefs.current[file.filename] = el }}
               />
             ))}
@@ -595,10 +726,29 @@ interface FileDiffSectionProps {
   file: DiffFileEntry
   viewed: boolean
   onToggleViewed: () => void
+  fileComments?: ReviewCommentEntry[]
 }
 
 const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
-  function FileDiffSection({ file, viewed, onToggleViewed }, ref) {
+  function FileDiffSection({ file, viewed, onToggleViewed, fileComments = [] }, ref) {
+    // Build a line-number → comments map for O(1) lookup
+    const commentsByLine = useMemo(() => {
+      const map: Record<number, ReviewCommentEntry[]> = {}
+      fileComments.forEach(c => { if (c.line > 0) (map[c.line] ??= []).push(c) })
+      return map
+    }, [fileComments])
+
+    // Collect rendered line numbers to detect orphan comments
+    const renderedLines = useMemo(() => {
+      const lines = new Set<number>()
+      file.hunks.forEach(h => h.lines.forEach(l => {
+        if (l.newLine > 0) lines.add(l.newLine)
+        if (l.oldLine > 0) lines.add(l.oldLine)
+      }))
+      return lines
+    }, [file.hunks])
+
+    const orphanComments = fileComments.filter(c => c.line === 0 || !renderedLines.has(c.line))
     const [collapsed, setCollapsed] = useState(false)
     const parts = file.filename.split('/')
     const filename = parts.pop() ?? file.filename
@@ -665,19 +815,44 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
                 {file.hunks.map((hunk, hi) => (
                   <Fragment key={hi}>
                     <HunkHeaderRow header={hunk.header} />
-                    {hunk.lines.map((line, li) => (
-                      <DiffLineRow
-                        key={li}
-                        type={line.type}
-                        oldLine={line.oldLine}
-                        newLine={line.newLine}
-                        content={line.content}
-                      />
-                    ))}
+                    {hunk.lines.map((line, li) => {
+                      const lineNum = line.newLine > 0 ? line.newLine : line.oldLine
+                      const lineComments = commentsByLine[lineNum] ?? []
+                      return (
+                        <Fragment key={li}>
+                          <DiffLineRow
+                            type={line.type}
+                            oldLine={line.oldLine}
+                            newLine={line.newLine}
+                            content={line.content}
+                          />
+                          {lineComments.map((c, ci) => (
+                            <InlineCommentRow key={ci} comment={c} />
+                          ))}
+                        </Fragment>
+                      )
+                    })}
                   </Fragment>
                 ))}
               </tbody>
             </table>
+            {orphanComments.length > 0 && (
+              <div className="border-t border-[var(--color-cards-card-stroke)] px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide font-semibold text-[var(--color-fonts-font-color-support)] mb-1">
+                  Other comments
+                </p>
+                {orphanComments.map((c, i) => (
+                  <div key={i} className="mb-1 border-l-2 border-[var(--color-tags-attention-background)] pl-3 py-1 rounded-r bg-[var(--color-tags-attention-background)]/10">
+                    <p className="text-[10px] text-[var(--color-tags-font-attention)] mb-0.5 flex items-center gap-1">
+                      <Bot size={10} />
+                      Bot Review
+                      {c.line > 0 && <span className="ml-1 px-1 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">line {c.line}</span>}
+                    </p>
+                    <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap">{c.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -741,6 +916,30 @@ function DiffLineRow({ type, oldLine, newLine, content }: {
       {/* Code content */}
       <td className="px-3 py-px leading-5 whitespace-pre text-[13px] text-[var(--color-fonts-font-color-primary)]">
         {content}
+      </td>
+    </tr>
+  )
+}
+
+function InlineCommentRow({ comment }: { comment: ReviewCommentEntry }) {
+  return (
+    <tr>
+      <td
+        colSpan={4}
+        className="border-l-2 border-[var(--color-tags-attention-background)] bg-[var(--color-tags-attention-background)]/10 px-3 py-2"
+      >
+        <div className="flex items-center gap-1.5 mb-1">
+          <Bot size={11} className="text-[var(--color-tags-font-attention)] shrink-0" />
+          <span className="text-[10px] font-semibold text-[var(--color-tags-font-attention)]">Bot Review</span>
+          {comment.line > 0 && (
+            <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
+              line {comment.line}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-sans">
+          {comment.content}
+        </p>
       </td>
     </tr>
   )
@@ -1196,5 +1395,384 @@ function CovSortHeader({
           : <ChevronDown size={11} className="opacity-30" />}
       </span>
     </th>
+  )
+}
+
+// ── SLA Badge ─────────────────────────────────────────────────────────────────
+
+function SlaBadge({ priority, deadline, status }: { priority?: string; deadline?: string; status?: string }) {
+  if (!status || status === 'NOT_APPLICABLE' || !deadline) return null
+
+  const deadlineDate = new Date(deadline)
+  const now = new Date()
+  const daysLeft = Math.ceil((deadlineDate.getTime() - now.getTime()) / 86400000)
+  const daysOverdue = -daysLeft
+
+  const statusStyles: Record<string, string> = {
+    ON_TRACK: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
+    AT_RISK:  'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]',
+    OVERDUE:  'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]',
+    MET:      'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
+    MISSED:   'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]',
+  }
+
+  const cls = statusStyles[status] ?? 'bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]'
+
+  let label = ''
+  if (status === 'MET') label = 'SLA Met ✓'
+  else if (status === 'MISSED') label = 'SLA Missed'
+  else if (status === 'OVERDUE') label = `Overdue by ${daysOverdue}d`
+  else if (status === 'AT_RISK') label = `${daysLeft}d left · At Risk`
+  else label = `${daysLeft}d left`
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${cls} ${status === 'AT_RISK' ? 'animate-pulse' : ''}`}>
+      <Clock size={9} />
+      {priority && <span>{priority}:</span>}
+      {deadlineDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+      · {label}
+    </span>
+  )
+}
+
+// ── Review Tab ────────────────────────────────────────────────────────────────
+
+interface ReviewTabProps {
+  reviewData: JobReviewResponse | undefined
+  isLoading: boolean
+  requestReviewPending: boolean
+  onRequestReview: () => void
+}
+
+function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestReview }: ReviewTabProps) {
+  const navigate = useNavigate()
+
+  if (isLoading) {
+    return (
+      <TableCard title="Review">
+        <div className="flex items-center gap-2 px-4 py-6 text-sm text-[var(--color-fonts-font-color-support)]">
+          <RefreshCw size={14} className="animate-spin" />
+          Loading review…
+        </div>
+      </TableCard>
+    )
+  }
+
+  const status = reviewData?.reviewJobStatus
+  const reviewJobId = reviewData?.reviewJobId
+  const inFlight = status === 'RUNNING' || status === 'PENDING'
+  const completed = status === 'SUCCESS' || status === 'FAILED'
+
+  if (!reviewData || (!reviewJobId && !reviewData.comments.length)) {
+    return (
+      <TableCard
+        title="Review"
+        toolbar={
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Eye size={12} />}
+            loading={requestReviewPending}
+            onClick={onRequestReview}
+          >
+            Request Review
+          </Button>
+        }
+      >
+        <div className="px-4 py-6 text-sm text-[var(--color-fonts-font-color-support)]">
+          No bot review found for this PR.
+        </div>
+      </TableCard>
+    )
+  }
+
+  if (inFlight) {
+    return (
+      <TableCard
+        title="Review"
+        toolbar={
+          <Button variant="secondary" size="sm" loading disabled icon={<RefreshCw size={12} />}>
+            Review in progress…
+          </Button>
+        }
+      >
+        <div className="flex items-center gap-2 px-4 py-6 text-sm text-[var(--color-fonts-font-color-support)]">
+          <RefreshCw size={14} className="animate-spin" />
+          Bot review is running. This page will auto-refresh.
+        </div>
+      </TableCard>
+    )
+  }
+
+  const statusBadgeCls = status === 'SUCCESS'
+    ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+    : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+
+  const comments = reviewData.comments ?? []
+  const commentsByFile: Record<string, ReviewCommentEntry[]> = {}
+  comments.forEach(c => { (commentsByFile[c.filePath] ??= []).push(c) })
+
+  return (
+    <div className="space-y-3">
+      {/* Review header card */}
+      <TableCard
+        title="Bot Review"
+        toolbar={
+          <div className="flex items-center gap-2">
+            {reviewJobId && (
+              <Tooltip text="Open review job">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<ExternalLink size={11} />}
+                  onClick={() => navigate({ to: '/jobs/$id', params: { id: reviewJobId } })}
+                >
+                  {reviewJobId.slice(0, 8)}…
+                </Button>
+              </Tooltip>
+            )}
+            {completed && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded ${statusBadgeCls}`}>
+                {status}
+              </span>
+            )}
+          </div>
+        }
+      >
+        <div className="px-4 py-2 text-xs text-[var(--color-fonts-font-color-support)]">
+          {reviewData.reviewedAt && (
+            <span className="flex items-center gap-1">
+              <Clock size={11} />
+              Reviewed on {new Date(reviewData.reviewedAt).toLocaleString()}
+            </span>
+          )}
+        </div>
+      </TableCard>
+
+      {/* Summary card */}
+      {reviewData.reviewSummary && (
+        <TableCard title="Summary">
+          <pre className="px-4 py-4 text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-sans leading-relaxed">
+            {reviewData.reviewSummary}
+          </pre>
+        </TableCard>
+      )}
+
+      {/* Comments grouped by file */}
+      {Object.entries(commentsByFile).map(([filePath, fileComments]) => (
+        <TableCard
+          key={filePath}
+          title={filePath.split('/').pop() ?? filePath}
+          subtitle={`${fileComments.length} comment${fileComments.length !== 1 ? 's' : ''}`}
+        >
+          <div className="divide-y divide-[var(--color-cards-card-stroke)]">
+            {fileComments.map((c, i) => (
+              <div key={i} className="px-4 py-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <Bot size={11} className="text-[var(--color-tags-font-attention)] shrink-0" />
+                  <span className="text-[10px] font-semibold text-[var(--color-tags-font-attention)]">Bot</span>
+                  {c.line > 0 && (
+                    <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
+                      line {c.line}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap leading-relaxed">
+                  {c.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        </TableCard>
+      ))}
+
+      {comments.length === 0 && (
+        <div className="text-sm text-[var(--color-fonts-font-color-support)] px-1">
+          No inline comments in this review.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Evidence Tab ──────────────────────────────────────────────────────────────
+
+interface EvidenceTabProps {
+  job: JobStatusResponse
+  evidenceData: JobEvidenceResponse | undefined
+  uploadScytalePending: boolean
+  onUploadScytale: () => void
+}
+
+function EvidenceTab({ job, evidenceData, uploadScytalePending, onUploadScytale }: EvidenceTabProps) {
+  const navigate = useNavigate()
+
+  if (!evidenceData) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-sm text-[var(--color-fonts-font-color-support)]">
+        <RefreshCw size={14} className="animate-spin" />
+        Loading evidence…
+      </div>
+    )
+  }
+
+  const { complianceApplicable, complianceChecks, auditTrail, scytaleEvidenceRef, scytaleEnabled } = evidenceData
+
+  return (
+    <div className="space-y-3 pb-6">
+      {/* Aikido source */}
+      {job.aikidoIssueId && (
+        <TableCard title="Vulnerability Source">
+          <div className="px-4 py-3 flex items-center gap-2 text-sm">
+            <ShieldCheck size={14} className="text-[var(--color-tags-font-critical)] shrink-0" />
+            <span>Aikido issue:</span>
+            <a
+              href={`https://app.aikido.dev/issues/${job.aikidoIssueId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[var(--color-fonts-font-color-brand)] hover:underline inline-flex items-center gap-1"
+            >
+              {job.aikidoIssueId}
+              <ExternalLink size={11} />
+            </a>
+            <span className="text-xs text-[var(--color-fonts-font-color-support)] ml-2">
+              Post-fix re-scan verification is a future phase.
+            </span>
+          </div>
+        </TableCard>
+      )}
+
+      {/* Compliance checklist or not-applicable notice */}
+      {complianceApplicable ? (
+        <TableCard
+          title="SOC II CC8.1 Compliance"
+          subtitle="Change Management"
+          toolbar={
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Printer size={11} />}
+              onClick={() => window.print()}
+            >
+              Print / Export
+            </Button>
+          }
+        >
+          <div className="divide-y divide-[var(--color-cards-card-stroke)]">
+            {complianceChecks.map((check) => (
+              <div key={check.name} className="flex items-start gap-3 px-4 py-2.5">
+                {check.passed
+                  ? <CheckCircle size={14} className="text-[var(--color-tags-font-success)] shrink-0 mt-0.5" />
+                  : <XCircle    size={14} className="text-[var(--color-tags-font-critical)] shrink-0 mt-0.5" />
+                }
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-[var(--color-fonts-font-color-primary)]">{check.name}</p>
+                  {check.detail && (
+                    <p className="text-[11px] text-[var(--color-fonts-font-color-support)] mt-0.5 truncate">{check.detail}</p>
+                  )}
+                </div>
+                <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                  check.passed
+                    ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+                    : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+                }`}>
+                  {check.passed ? 'PASS' : 'FAIL'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </TableCard>
+      ) : (
+        <div className="px-1 text-sm text-[var(--color-fonts-font-color-support)]">
+          Compliance controls apply to Jira Bug tickets only. Showing audit trail below.
+        </div>
+      )}
+
+      {/* Promotion banner */}
+      {evidenceData.promotionJobId && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-card)] bg-[var(--color-status-neutral-background)] border border-[var(--color-cards-card-stroke)]">
+          <GitBranch size={14} className="text-[var(--color-fonts-font-color-brand)]" />
+          <span className="text-sm text-[var(--color-fonts-font-color-primary)]">
+            Production promotion:
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<ExternalLink size={11} />}
+            onClick={() => navigate({ to: '/jobs/$id', params: { id: evidenceData.promotionJobId! } })}
+          >
+            {evidenceData.promotionJobId.slice(0, 8)}…
+          </Button>
+        </div>
+      )}
+
+      {/* Scytale upload */}
+      {complianceApplicable && (
+        <TableCard title="Scytale Evidence Upload">
+          <div className="px-4 py-3">
+            {scytaleEvidenceRef ? (
+              <div className="flex items-center gap-2 text-sm text-[var(--color-tags-font-success)]">
+                <CheckCircle size={14} />
+                Uploaded to Scytale · Ref: <span className="font-mono">{scytaleEvidenceRef}</span>
+              </div>
+            ) : scytaleEnabled ? (
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<ShieldCheck size={12} />}
+                  loading={uploadScytalePending}
+                  onClick={onUploadScytale}
+                >
+                  Upload to Scytale
+                </Button>
+                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                  Upload SOC II evidence to your Scytale workspace for CC8.1
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)]">
+                Scytale integration not configured. Add credentials in System Settings → Compliance.
+              </p>
+            )}
+          </div>
+        </TableCard>
+      )}
+
+      {/* Audit timeline */}
+      <TableCard title="Audit Trail" subtitle={`${auditTrail.length} events`}>
+        {auditTrail.length === 0 ? (
+          <p className="px-4 py-4 text-sm text-[var(--color-fonts-font-color-support)]">No audit events found.</p>
+        ) : (
+          <div className="relative">
+            {auditTrail.map((entry, i) => (
+              <div key={i} className="flex items-start gap-3 px-4 py-2.5 relative">
+                {/* Vertical connector */}
+                {i < auditTrail.length - 1 && (
+                  <div className="absolute left-[23px] top-8 bottom-0 w-px bg-[var(--color-cards-card-stroke)]" />
+                )}
+                <div className="shrink-0 w-5 h-5 rounded-full bg-[var(--color-tags-neutral-background)] flex items-center justify-center mt-0.5 z-10">
+                  <MessageSquare size={9} className="text-[var(--color-fonts-font-color-support)]" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-[var(--color-fonts-font-color-primary)]">{entry.action}</span>
+                    <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+                      {new Date(entry.timestamp).toLocaleString()}
+                    </span>
+                    <span className="text-[10px] italic text-[var(--color-fonts-font-color-support)]">{entry.actor}</span>
+                  </div>
+                  {entry.detail && (
+                    <p className="text-[11px] text-[var(--color-fonts-font-color-support)] mt-0.5 font-mono break-all">
+                      {entry.detail}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </TableCard>
+    </div>
   )
 }

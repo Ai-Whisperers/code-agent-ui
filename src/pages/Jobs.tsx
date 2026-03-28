@@ -230,15 +230,21 @@ function JobRow({ job, isEven }: { job: JobStatusResponse; isEven: boolean }) {
             </>
           )}
           {(job.status === 'PENDING' || job.status === 'QUEUED') && (
-            <Tooltip text="Cancel this job">
-              <Button
-                variant="danger"
-                size="xs"
-                icon={<Ban size={14} />}
-                loading={cancelMutation.isPending}
-                onClick={() => cancelMutation.mutate()}
-              />
-            </Tooltip>
+            job.soc2Protected ? (
+              <Tooltip text="SOC II: cancellation not permitted for compliance records.">
+                <Button variant="danger" size="xs" icon={<Ban size={14} />} disabled />
+              </Tooltip>
+            ) : (
+              <Tooltip text="Cancel this job">
+                <Button
+                  variant="danger"
+                  size="xs"
+                  icon={<Ban size={14} />}
+                  loading={cancelMutation.isPending}
+                  onClick={() => cancelMutation.mutate()}
+                />
+              </Tooltip>
+            )
           )}
           {(job.status === 'FAILED' || job.status === 'SUCCESS') && (
             <Tooltip text="Rerun this job">
