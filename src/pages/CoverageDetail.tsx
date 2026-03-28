@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { Toast } from '@/components/ui/Toast'
+import type { ToastConfig } from '@/components/ui/Toast'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -69,6 +71,8 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
   const navigate = useNavigate()
   const [sortKey, setSortKey] = useState<SortKey>('lineRate')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [toast, setToast] = useState<ToastConfig | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
 
   const { data: repos } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -118,11 +122,21 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
         .slice(0, 20)
         .map((p) => p.name)
       return api
-        .post('/run/generate-tests', { repoUrl, branchName, targetFiles })
+        .post('/generate-tests', { repoUrl, branchName, targetFiles })
         .then((r) => r.data as { jobId: string })
     },
     onSuccess: (data) => {
-      if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+      setToast({
+        variant: 'success',
+        message: 'Generate tests job started successfully.',
+        action: data?.jobId
+          ? { label: 'View job', onClick: () => navigate({ to: '/jobs/$id', params: { id: data.jobId } }) }
+          : undefined,
+        duration: 8000,
+      })
+    },
+    onError: () => {
+      setToast({ variant: 'error', message: 'Failed to start generate tests job. Please try again.' })
     },
   })
 
@@ -212,7 +226,7 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
                 size="sm"
                 icon={generateTestsMutation.isPending ? undefined : <FlaskConical size={13} />}
                 loading={generateTestsMutation.isPending}
-                onClick={() => { if (!generateTestsMutation.isPending) generateTestsMutation.mutate() }}
+                onClick={() => generateTestsMutation.mutate()}
               >
                 {generateTestsMutation.isPending ? 'Starting…' : 'Generate Tests'}
               </Button>
@@ -338,6 +352,8 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
           </TableCard>
         </div>
       )}
+
+      {toast && <Toast {...toast} onClose={dismissToast} />}
     </main>
   )
 }

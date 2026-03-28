@@ -288,13 +288,37 @@ export interface AiCallDailyStat {
 export interface AiCallRecord {
   id: string
   jobId: string
+  jobType: string
   model: string
+  iteration: number
   inputTokens: number
   outputTokens: number
+  cacheCreationInputTokens: number
+  cacheReadInputTokens: number
   cacheReadTokens: number
   cacheWriteTokens: number
   costUsd: number
+  stopReason: string | null
+  toolNames: string | null
+  durationMs: number
+  isError: boolean
+  errorMessage: string | null
+  createdAt: string
   calledAt: string
+  promptText: string | null
+  responseText: string | null
+}
+
+export interface JobAiCallsResponse {
+  jobId: string
+  calls: AiCallRecord[]
+  totalCalls: number
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheWriteTokens: number
+  totalCacheReadTokens: number
+  totalDurationMs: number
+  estimatedCostUsd: number
 }
 
 // ---- Review Metrics ----
