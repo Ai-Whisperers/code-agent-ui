@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
@@ -17,6 +17,9 @@ import {
   ShieldCheck,
   Link2,
   KeyRound,
+  ExternalLink,
+  RefreshCw,
+  Zap,
 } from 'lucide-react'
 import type { AuthUser } from '@/store/auth-store'
 import {
@@ -30,6 +33,7 @@ import {
 import {
   mcpProfilesApi,
   type LinkedAccountResponse,
+  type OAuthStatus,
   type SystemConfig,
 } from '@/lib/mcpProfiles'
 
@@ -232,15 +236,20 @@ interface ProviderCardProps {
   linked: LinkedAccountResponse | null
   user: AuthUser
   systemConfig: SystemConfig | undefined
+  oauthStatus: OAuthStatus | undefined
 }
 
-function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProps) {
+function ProviderCard({ provider, linked, user, systemConfig, oauthStatus }: ProviderCardProps) {
   const qc = useQueryClient()
-  const [isEditing, setIsEditing] = useState(false)
-  const [form, setForm] = useState<LinkFormState>({ baseUrl: '', username: '', apiToken: '' })
+  const [isEditing, setIsEditing]   = useState(false)
+  const [form, setForm]             = useState<LinkFormState>({ baseUrl: '', username: '', apiToken: '' })
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [oauthError, setOauthError] = useState<string | null>(null)
+  const [oauthPending, setOauthPending] = useState(false)
 
-  const isXray = provider === 'xray'
+  const isXray      = provider === 'xray'
+  const isOauthLinked = linked?.authType === 'oauth'
+  const atlassianOauthAvailable = !isXray && !!oauthStatus?.atlassian
 
   const upsertMutation = useMutation({
     mutationFn: (data: LinkFormState) =>
@@ -269,13 +278,72 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
         : { baseUrl: linked?.baseUrl ?? systemConfig?.jira?.baseUrl ?? '', username: linked?.username ?? user.email ?? '', apiToken: '' },
     )
     setTestResult(null)
+    setOauthError(null)
     setIsEditing(true)
   }
+
+  // ── Atlassian OAuth popup flow ────────────────────────────────────────────────
+  const connectWithOAuth = useCallback(async () => {
+    setOauthError(null)
+    setOauthPending(true)
+    try {
+      // The redirect_uri points to the backend callback, which redirects to /oauth/callback
+      const backendCallbackUrl =
+        `${window.location.origin}/api/mcp/oauth/callback`
+
+      const { url } = await mcpProfilesApi.getOAuthUrl(provider, backendCallbackUrl)
+
+      const popup = window.open(
+        url,
+        'atlassian-oauth',
+        'width=600,height=700,left=200,top=100,toolbar=0,menubar=0,location=0',
+      )
+
+      if (!popup) {
+        setOauthError('Popup blocked. Please allow popups for this site and try again.')
+        setOauthPending(false)
+        return
+      }
+
+      const onMessage = (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return
+        const data = event.data as { type?: string; status?: string; message?: string }
+        if (data?.type !== 'oauth-callback') return
+
+        window.removeEventListener('message', onMessage)
+        setOauthPending(false)
+
+        if (data.status === 'success') {
+          qc.invalidateQueries({ queryKey: ['mcp-profiles'] })
+        } else {
+          setOauthError(data.message ?? 'OAuth failed.')
+        }
+      }
+
+      window.addEventListener('message', onMessage)
+
+      // Fallback: if popup closes without posting a message
+      const pollClosed = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollClosed)
+          window.removeEventListener('message', onMessage)
+          setOauthPending(false)
+          // Refresh anyway — the account might have been linked
+          qc.invalidateQueries({ queryKey: ['mcp-profiles'] })
+        }
+      }, 500)
+    } catch (err: unknown) {
+      setOauthError(err instanceof Error ? err.message : 'Failed to start OAuth flow.')
+      setOauthPending(false)
+    }
+  }, [provider, qc])
+
+  // ── Derived display values ────────────────────────────────────────────────────
 
   const linkedSummary = linked
     ? isXray
       ? `${XRAY_REGIONS.find((r) => r.value === linked.baseUrl)?.label.split(' ')[0] ?? 'Custom'} · ${linked.username}`
-      : `${linked.username} · ${linked.baseUrl}`
+      : linked.displayName ?? `${linked.username} · ${linked.baseUrl}`
     : null
 
   const inputCls =
@@ -283,6 +351,7 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
 
   return (
     <div className="rounded-lg border border-[var(--color-navigation-menu-border)] overflow-hidden">
+      {/* Header row */}
       <div className="flex items-center gap-3 px-4 py-3">
         {/* Logo */}
         <div
@@ -293,9 +362,17 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
         </div>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
-            {isXray ? 'Xray Cloud' : 'Atlassian'}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+              {isXray ? 'Xray Cloud' : 'Atlassian'}
+            </p>
+            {isOauthLinked && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-status-background-active)] text-[var(--color-status-text-active)] font-medium">
+                <Zap size={9} />
+                OAuth
+              </span>
+            )}
+          </div>
           {linkedSummary ? (
             <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate">{linkedSummary}</p>
           ) : (
@@ -304,6 +381,22 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {/* OAuth re-connect button (only for already-OAuth-linked Atlassian accounts) */}
+          {isOauthLinked && (
+            <button
+              onClick={connectWithOAuth}
+              disabled={oauthPending}
+              className="text-xs px-2.5 py-1 rounded border border-[var(--color-navigation-menu-border)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors disabled:opacity-50 flex items-center gap-1"
+              title="Re-connect via OAuth"
+            >
+              {oauthPending
+                ? <Loader2 size={11} className="animate-spin" />
+                : <RefreshCw size={11} />}
+              Refresh
+            </button>
+          )}
+
+          {/* Test connection button */}
           {linked && !isEditing && (
             <button
               onClick={() => testMutation.mutate()}
@@ -313,13 +406,17 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
               {testMutation.isPending ? <Loader2 size={11} className="animate-spin inline" /> : 'Test'}
             </button>
           )}
+
+          {/* Edit / cancel */}
           <button
             onClick={() => (isEditing ? setIsEditing(false) : openEdit())}
             className="p-1.5 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-[var(--color-icons-icon)]"
-            title={linked ? 'Edit' : 'Link account'}
+            title={isEditing ? 'Cancel' : linked ? 'Edit credentials' : 'Link with API token'}
           >
             <Link size={14} />
           </button>
+
+          {/* Unlink */}
           {linked && (
             <button
               onClick={() => deleteMutation.mutate()}
@@ -333,6 +430,41 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
         </div>
       </div>
 
+      {/* OAuth connect button — shown when OAuth is available and account is not yet OAuth-linked */}
+      {atlassianOauthAvailable && !isOauthLinked && (
+        <div className="border-t border-[var(--color-navigation-menu-border)] px-4 py-3 bg-[var(--color-page-background)]">
+          <button
+            onClick={connectWithOAuth}
+            disabled={oauthPending}
+            className="w-full flex items-center justify-center gap-2 text-sm px-3 py-2 rounded bg-[#0052CC] text-white hover:bg-[#0747A6] transition-colors disabled:opacity-50"
+          >
+            {oauthPending
+              ? <Loader2 size={14} className="animate-spin" />
+              : <ExternalLink size={14} />}
+            {oauthPending ? 'Redirecting to Atlassian…' : 'Connect with Atlassian'}
+          </button>
+          {!isEditing && (
+            <p className="text-center text-xs text-[var(--color-fonts-font-color-support)] mt-2">
+              or{' '}
+              <button
+                onClick={openEdit}
+                className="underline hover:text-[var(--color-fonts-font-color-primary)]"
+              >
+                link with API token
+              </button>
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* OAuth error */}
+      {oauthError && (
+        <div className="border-t border-[var(--color-navigation-menu-border)] px-4 py-2 text-xs flex items-center gap-1.5 text-[var(--color-status-text-critical)]">
+          <AlertCircle size={12} />
+          {oauthError}
+        </div>
+      )}
+
       {/* Test result */}
       {testResult && !isEditing && (
         <div
@@ -345,7 +477,7 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
         </div>
       )}
 
-      {/* Edit form */}
+      {/* API token edit form */}
       {isEditing && (
         <div className="border-t border-[var(--color-navigation-menu-border)] px-4 py-4 space-y-3 bg-[var(--color-page-background)]">
           {isXray ? (
@@ -363,7 +495,7 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Client ID</label>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">OAuth Client ID</label>
                 <input
                   type="text"
                   placeholder="Xray Cloud Client ID"
@@ -373,7 +505,7 @@ function ProviderCard({ provider, linked, user, systemConfig }: ProviderCardProp
                 />
               </div>
               <div>
-                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">Client Secret</label>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">OAuth Client Secret</label>
                 <input
                   type="password"
                   placeholder={linked ? '(leave blank to keep existing)' : 'Xray Cloud Client Secret'}
@@ -473,6 +605,12 @@ function LinkedAccountsSection({ user }: { user: AuthUser }) {
     staleTime: 5 * 60 * 1000,
   })
 
+  const { data: oauthStatus } = useQuery<OAuthStatus>({
+    queryKey: ['mcp-oauth-status'],
+    queryFn: () => mcpProfilesApi.getOAuthStatus().catch(() => ({ atlassian: false })),
+    staleTime: 10 * 60 * 1000,
+  })
+
   const jiraLinked = accounts.find((a) => a.provider === 'jira') ?? null
   const xrayLinked = accounts.find((a) => a.provider === 'xray') ?? null
 
@@ -488,9 +626,15 @@ function LinkedAccountsSection({ user }: { user: AuthUser }) {
     <div className="space-y-4">
       <p className="text-sm text-[var(--color-fonts-font-color-support)]">
         Link your personal accounts so the AI can interact with Jira, Confluence, and Xray on your behalf.
+        {oauthStatus?.atlassian && (
+          <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--color-status-background-active)] text-[var(--color-status-text-active)] font-medium">
+            <Zap size={9} />
+            OAuth ready
+          </span>
+        )}
       </p>
-      <ProviderCard provider="jira" linked={jiraLinked} user={user} systemConfig={systemConfig} />
-      <ProviderCard provider="xray" linked={xrayLinked} user={user} systemConfig={systemConfig} />
+      <ProviderCard provider="jira" linked={jiraLinked} user={user} systemConfig={systemConfig} oauthStatus={oauthStatus} />
+      <ProviderCard provider="xray" linked={xrayLinked} user={user} systemConfig={systemConfig} oauthStatus={oauthStatus} />
     </div>
   )
 }

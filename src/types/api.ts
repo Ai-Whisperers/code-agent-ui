@@ -93,12 +93,30 @@ export interface JobDiffResponse {
   files: DiffFileEntry[]
 }
 
+// ---- PR Commits ----
+
+export interface PrCommitEntry {
+  sha: string
+  shortSha: string
+  message: string
+  authorName: string
+  authorDate: string
+}
+
+export interface JobCommitsResponse {
+  commits: PrCommitEntry[]
+}
+
 // ---- SOC II Review & Evidence ----
 
 export interface ReviewCommentEntry {
+  commentId: number
   filePath: string
   line: number
   content: string
+  resolved: boolean
+  resolvedAt?: string | null
+  resolvedBy?: string | null
 }
 
 export interface JobReviewResponse {

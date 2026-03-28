@@ -102,3 +102,76 @@ h3 {
     background-position: 200% 0;
   }
 }
+
+/* ── Bot review comment markdown body ──────────────────────────────────────── */
+.bot-comment-body {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--color-fonts-font-color-primary);
+}
+.bot-comment-body p { margin: 0 0 0.5em; }
+.bot-comment-body p:last-child { margin-bottom: 0; }
+.bot-comment-body strong { font-weight: 600; color: var(--color-fonts-font-color-headings); }
+.bot-comment-body em { font-style: italic; }
+.bot-comment-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--color-tags-neutral-background);
+  color: var(--color-fonts-font-color-primary);
+}
+.bot-comment-body pre {
+  margin: 0.5em 0;
+  padding: 0.6em 0.8em;
+  border-radius: 4px;
+  background: var(--color-tags-neutral-background);
+  overflow-x: auto;
+}
+.bot-comment-body pre code {
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+}
+.bot-comment-body ul, .bot-comment-body ol {
+  margin: 0.35em 0 0.5em;
+  padding-left: 1.4em;
+}
+.bot-comment-body li { margin: 0.15em 0; }
+.bot-comment-body blockquote {
+  margin: 0.4em 0;
+  padding: 0.3em 0.75em;
+  border-left: 3px solid var(--color-borders-border-primary);
+  color: var(--color-fonts-font-color-support);
+}
+.bot-comment-body h1, .bot-comment-body h2, .bot-comment-body h3,
+.bot-comment-body h4, .bot-comment-body h5, .bot-comment-body h6 {
+  font-weight: 600;
+  margin: 0.5em 0 0.25em;
+  color: var(--color-fonts-font-color-headings);
+}
+.bot-comment-body a {
+  color: var(--color-fonts-font-color-brand);
+  text-decoration: underline;
+}
+.bot-comment-body hr {
+  border: none;
+  border-top: 1px solid var(--color-borders-border-primary);
+  margin: 0.5em 0;
+}
+.bot-comment-body table {
+  border-collapse: collapse;
+  font-size: 11px;
+  width: 100%;
+  margin: 0.5em 0;
+}
+.bot-comment-body th, .bot-comment-body td {
+  border: 1px solid var(--color-borders-border-primary);
+  padding: 3px 8px;
+  text-align: left;
+}
+.bot-comment-body th { background: var(--color-cards-card-background-hover); font-weight: 600; }
+/* Muted variant for resolved comments */
+.bot-comment-body.is-resolved {
+  opacity: 0.6;
+}

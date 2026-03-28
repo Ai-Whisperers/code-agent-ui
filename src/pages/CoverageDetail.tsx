@@ -15,7 +15,7 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { ArrowLeft, BarChart2, ChevronUp, ChevronDown, Loader2, FlaskConical, Info, X } from 'lucide-react'
+import { ArrowLeft, BarChart2, ChevronUp, ChevronDown, Loader2, FlaskConical, Info, X, ExternalLink } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -93,6 +93,8 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
   const dismissToast = useCallback(() => setToast(null), [])
   // null = dialog closed; array = packages to confirm
   const [confirmTargets, setConfirmTargets] = useState<PackageLineCoverage[] | null>(null)
+  // pkg.name → jobId for single-package jobs that have been queued
+  const [packageJobIds, setPackageJobIds] = useState<Record<string, string>>({})
 
   const { data: repos } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -182,8 +184,11 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
       if (jobIds.length === 0) throw new Error('All job submissions failed')
       return { jobIds, failed }
     },
-    onSuccess: ({ jobIds, failed }) => {
+    onSuccess: ({ jobIds, failed }, variables) => {
       setConfirmTargets(null)
+      if (variables.pkgs.length === 1 && jobIds[0]) {
+        setPackageJobIds((prev) => ({ ...prev, [variables.pkgs[0].name]: jobIds[0] }))
+      }
       const count = jobIds.length
       const message =
         count === 1
@@ -419,16 +424,29 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
                           <span className="text-[var(--color-fonts-font-color-support)] ml-1">/ {total}</span>
                         </td>
                         <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
-                          {rate < COVERAGE_THRESHOLD && (
-                            <Tooltip text={`Generate tests for ${pkg.name.replace(/\//g, '.')}`} position="left">
-                              <button
-                                onClick={() => setConfirmTargets([pkg])}
-                                className="p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-buttons-button-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
-                              >
-                                <FlaskConical size={13} />
-                              </button>
-                            </Tooltip>
-                          )}
+                          <div className="flex items-center gap-1.5">
+                            {rate < COVERAGE_THRESHOLD && (
+                              <Tooltip text={`Generate tests for ${pkg.name.replace(/\//g, '.')}`} position="left">
+                                <button
+                                  onClick={() => setConfirmTargets([pkg])}
+                                  className="p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-buttons-button-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+                                >
+                                  <FlaskConical size={13} />
+                                </button>
+                              </Tooltip>
+                            )}
+                            {packageJobIds[pkg.name] && (
+                              <Tooltip text="View queued job" position="left">
+                                <button
+                                  onClick={() => navigate({ to: '/jobs/$id', params: { id: packageJobIds[pkg.name] } })}
+                                  className="flex items-center gap-0.5 text-[10px] font-medium text-[var(--color-buttons-button-primary)] hover:underline transition-colors"
+                                >
+                                  <ExternalLink size={11} />
+                                  <span>Job</span>
+                                </button>
+                              </Tooltip>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     )

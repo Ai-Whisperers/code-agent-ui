@@ -41,6 +41,7 @@ import RoadmapDetail from '@/pages/RoadmapDetail'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
+import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
 
@@ -294,6 +295,12 @@ const soc2AuditRoute = createRoute({
   component: Soc2AuditPage,
 })
 
+const oauthCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/callback',
+  component: OAuthCallbackPage,
+})
+
 const accessDeniedRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/access-denied',
@@ -337,6 +344,7 @@ const routeTree = rootRoute.addChildren([
     scopeDetailRoute,
     soc2AuditRoute,
   ]),
+  oauthCallbackRoute,
   accessDeniedRoute,
   unauthenticatedRoute,
 ])

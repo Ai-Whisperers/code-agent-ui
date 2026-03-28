@@ -96,8 +96,19 @@ const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'bitbucket.base.url', label: 'Base URL', description: 'Bitbucket Cloud API base URL', defaultValue: 'https://api.bitbucket.org/2.0' },
       { key: 'bitbucket.workspace', label: 'Workspace', description: 'Bitbucket workspace slug' },
-      { key: 'bitbucket.user', label: 'Username', description: 'Bitbucket username' },
-      { key: 'bitbucket.app.password', label: 'App Password', description: 'Bitbucket app password for API access', isSecret: true },
+      {
+        key: 'bitbucket.oauth.client-id',
+        label: 'OAuth Consumer Key',
+        description: 'Recommended — OAuth 2.0 Client Credentials (Workspace Settings → OAuth Consumers). Enables /user identity resolution and automatic token refresh. Takes priority over App Password when set.',
+      },
+      {
+        key: 'bitbucket.oauth.client-secret',
+        label: 'OAuth Consumer Secret',
+        description: 'Secret for the OAuth Consumer above.',
+        isSecret: true,
+      },
+      { key: 'bitbucket.user', label: 'App Password Username', description: 'Fallback — Bitbucket username for App Password auth (leave blank when using OAuth).' },
+      { key: 'bitbucket.app.password', label: 'App Password', description: 'Fallback — Bitbucket App Password (leave blank when using OAuth).', isSecret: true },
     ],
   },
   {
@@ -134,8 +145,19 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'JIRA',
     settings: [
       { key: 'jira.base.url', label: 'Base URL', description: 'Jira Cloud or Server base URL', defaultValue: 'https://yourorg.atlassian.net' },
-      { key: 'jira.user', label: 'Username', description: 'Jira username or email address' },
-      { key: 'jira.api.token', label: 'API Token', description: 'Jira API token (personal access token)', isSecret: true },
+      {
+        key: 'atlassian.oauth.client-id',
+        label: 'OAuth Client ID',
+        description: 'Recommended — Atlassian OAuth 2.0 app Client ID (developer.atlassian.com). Enables per-user "Connect with Atlassian" linking in the Profile dialog. Takes priority over username/API token when set.',
+      },
+      {
+        key: 'atlassian.oauth.client-secret',
+        label: 'OAuth Client Secret',
+        description: 'Secret for the Atlassian OAuth 2.0 app above.',
+        isSecret: true,
+      },
+      { key: 'jira.user', label: 'Service Account Username', description: 'Fallback — Jira username or email for server-side bot operations (leave blank when using OAuth for all access).' },
+      { key: 'jira.api.token', label: 'Service Account API Token', description: 'Fallback — Jira API token for the service account above.', isSecret: true },
       { key: 'jira.transition.in-review', label: 'Transition: In Review', description: 'Jira transition ID to move ticket to "In Review"' },
       { key: 'jira.transition.done', label: 'Transition: Done', description: 'Jira transition ID to move ticket to "Done"' },
       { key: 'jira.transition.rejected', label: 'Transition: Rejected', description: 'Jira transition ID to move ticket to "Rejected"' },
@@ -218,7 +240,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'run-fix.max-queue-size', label: 'Max Queue Size', description: 'Maximum non-review jobs that can wait in the in-memory queue before being failed. Review jobs are always backed by the DB.', defaultValue: '20', inputType: 'number', min: 1 },
       { key: 'run-fix.blocked-paths', label: 'Blocked Paths', description: 'Comma-separated paths the agent is not allowed to modify', defaultValue: 'src/main/security,src/main/billing,.github,.env', inputType: 'textarea' },
-      { key: 'run-fix.allowed-commands', label: 'Allowed Commands', description: 'Comma-separated shell commands the agent is permitted to run', inputType: 'textarea' },
+      { key: 'run-fix.allowed-commands', label: 'Allowed Commands', description: 'Comma-separated shell commands the agent is permitted to run', defaultValue: 'mvn,./mvnw,git diff,git status,git log,git add,git commit,ls,find,cat,grep,dotnet,npm,npx', inputType: 'textarea' },
       { key: 'run-fix.max-files-changed', label: 'Max Files Changed', description: 'Maximum number of files the agent may modify per job', defaultValue: '10', inputType: 'number', min: 1 },
       { key: 'run-fix.max-lines-changed', label: 'Max Lines Changed', description: 'Maximum lines the agent may change per job', defaultValue: '500', inputType: 'number', min: 1 },
       { key: 'run-fix.max-loop-iterations', label: 'Max Loop Iterations', description: 'Maximum agent loop cycles before the job is aborted', defaultValue: '150', inputType: 'number', min: 1 },

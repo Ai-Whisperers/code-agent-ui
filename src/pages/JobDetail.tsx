@@ -1,11 +1,84 @@
-import { useState, useCallback, useRef, Fragment, useMemo } from 'react'
+import { useState, useCallback, useRef, Fragment, useMemo, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+// Language registrations (tree-shaken — only loaded languages are bundled)
+import langTypescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
+import langJsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
+import langJava from 'react-syntax-highlighter/dist/esm/languages/prism/java'
+import langCsharp from 'react-syntax-highlighter/dist/esm/languages/prism/csharp'
+import langPython from 'react-syntax-highlighter/dist/esm/languages/prism/python'
+import langPhp from 'react-syntax-highlighter/dist/esm/languages/prism/php'
+import langGo from 'react-syntax-highlighter/dist/esm/languages/prism/go'
+import langRust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
+import langKotlin from 'react-syntax-highlighter/dist/esm/languages/prism/kotlin'
+import langSwift from 'react-syntax-highlighter/dist/esm/languages/prism/swift'
+import langRuby from 'react-syntax-highlighter/dist/esm/languages/prism/ruby'
+import langScala from 'react-syntax-highlighter/dist/esm/languages/prism/scala'
+import langCpp from 'react-syntax-highlighter/dist/esm/languages/prism/cpp'
+import langC from 'react-syntax-highlighter/dist/esm/languages/prism/c'
+import langBash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
+import langSql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
+import langJson from 'react-syntax-highlighter/dist/esm/languages/prism/json'
+import langYaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
+import langMarkdown from 'react-syntax-highlighter/dist/esm/languages/prism/markdown'
+import langCss from 'react-syntax-highlighter/dist/esm/languages/prism/css'
+import langXml from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
+SyntaxHighlighter.registerLanguage('typescript', langTypescript)
+SyntaxHighlighter.registerLanguage('tsx', langJsx)
+SyntaxHighlighter.registerLanguage('jsx', langJsx)
+SyntaxHighlighter.registerLanguage('javascript', langJsx)
+SyntaxHighlighter.registerLanguage('java', langJava)
+SyntaxHighlighter.registerLanguage('csharp', langCsharp)
+SyntaxHighlighter.registerLanguage('python', langPython)
+SyntaxHighlighter.registerLanguage('php', langPhp)
+SyntaxHighlighter.registerLanguage('go', langGo)
+SyntaxHighlighter.registerLanguage('rust', langRust)
+SyntaxHighlighter.registerLanguage('kotlin', langKotlin)
+SyntaxHighlighter.registerLanguage('swift', langSwift)
+SyntaxHighlighter.registerLanguage('ruby', langRuby)
+SyntaxHighlighter.registerLanguage('scala', langScala)
+SyntaxHighlighter.registerLanguage('cpp', langCpp)
+SyntaxHighlighter.registerLanguage('c', langC)
+SyntaxHighlighter.registerLanguage('bash', langBash)
+SyntaxHighlighter.registerLanguage('sql', langSql)
+SyntaxHighlighter.registerLanguage('json', langJson)
+SyntaxHighlighter.registerLanguage('yaml', langYaml)
+SyntaxHighlighter.registerLanguage('markdown', langMarkdown)
+SyntaxHighlighter.registerLanguage('css', langCss)
+SyntaxHighlighter.registerLanguage('xml', langXml)
+SyntaxHighlighter.registerLanguage('html', langXml)
+
+const HIGHLIGHT_STYLE = {
+  ...oneDark,
+  'pre[class*="language-"]': { ...oneDark['pre[class*="language-"]'], background: 'transparent', margin: 0, padding: 0 },
+  'code[class*="language-"]': { ...oneDark['code[class*="language-"]'], background: 'transparent' },
+}
+
+function languageFromFilename(filename: string): string | undefined {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'tsx', js: 'javascript', jsx: 'jsx',
+    java: 'java', cs: 'csharp', py: 'python', php: 'php',
+    go: 'go', rs: 'rust', kt: 'kotlin', swift: 'swift',
+    rb: 'ruby', scala: 'scala', sc: 'scala',
+    cpp: 'cpp', cc: 'cpp', cxx: 'cpp', c: 'c', h: 'c', hpp: 'cpp',
+    sh: 'bash', bash: 'bash', zsh: 'bash',
+    sql: 'sql', json: 'json', yaml: 'yaml', yml: 'yaml',
+    md: 'markdown', css: 'css', scss: 'css', less: 'css',
+    xml: 'xml', html: 'html', htm: 'html', svg: 'xml',
+    gradle: 'groovy',
+  }
+  return ext ? map[ext] : undefined
+}
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Eye,
-  GitBranch, ArrowRight, ChevronDown, ChevronRight,
+  GitBranch, ArrowRight, ChevronDown, ChevronRight, ChevronUp,
   FolderOpen, Folder, TrendingUp, TrendingDown, Minus,
-  ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, Printer,
+  ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, Printer, Wrench, CheckCheck,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
@@ -20,6 +93,7 @@ import type {
   JobStatusResponse, JobAiCallsResponse, AiCallRecord,
   JobDiffResponse, DiffFileEntry, JobCoverageData, PackageLineCoverage,
   JobReviewResponse, ReviewCommentEntry, JobEvidenceResponse,
+  PrCommitEntry, JobCommitsResponse,
 } from '@/types/api'
 
 interface JobDetailProps {
@@ -28,7 +102,7 @@ interface JobDetailProps {
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PENDING', 'QUEUED'])
 
-type Tab = 'summary' | 'ai-calls' | 'review' | 'changed-files' | 'evidence' | 'coverage'
+type Tab = 'summary' | 'ai-calls' | 'review' | 'changed-files' | 'commits' | 'evidence' | 'coverage'
 
 export default function JobDetail({ jobId }: JobDetailProps) {
   const navigate = useNavigate()
@@ -80,6 +154,29 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     retry: false,
   })
 
+  const { data: commitsData } = useQuery<JobCommitsResponse>({
+    queryKey: ['job-commits', jobId],
+    queryFn: () => api.get(`/jobs/${jobId}/commits`).then((r) => r.data),
+    enabled: activeTab === 'commits' && !!job?.prUrl,
+    retry: false,
+  })
+
+  const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(null)
+
+  const { data: commitDiffData, isLoading: commitDiffLoading } = useQuery<JobDiffResponse>({
+    queryKey: ['commit-diff', jobId, selectedCommitSha],
+    queryFn: () => api.get(`/jobs/${jobId}/commits/${selectedCommitSha}/diff`).then((r) => r.data),
+    enabled: !!selectedCommitSha,
+    retry: false,
+  })
+
+  // Track running fix jobs so we can poll them and reload review when done
+  const [fixPrJobId, setFixPrJobId] = useState<string | null>(null)
+  const [fixCommentJobIds, setFixCommentJobIds] = useState<Record<number, string>>({})
+  /** Permanent record of completed fix-comment jobs, keyed by SCM comment ID. */
+  const [fixedCommentInfo, setFixedCommentInfo] = useState<Record<number, { fixJobId: string; commitSha?: string }>>({})
+  const [showFixPrConfirm, setShowFixPrConfirm] = useState(false)
+
   const requestReviewMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${jobId}/request-review`),
     onSuccess: () => {
@@ -89,6 +186,77 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to request review.'
       setToast({ variant: 'error', message: msg })
+    },
+  })
+
+  const requestFixPrMutation = useMutation({
+    mutationFn: () => api.post(`/jobs/${jobId}/request-fix-pr`),
+    onSuccess: (res) => {
+      const newJobId: string = res.data?.fixPrJobId
+      if (newJobId) setFixPrJobId(newJobId)
+      setToast({ variant: 'success', message: 'Fix-PR job queued.' })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to queue fix-PR job.'
+      setToast({ variant: 'error', message: msg })
+    },
+  })
+
+  const requestFixCommentMutation = useMutation({
+    mutationFn: ({ commentId, filePath, line }: { commentId: number; filePath: string; line: number }) =>
+      api.post(`/jobs/${jobId}/request-fix-comment`, { commentId, filePath, line }),
+    onSuccess: (res, { commentId }) => {
+      const newJobId: string = res.data?.fixCommentJobId
+      if (newJobId) setFixCommentJobIds(prev => ({ ...prev, [commentId]: newJobId }))
+      setToast({ variant: 'success', message: 'Fix-comment job queued.' })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to queue fix-comment job.'
+      setToast({ variant: 'error', message: msg })
+    },
+  })
+
+  // Poll the fix-PR job status and invalidate review data once it finishes
+  useQuery({
+    queryKey: ['fix-pr-job', fixPrJobId],
+    queryFn: () => api.get(`/status/${fixPrJobId}`).then(r => r.data),
+    enabled: !!fixPrJobId,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status
+      if (!s || s === 'RUNNING' || s === 'PENDING' || s === 'QUEUED') return 4_000
+      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+      setFixPrJobId(null)
+      return false
+    },
+  })
+
+  // Poll each running fix-comment job; when done, persist completed info
+  const fixCommentEntries = Object.entries(fixCommentJobIds)
+  useQuery({
+    queryKey: ['fix-comment-jobs', fixCommentEntries.map(([, v]) => v).join(',')],
+    queryFn: async () => {
+      const results = await Promise.all(
+        fixCommentEntries.map(([commentId, jId]) =>
+          api.get(`/status/${jId}`).then(r => ({ commentId: Number(commentId), jId, status: r.data?.status as string, sourceBranch: r.data?.sourceBranch as string | undefined }))
+        )
+      )
+      return results
+    },
+    enabled: fixCommentEntries.length > 0,
+    refetchInterval: (q) => {
+      const results = q.state.data as Array<{ commentId: number; jId: string; status: string; sourceBranch?: string }> | undefined
+      if (!results) return 4_000
+      const allDone = results.every(r => r.status && !['RUNNING', 'PENDING', 'QUEUED'].includes(r.status))
+      if (allDone) {
+        // Record completed fix info per comment before clearing the running map
+        const newFixed: Record<number, { fixJobId: string; commitSha?: string }> = {}
+        results.forEach(r => { newFixed[r.commentId] = { fixJobId: r.jId } })
+        setFixedCommentInfo(prev => ({ ...prev, ...newFixed }))
+        qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+        setFixCommentJobIds({})
+        return false
+      }
+      return 4_000
     },
   })
 
@@ -363,6 +531,15 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 Changed Files
               </TabButton>
             )}
+            {hasPr && (
+              <TabButton
+                active={activeTab === 'commits'}
+                onClick={() => setActiveTab('commits')}
+                badge={commitsData && commitsData.commits.length > 0 ? String(commitsData.commits.length) : undefined}
+              >
+                Commits
+              </TabButton>
+            )}
             <TabButton
               active={activeTab === 'evidence'}
               onClick={() => setActiveTab('evidence')}
@@ -384,9 +561,9 @@ export default function JobDetail({ jobId }: JobDetailProps) {
             <div className="space-y-3">
               {job.summary && (
                 <TableCard title="Summary" maxHeight="none">
-                  <p className="text-sm text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap p-4">
-                    {job.summary}
-                  </p>
+                  <div className="px-4 py-4 bot-comment-body">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{job.summary.replace(/<!--[\s\S]*?-->/g, '')}</ReactMarkdown>
+                  </div>
                 </TableCard>
               )}
 
@@ -424,6 +601,17 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               isLoading={reviewLoading}
               requestReviewPending={requestReviewMutation.isPending}
               onRequestReview={() => requestReviewMutation.mutate()}
+              fixPrPending={requestFixPrMutation.isPending}
+              fixPrJobId={fixPrJobId}
+              onFixPr={() => setShowFixPrConfirm(true)}
+              fixCommentJobIds={fixCommentJobIds}
+              fixedCommentInfo={fixedCommentInfo}
+              onFixComment={(commentId, filePath, line) =>
+                requestFixCommentMutation.mutate({ commentId, filePath, line })}
+              fixCommentPendingId={requestFixCommentMutation.isPending
+                ? (requestFixCommentMutation.variables as { commentId: number })?.commentId
+                : undefined}
+              onOpenCommit={setSelectedCommitSha}
             />
           )}
 
@@ -435,6 +623,36 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               isLoading={diffLoading}
               isError={diffError}
               reviewComments={reviewData?.comments ?? []}
+              fixPrPending={requestFixPrMutation.isPending}
+              fixPrJobId={fixPrJobId}
+              onFixPr={() => setShowFixPrConfirm(true)}
+              fixCommentJobIds={fixCommentJobIds}
+              fixedCommentInfo={fixedCommentInfo}
+              onFixComment={(commentId, filePath, line) =>
+                requestFixCommentMutation.mutate({ commentId, filePath, line })}
+              fixCommentPendingId={requestFixCommentMutation.isPending
+                ? (requestFixCommentMutation.variables as { commentId: number })?.commentId
+                : undefined}
+              onOpenCommit={setSelectedCommitSha}
+            />
+          )}
+
+          {/* Commits tab */}
+          {hasPr && activeTab === 'commits' && (
+            <CommitsTab
+              commits={commitsData?.commits ?? []}
+              isLoading={!commitsData && activeTab === 'commits'}
+              onCommitClick={setSelectedCommitSha}
+            />
+          )}
+
+          {/* Commit diff dialog */}
+          {selectedCommitSha && (
+            <CommitDiffDialog
+              commit={commitsData?.commits.find(c => c.sha === selectedCommitSha) ?? null}
+              diffData={commitDiffData}
+              isLoading={commitDiffLoading}
+              onClose={() => setSelectedCommitSha(null)}
             />
           )}
 
@@ -460,6 +678,18 @@ export default function JobDetail({ jobId }: JobDetailProps) {
       {toast && <Toast {...toast} onClose={dismissToast} />}
       {selectedCall && (
         <AiCallModal call={selectedCall} onClose={() => setSelectedCall(null)} />
+      )}
+
+      {showFixPrConfirm && (
+        <FixPrConfirmDialog
+          openComments={(reviewData?.comments ?? []).filter(c => !c.resolved)}
+          isPending={requestFixPrMutation.isPending}
+          onConfirm={() => {
+            requestFixPrMutation.mutate()
+            setShowFixPrConfirm(false)
+          }}
+          onCancel={() => setShowFixPrConfirm(false)}
+        />
       )}
     </main>
   )
@@ -499,15 +729,29 @@ function TabButton({ active, onClick, badge, children }: TabButtonProps) {
 
 // ── Changed Files tab ─────────────────────────────────────────────────────────
 
+interface FixedCommentInfo { fixJobId: string; commitSha?: string }
+
 interface ChangedFilesTabProps {
   job: JobStatusResponse
   diffData: JobDiffResponse | undefined
   isLoading: boolean
   isError: boolean
   reviewComments?: ReviewCommentEntry[]
+  fixPrPending?: boolean
+  fixPrJobId?: string | null
+  onFixPr?: () => void
+  fixCommentJobIds?: Record<number, string>
+  fixedCommentInfo?: Record<number, FixedCommentInfo>
+  onFixComment?: (commentId: number, filePath: string, line: number) => void
+  fixCommentPendingId?: number
+  onOpenCommit?: (sha: string) => void
 }
 
-function ChangedFilesTab({ job, diffData, isLoading, isError, reviewComments = [] }: ChangedFilesTabProps) {
+function ChangedFilesTab({
+  job, diffData, isLoading, isError, reviewComments = [],
+  fixPrPending, fixPrJobId, onFixPr,
+  fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
+}: ChangedFilesTabProps) {
   // Build a file-keyed map of review comments for inline display
   const commentsByFile = useMemo(() => {
     const map: Record<string, ReviewCommentEntry[]> = {}
@@ -540,12 +784,21 @@ function ChangedFilesTab({ job, diffData, isLoading, isError, reviewComments = [
           <ArrowRight size={11} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
           <span className="font-mono font-medium text-[var(--color-fonts-font-color-primary)]">{targetBranch || '—'}</span>
           {diffData && (
-            <span className="ml-auto flex items-center gap-2 shrink-0">
+            <span className="flex items-center gap-2 shrink-0">
               <span className="text-[var(--color-fonts-font-color-support)]">
                 {diffData.files.length} file{diffData.files.length !== 1 ? 's' : ''}
               </span>
               <span className="text-emerald-400 font-semibold">+{diffData.totalAdditions}</span>
               <span className="text-rose-400 font-semibold">−{diffData.totalDeletions}</span>
+            </span>
+          )}
+          {onFixPr && reviewComments.length > 0 && (
+            <span className="ml-auto shrink-0">
+              <FixPrButton
+                pending={fixPrPending}
+                runningJobId={fixPrJobId}
+                onClick={onFixPr}
+              />
             </span>
           )}
         </div>
@@ -598,6 +851,11 @@ function ChangedFilesTab({ job, diffData, isLoading, isError, reviewComments = [
                 onToggleViewed={() => toggleViewed(file.filename)}
                 fileComments={commentsByFile[file.filename] ?? []}
                 ref={(el) => { fileRefs.current[file.filename] = el }}
+                onFixComment={onFixComment}
+                fixCommentJobIds={fixCommentJobIds}
+                fixedCommentInfo={fixedCommentInfo}
+                fixCommentPendingId={fixCommentPendingId}
+                onOpenCommit={onOpenCommit}
               />
             ))}
           </div>
@@ -727,10 +985,18 @@ interface FileDiffSectionProps {
   viewed: boolean
   onToggleViewed: () => void
   fileComments?: ReviewCommentEntry[]
+  onFixComment?: (commentId: number, filePath: string, line: number) => void
+  fixCommentJobIds?: Record<number, string>
+  fixedCommentInfo?: Record<number, FixedCommentInfo>
+  fixCommentPendingId?: number
+  onOpenCommit?: (sha: string) => void
 }
 
 const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
-  function FileDiffSection({ file, viewed, onToggleViewed, fileComments = [] }, ref) {
+  function FileDiffSection({
+    file, viewed, onToggleViewed, fileComments = [],
+    onFixComment, fixCommentJobIds = {}, fixedCommentInfo = {}, fixCommentPendingId, onOpenCommit,
+  }, ref) {
     // Build a line-number → comments map for O(1) lookup
     const commentsByLine = useMemo(() => {
       const map: Record<number, ReviewCommentEntry[]> = {}
@@ -757,6 +1023,8 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
     const breadcrumb = dirParts.length > 4
       ? [...dirParts.slice(0, 1), '…', ...dirParts.slice(-1), filename]
       : [...dirParts, filename]
+
+    const language = languageFromFilename(file.filename)
 
     return (
       <div ref={ref} className="border-b border-[var(--color-cards-card-stroke)] last:border-b-0">
@@ -825,9 +1093,21 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
                             oldLine={line.oldLine}
                             newLine={line.newLine}
                             content={line.content}
+                            language={language}
                           />
                           {lineComments.map((c, ci) => (
-                            <InlineCommentRow key={ci} comment={c} />
+                            <InlineCommentRow
+                              key={ci}
+                              comment={c}
+                              lineType={line.type}
+                              onFix={onFixComment && c.commentId > 0 && !fixedCommentInfo[c.commentId]
+                                ? () => onFixComment(c.commentId, c.filePath, c.line)
+                                : undefined}
+                              isFixRunning={!!fixCommentJobIds[c.commentId]}
+                              isFixPending={fixCommentPendingId === c.commentId}
+                              fixedInfo={fixedCommentInfo[c.commentId]}
+                              onOpenCommit={onOpenCommit}
+                            />
                           ))}
                         </Fragment>
                       )
@@ -843,11 +1123,20 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
                 </p>
                 {orphanComments.map((c, i) => (
                   <div key={i} className="mb-1 border-l-2 border-[var(--color-tags-attention-background)] pl-3 py-1 rounded-r bg-[var(--color-tags-attention-background)]/10">
-                    <p className="text-[10px] text-[var(--color-tags-font-attention)] mb-0.5 flex items-center gap-1">
-                      <Bot size={10} />
-                      Bot Review
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <Bot size={10} className="text-[var(--color-tags-font-attention)]" />
+                      <span className="text-[10px] text-[var(--color-tags-font-attention)]">Bot Review</span>
                       {c.line > 0 && <span className="ml-1 px-1 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">line {c.line}</span>}
-                    </p>
+                      {onFixComment && c.commentId > 0 && (
+                        <span className="ml-auto">
+                          <FixCommentButton
+                            isRunning={!!fixCommentJobIds[c.commentId]}
+                            isPending={fixCommentPendingId === c.commentId}
+                            onClick={() => onFixComment(c.commentId, c.filePath, c.line)}
+                          />
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap">{c.content}</p>
                   </div>
                 ))}
@@ -873,20 +1162,19 @@ function HunkHeaderRow({ header }: { header: string }) {
   )
 }
 
-function DiffLineRow({ type, oldLine, newLine, content }: {
+function DiffLineRow({ type, oldLine, newLine, content, language }: {
   type: 'add' | 'del' | 'ctx'
   oldLine: number
   newLine: number
   content: string
+  language?: string
 }) {
   // Use bright-base colours at low opacity so the tint is visible in both light and dark themes.
-  // emerald-500 (#10b981) and rose-500 (#f43f5e) produce a clear tint at 12–15 % opacity.
   const rowBg =
     type === 'add' ? 'bg-emerald-500/[0.13]' :
     type === 'del' ? 'bg-rose-500/[0.13]'    :
     'hover:bg-[var(--color-tables-table-hover)]'
 
-  // Gutter cells (line-number + prefix) use a slightly denser tint for depth.
   const gutterBg =
     type === 'add' ? 'bg-emerald-500/[0.22]' :
     type === 'del' ? 'bg-rose-500/[0.22]'    :
@@ -913,33 +1201,250 @@ function DiffLineRow({ type, oldLine, newLine, content }: {
       <td className={`${gutterBg} w-5 px-1 py-px text-center select-none leading-5 font-bold border-r border-[var(--color-borders-border-primary)] ${prefixColor}`}>
         {prefix !== ' ' ? prefix : ''}
       </td>
-      {/* Code content */}
-      <td className="px-3 py-px leading-5 whitespace-pre text-[13px] text-[var(--color-fonts-font-color-primary)]">
-        {content}
+      {/* Code content — syntax highlighted when language is known */}
+      <td className="px-3 py-px leading-5 whitespace-pre text-[13px]">
+        {language && content.trim() ? (
+          <SyntaxHighlighter
+            language={language}
+            style={HIGHLIGHT_STYLE}
+            PreTag="span"
+            CodeTag="span"
+            customStyle={{ background: 'transparent', padding: 0, margin: 0, fontSize: 'inherit', fontFamily: 'inherit', lineHeight: 'inherit', display: 'inline' }}
+            wrapLongLines={false}
+          >
+            {content}
+          </SyntaxHighlighter>
+        ) : (
+          <span className="text-[var(--color-fonts-font-color-primary)]">{content}</span>
+        )}
       </td>
     </tr>
   )
 }
 
-function InlineCommentRow({ comment }: { comment: ReviewCommentEntry }) {
-  return (
-    <tr>
-      <td
-        colSpan={4}
-        className="border-l-2 border-[var(--color-tags-attention-background)] bg-[var(--color-tags-attention-background)]/10 px-3 py-2"
-      >
-        <div className="flex items-center gap-1.5 mb-1">
-          <Bot size={11} className="text-[var(--color-tags-font-attention)] shrink-0" />
-          <span className="text-[10px] font-semibold text-[var(--color-tags-font-attention)]">Bot Review</span>
-          {comment.line > 0 && (
-            <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
-              line {comment.line}
+/**
+ * Div-based version of the same floating comment card — used in ReviewTab
+ * where there is no table context.
+ */
+function ReviewCommentCard({
+  comment, onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+}: {
+  comment: ReviewCommentEntry
+  onFix?: () => void
+  isFixRunning?: boolean
+  isFixPending?: boolean
+  fixedInfo?: FixedCommentInfo
+  onOpenCommit?: (sha: string) => void
+}) {
+  const isResolved = !!comment.resolved
+  const [expanded, setExpanded] = useState(!isResolved)
+  const accentColor = isResolved ? 'var(--color-status-text-active)' : 'var(--color-tags-font-attention)'
+  const isFixable = comment.line > 0 && comment.commentId > 0
+
+  if (!expanded) {
+    return (
+      <div className="px-4 py-2">
+        <button
+          onClick={() => setExpanded(true)}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background)] text-left group hover:bg-[var(--color-cards-card-background-hover)] transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.07)]"
+          style={{ borderLeftWidth: '3px', borderLeftColor: accentColor }}
+        >
+          <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isResolved ? 'bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]' : 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'}`}>
+            {isResolved ? <CheckCheck size={10} /> : <Bot size={10} />}
+          </span>
+          <span className="text-[11px] font-semibold text-[var(--color-fonts-font-color-primary)]">Review Agent</span>
+          {isResolved ? (
+            <>
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]">
+                <CheckCheck size={8} /> Resolved
+              </span>
+              {comment.resolvedBy && <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">by <span className="font-medium">{comment.resolvedBy}</span></span>}
+            </>
+          ) : (
+            <span className="text-[10px] text-[var(--color-fonts-font-color-support)] truncate max-w-[60ch]">
+              {comment.content.replace(/[#*`_>-]/g, '').trim().slice(0, 90)}{comment.content.length > 90 ? '…' : ''}
             </span>
           )}
+          <ChevronDown size={12} className="ml-auto shrink-0 text-[var(--color-fonts-font-color-support)] group-hover:text-[var(--color-fonts-font-color-primary)] transition-colors" />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 py-2">
+      <div
+        className="rounded-lg border border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background)] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.10)]"
+        style={{ borderLeftWidth: '3px', borderLeftColor: accentColor }}
+      >
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-borders-border-primary)]/20">
+          <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${isResolved ? 'bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]' : 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'}`}>
+            {isResolved ? <CheckCheck size={12} /> : <Bot size={12} />}
+          </span>
+          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-primary)]">Review Agent</span>
+          {comment.line > 0 && (
+            <span className="px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)] font-mono">line {comment.line}</span>
+          )}
+          {isResolved && (
+            <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]">
+              <CheckCheck size={9} /> Resolved
+            </span>
+          )}
+          <button onClick={() => setExpanded(false)} className="ml-auto shrink-0 p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] transition-colors" title="Collapse">
+            <ChevronUp size={14} />
+          </button>
         </div>
-        <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-sans">
-          {comment.content}
-        </p>
+        <div className={`px-4 py-3 bot-comment-body${isResolved ? ' is-resolved' : ''}`}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.content}</ReactMarkdown>
+        </div>
+        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)] min-h-[32px]">
+          {isResolved ? (
+            <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+              Resolved{comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
+              {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
+            </span>
+          ) : fixedInfo ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
+              <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
+              {fixedInfo.commitSha && (
+                <><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span>
+                <button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>
+              )}
+            </div>
+          ) : isFixable && onFix ? (
+            <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InlineCommentRow({
+  comment, lineType = 'ctx', onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+}: {
+  comment: ReviewCommentEntry
+  /** Type of the diff line this comment is attached to — used to tint the gutter cell. */
+  lineType?: 'add' | 'del' | 'ctx'
+  onFix?: () => void
+  isFixRunning?: boolean
+  isFixPending?: boolean
+  fixedInfo?: { fixJobId: string; commitSha?: string }
+  onOpenCommit?: (sha: string) => void
+}) {
+  const isResolved = !!comment.resolved
+  const [expanded, setExpanded] = useState(!isResolved)
+
+  // Saturated accent colour for the left border (font token, not background token)
+  const accentColor = isResolved
+    ? 'var(--color-status-text-active)'
+    : 'var(--color-tags-font-attention)'
+
+  // Use the exact same tints as DiffLineRow so the gutter colours are identical
+  const gutterBg =
+    lineType === 'add' ? 'bg-emerald-500/[0.22]' :
+    lineType === 'del' ? 'bg-rose-500/[0.22]'    :
+    'bg-[var(--color-tables-table-row-a)]'
+
+  const rowBg =
+    lineType === 'add' ? 'bg-emerald-500/[0.13]' :
+    lineType === 'del' ? 'bg-rose-500/[0.13]'    :
+    ''
+
+  const isFixable = comment.line > 0 && comment.commentId > 0
+
+  // ── Collapsed chip ─────────────────────────────────────────────────────────
+  if (!expanded) {
+    return (
+      <tr className={rowBg}>
+        {/* Gutter — same tint as parent diff line */}
+        <td colSpan={3} className={`${gutterBg} border-r border-[var(--color-borders-border-primary)]/30`} />
+        {/* Chip in code column */}
+        <td className="pl-1 pr-3 py-1">
+          <button
+            onClick={() => setExpanded(true)}
+            className="w-full flex items-center gap-2 px-2.5 py-1 rounded border border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background)] text-left group hover:bg-[var(--color-cards-card-background-hover)] transition-colors shadow-[0_1px_3px_rgba(0,0,0,0.07)]"
+            style={{ borderLeftWidth: '3px', borderLeftColor: accentColor }}
+          >
+            <span className={`shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${isResolved ? 'bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]' : 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'}`}>
+              {isResolved ? <CheckCheck size={10} /> : <Bot size={10} />}
+            </span>
+            <span className="text-[11px] font-semibold text-[var(--color-fonts-font-color-primary)]">Review Agent</span>
+            {isResolved ? (
+              <>
+                <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]">
+                  <CheckCheck size={8} /> Resolved
+                </span>
+                {comment.resolvedBy && <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">by <span className="font-medium">{comment.resolvedBy}</span></span>}
+                {comment.resolvedAt && <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">· {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>}
+              </>
+            ) : (
+              <span className="text-[10px] text-[var(--color-fonts-font-color-support)] truncate max-w-[60ch]">
+                {comment.content.replace(/[#*`_>-]/g, '').trim().slice(0, 90)}{comment.content.length > 90 ? '…' : ''}
+              </span>
+            )}
+            <ChevronDown size={12} className="ml-auto shrink-0 text-[var(--color-fonts-font-color-support)] group-hover:text-[var(--color-fonts-font-color-primary)] transition-colors" />
+          </button>
+        </td>
+      </tr>
+    )
+  }
+
+  // ── Expanded card ──────────────────────────────────────────────────────────
+  return (
+    <tr className={rowBg}>
+      {/* Gutter — continues the diff line color visually */}
+      <td colSpan={3} className={`${gutterBg} border-r border-[var(--color-borders-border-primary)]/30 align-top pt-1.5`} />
+      {/* Card floats in the code column */}
+      <td className="pl-1 pr-3 py-1.5 align-top">
+        <div
+          className="rounded-lg border border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background)] overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.10)]"
+          style={{ borderLeftWidth: '3px', borderLeftColor: accentColor }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-[var(--color-borders-border-primary)]/20">
+            <span className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${isResolved ? 'bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]' : 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]'}`}>
+              {isResolved ? <CheckCheck size={12} /> : <Bot size={12} />}
+            </span>
+            <span className="text-xs font-semibold text-[var(--color-fonts-font-color-primary)]">Review Agent</span>
+            {comment.line > 0 && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)] font-mono">line {comment.line}</span>
+            )}
+            {isResolved && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]">
+                <CheckCheck size={9} /> Resolved
+              </span>
+            )}
+            <button onClick={() => setExpanded(false)} className="ml-auto shrink-0 p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] transition-colors" title="Collapse">
+              <ChevronUp size={14} />
+            </button>
+          </div>
+
+          {/* Markdown body */}
+          <div className={`px-4 py-3 bot-comment-body${isResolved ? ' is-resolved' : ''}`}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.content}</ReactMarkdown>
+          </div>
+
+          {/* Footer */}
+          <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)] min-h-[32px]">
+            {isResolved ? (
+              <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+                Resolved
+                {comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
+                {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
+              </span>
+            ) : fixedInfo ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
+                <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
+                {fixedInfo.commitSha && (<><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span><button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>)}
+              </div>
+            ) : isFixable && onFix ? (
+              <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
+            ) : null}
+          </div>
+        </div>
       </td>
     </tr>
   )
@@ -950,6 +1455,175 @@ function InlineCommentRow({ comment }: { comment: ReviewCommentEntry }) {
 function Separator() {
   return (
     <span className="h-3 w-px bg-[var(--color-borders-border-primary)] opacity-30 shrink-0" />
+  )
+}
+
+// ── Fix PR Confirm Dialog ─────────────────────────────────────────────────────
+
+function FixPrConfirmDialog({
+  openComments,
+  isPending,
+  onConfirm,
+  onCancel,
+}: {
+  openComments: ReviewCommentEntry[]
+  isPending: boolean
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  // Group open comments by file for the summary table
+  const byFile = useMemo(() => {
+    const map = new Map<string, number>()
+    openComments.forEach(c => map.set(c.filePath, (map.get(c.filePath) ?? 0) + 1))
+    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+  }, [openComments])
+
+  const commentCount = openComments.length
+  const fileCount = byFile.length
+
+  // Close on Escape
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [onCancel])
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+      <div className="w-full max-w-[460px] max-h-[90vh] flex flex-col rounded-lg bg-[var(--color-cards-card-background)] shadow-xl">
+
+        {/* Header */}
+        <div className="shrink-0 flex items-start gap-3 px-5 pt-5 pb-4 border-b border-[var(--color-borders-border-primary)]">
+          <div className="shrink-0 flex items-center justify-center w-8 h-8 rounded-full bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+            <Wrench size={15} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+              Queue Fix PR job?
+            </h2>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+              The agent will create a new commit addressing{' '}
+              <strong>{commentCount} review {commentCount === 1 ? 'comment' : 'comments'}</strong>{' '}
+              across <strong>{fileCount} {fileCount === 1 ? 'file' : 'files'}</strong>.
+            </p>
+          </div>
+        </div>
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 min-h-0 space-y-3">
+
+          {/* What will happen */}
+          <div className="rounded-lg border border-[var(--color-borders-border-primary)] p-3 space-y-1.5">
+            {[
+              'Clones the repository and checks out the PR branch',
+              'Applies targeted fixes for each open review comment',
+              'Commits and pushes the changes to the existing PR branch',
+              'Triggers a follow-up bot review once the fix lands',
+            ].map((step, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="shrink-0 mt-0.5 w-4 h-4 rounded-full bg-[var(--color-tags-neutral-background)] flex items-center justify-center text-[9px] font-bold text-[var(--color-fonts-font-color-support)]">
+                  {i + 1}
+                </span>
+                <p className="text-xs text-[var(--color-fonts-font-color-support)]">{step}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Comments by file */}
+          {byFile.length > 0 && (
+            <div className="rounded-lg border border-[var(--color-borders-border-primary)] overflow-hidden">
+              <div className="px-3 py-1.5 bg-[var(--color-cards-card-background-hover)] border-b border-[var(--color-borders-border-primary)]">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+                  Comments to fix
+                </p>
+              </div>
+              <table className="w-full text-xs">
+                <tbody>
+                  {byFile.map(([filePath, count]) => {
+                    const name = filePath.split('/').pop() ?? filePath
+                    const dir = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : ''
+                    return (
+                      <tr key={filePath} className="border-b border-[var(--color-borders-border-primary)] last:border-b-0">
+                        <td className="px-3 py-1.5">
+                          <span className="font-mono font-semibold text-[var(--color-fonts-font-color-primary)]">{name}</span>
+                          {dir && (
+                            <span className="ml-1 text-[var(--color-fonts-font-color-support)] font-mono">{dir}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-1.5 text-right shrink-0 whitespace-nowrap">
+                          <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+                            {count} {count === 1 ? 'comment' : 'comments'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="shrink-0 flex items-center justify-end gap-2 px-5 py-4 border-t border-[var(--color-borders-border-primary)]">
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={isPending ? <RefreshCw size={13} className="animate-spin" /> : <Wrench size={13} />}
+            loading={isPending}
+            onClick={onConfirm}
+          >
+            {isPending ? 'Queuing…' : 'Start Fix'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FixPrButton({ pending, runningJobId, onClick }: {
+  pending?: boolean
+  runningJobId?: string | null
+  onClick: () => void
+}) {
+  const isActive = pending || !!runningJobId
+  return (
+    <Tooltip text={isActive ? 'Fix job is running…' : 'Auto-fix all review comments in this PR'}>
+      <Button
+        variant="secondary"
+        size="xs"
+        icon={isActive ? <RefreshCw size={11} className="animate-spin" /> : <Wrench size={11} />}
+        loading={pending && !runningJobId}
+        disabled={isActive}
+        onClick={onClick}
+      >
+        {isActive ? 'Fixing…' : 'Fix PR'}
+      </Button>
+    </Tooltip>
+  )
+}
+
+function FixCommentButton({ isRunning, isPending, onClick }: {
+  isRunning: boolean
+  isPending: boolean
+  onClick: () => void
+}) {
+  const isActive = isRunning || isPending
+  return (
+    <Tooltip text={isActive ? 'Fix job running…' : 'Auto-fix this comment'}>
+      <Button
+        variant="ghost"
+        size="xs"
+        icon={isActive ? <RefreshCw size={10} className="animate-spin" /> : <Wrench size={10} />}
+        disabled={isActive}
+        onClick={onClick}
+      >
+        {isActive ? 'Fixing…' : 'Fix'}
+      </Button>
+    </Tooltip>
   )
 }
 
@@ -1442,9 +2116,21 @@ interface ReviewTabProps {
   isLoading: boolean
   requestReviewPending: boolean
   onRequestReview: () => void
+  fixPrPending?: boolean
+  fixPrJobId?: string | null
+  onFixPr?: () => void
+  fixCommentJobIds?: Record<number, string>
+  fixedCommentInfo?: Record<number, FixedCommentInfo>
+  onFixComment?: (commentId: number, filePath: string, line: number) => void
+  fixCommentPendingId?: number
+  onOpenCommit?: (sha: string) => void
 }
 
-function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestReview }: ReviewTabProps) {
+function ReviewTab({
+  reviewData, isLoading, requestReviewPending, onRequestReview,
+  fixPrPending, fixPrJobId, onFixPr,
+  fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
+}: ReviewTabProps) {
   const navigate = useNavigate()
 
   if (isLoading) {
@@ -1508,7 +2194,7 @@ function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestRevie
     ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
     : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
 
-  const comments = reviewData.comments ?? []
+  const comments = (reviewData.comments ?? []).filter(c => c.filePath && c.filePath.trim() !== '')
   const commentsByFile: Record<string, ReviewCommentEntry[]> = {}
   comments.forEach(c => { (commentsByFile[c.filePath] ??= []).push(c) })
 
@@ -1536,6 +2222,26 @@ function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestRevie
                 {status}
               </span>
             )}
+            {completed && (
+              <Tooltip text="Re-request a fresh bot review">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<RefreshCw size={11} />}
+                  loading={requestReviewPending}
+                  onClick={onRequestReview}
+                >
+                  Re-request
+                </Button>
+              </Tooltip>
+            )}
+            {onFixPr && comments.length > 0 && (
+              <FixPrButton
+                pending={fixPrPending}
+                runningJobId={fixPrJobId}
+                onClick={onFixPr}
+              />
+            )}
           </div>
         }
       >
@@ -1552,9 +2258,9 @@ function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestRevie
       {/* Summary card */}
       {reviewData.reviewSummary && (
         <TableCard title="Summary">
-          <pre className="px-4 py-4 text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap font-sans leading-relaxed">
-            {reviewData.reviewSummary}
-          </pre>
+          <div className="px-4 py-4 bot-comment-body">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{reviewData.reviewSummary.replace(/<!--[\s\S]*?-->/g, '')}</ReactMarkdown>
+          </div>
         </TableCard>
       )}
 
@@ -1567,20 +2273,17 @@ function ReviewTab({ reviewData, isLoading, requestReviewPending, onRequestRevie
         >
           <div className="divide-y divide-[var(--color-cards-card-stroke)]">
             {fileComments.map((c, i) => (
-              <div key={i} className="px-4 py-3">
-                <div className="flex items-center gap-1.5 mb-1">
-                  <Bot size={11} className="text-[var(--color-tags-font-attention)] shrink-0" />
-                  <span className="text-[10px] font-semibold text-[var(--color-tags-font-attention)]">Bot</span>
-                  {c.line > 0 && (
-                    <span className="ml-1 px-1.5 py-0.5 rounded text-[9px] bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
-                      line {c.line}
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-[var(--color-fonts-font-color-primary)] whitespace-pre-wrap leading-relaxed">
-                  {c.content}
-                </p>
-              </div>
+              <ReviewCommentCard
+                key={i}
+                comment={c}
+                onFix={onFixComment && c.commentId > 0 && !fixedCommentInfo[c.commentId]
+                  ? () => onFixComment(c.commentId, c.filePath, c.line)
+                  : undefined}
+                isFixRunning={!!fixCommentJobIds[c.commentId]}
+                isFixPending={fixCommentPendingId === c.commentId}
+                fixedInfo={fixedCommentInfo[c.commentId]}
+                onOpenCommit={onOpenCommit}
+              />
             ))}
           </div>
         </TableCard>
@@ -1773,6 +2476,166 @@ function EvidenceTab({ job, evidenceData, uploadScytalePending, onUploadScytale 
           </div>
         )}
       </TableCard>
+    </div>
+  )
+}
+
+// ── Commits Tab ───────────────────────────────────────────────────────────────
+
+interface CommitsTabProps {
+  commits: PrCommitEntry[]
+  isLoading: boolean
+  onCommitClick: (sha: string) => void
+}
+
+function CommitsTab({ commits, isLoading, onCommitClick }: CommitsTabProps) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-8 text-sm text-[var(--color-fonts-font-color-support)]">
+        <RefreshCw size={14} className="animate-spin" />
+        Loading commits…
+      </div>
+    )
+  }
+
+  if (commits.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-[var(--color-fonts-font-color-support)] text-sm">
+        No commits found for this pull request.
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <div className="shrink-0 px-3 py-2 border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)] flex items-center gap-2">
+        <span className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)]">
+          Commits
+        </span>
+        <span className="ml-auto text-[11px] text-[var(--color-fonts-font-color-support)]">
+          {commits.length} commit{commits.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto divide-y divide-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)]">
+        {commits.map((commit) => (
+          <button
+            key={commit.sha}
+            onClick={() => onCommitClick(commit.sha)}
+            className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-[var(--color-tables-table-hover)] transition-colors group"
+          >
+            {/* SHA badge */}
+            <span className="shrink-0 mt-0.5 font-mono text-[11px] font-semibold text-[var(--color-fonts-font-color-brand)] bg-[var(--color-tags-neutral-background)] px-1.5 py-0.5 rounded">
+              {commit.shortSha}
+            </span>
+            {/* Message + meta */}
+            <span className="flex-1 min-w-0">
+              <span className="block text-sm font-medium text-[var(--color-fonts-font-color-primary)] truncate">
+                {commit.message.split('\n')[0]}
+              </span>
+              <span className="block text-[11px] text-[var(--color-fonts-font-color-support)] mt-0.5">
+                {commit.authorName}
+                {commit.authorDate && (
+                  <> · <RelativeTime dateStr={commit.authorDate} /></>
+                )}
+              </span>
+            </span>
+            {/* Arrow hint */}
+            <ChevronRight size={14} className="shrink-0 mt-0.5 text-[var(--color-fonts-font-color-support)] opacity-0 group-hover:opacity-100 transition-opacity" />
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function RelativeTime({ dateStr }: { dateStr: string }) {
+  const date = new Date(dateStr)
+  if (isNaN(date.getTime())) return <>{dateStr}</>
+  const diff = Date.now() - date.getTime()
+  const mins = Math.floor(diff / 60_000)
+  const hours = Math.floor(diff / 3_600_000)
+  const days = Math.floor(diff / 86_400_000)
+  if (mins < 1) return <>just now</>
+  if (mins < 60) return <>{mins}m ago</>
+  if (hours < 24) return <>{hours}h ago</>
+  if (days < 30) return <>{days}d ago</>
+  return <>{date.toLocaleDateString()}</>
+}
+
+// ── Commit Diff Dialog ────────────────────────────────────────────────────────
+
+interface CommitDiffDialogProps {
+  commit: PrCommitEntry | null
+  diffData: JobDiffResponse | undefined
+  isLoading: boolean
+  onClose: () => void
+}
+
+function CommitDiffDialog({ commit, diffData, isLoading, onClose }: CommitDiffDialogProps) {
+  if (!commit) return null
+
+  const firstLine = commit.message.split('\n')[0]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-16 overflow-y-auto">
+      <div className="w-full max-w-5xl rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] shadow-xl flex flex-col max-h-[80vh]">
+        {/* Dialog header */}
+        <div className="shrink-0 flex items-start gap-3 px-4 py-3 border-b border-[var(--color-cards-card-stroke)]">
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-[var(--color-fonts-font-color-primary)] truncate">
+              {firstLine}
+            </p>
+            <div className="flex items-center gap-2 mt-1 text-[11px] text-[var(--color-fonts-font-color-support)]">
+              <span className="font-mono bg-[var(--color-tags-neutral-background)] px-1.5 py-0.5 rounded text-[var(--color-fonts-font-color-brand)]">
+                {commit.shortSha}
+              </span>
+              <span>{commit.authorName}</span>
+              {commit.authorDate && (
+                <><span>·</span><RelativeTime dateStr={commit.authorDate} /></>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 p-1.5 rounded hover:bg-[var(--color-tables-table-hover)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+          >
+            <XCircle size={16} />
+          </button>
+        </div>
+
+        {/* Dialog body */}
+        <div className="flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center gap-2 px-4 py-8 text-sm text-[var(--color-fonts-font-color-support)]">
+              <RefreshCw size={14} className="animate-spin" />
+              Loading diff…
+            </div>
+          )}
+          {!isLoading && (!diffData || diffData.files.length === 0) && (
+            <div className="flex flex-col items-center justify-center py-12 text-[var(--color-fonts-font-color-support)] text-sm">
+              Diff unavailable for this platform or commit.
+            </div>
+          )}
+          {!isLoading && diffData && diffData.files.length > 0 && (
+            <div className="text-xs">
+              {/* Stats bar */}
+              <div className="flex items-center gap-3 px-4 py-2 border-b border-[var(--color-cards-card-stroke)] text-[11px] text-[var(--color-fonts-font-color-support)]">
+                <span>{diffData.files.length} file{diffData.files.length !== 1 ? 's' : ''}</span>
+                <span className="text-emerald-400 font-semibold">+{diffData.totalAdditions}</span>
+                <span className="text-rose-400 font-semibold">−{diffData.totalDeletions}</span>
+              </div>
+              {diffData.files.map((file) => (
+                <FileDiffSection
+                  key={file.filename}
+                  file={file}
+                  viewed={false}
+                  onToggleViewed={() => {}}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
