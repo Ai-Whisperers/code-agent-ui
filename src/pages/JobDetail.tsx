@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, Fragment, useMemo, useEffect, memo } from 'react'
+import { useState, useCallback, useRef, Fragment, useMemo, useEffect, memo, useImperativeHandle, type MutableRefObject } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Prism from 'prismjs'
@@ -46,9 +46,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Eye,
-  GitBranch, ArrowRight, ChevronDown, ChevronRight, ChevronUp,
+  GitBranch, ArrowRight, ChevronDown, ChevronRight, ChevronUp, ChevronLeft,
   FolderOpen, Folder, TrendingUp, TrendingDown, Minus,
   ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, Printer, Wrench, CheckCheck,
+  FileCode, Flag, Send, GitCompare,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
@@ -228,6 +229,39 @@ export default function JobDetail({ jobId }: JobDetailProps) {
       }
       return 4_000
     },
+  })
+
+  // Comment action mutations
+  const [resolvedCommentIds, setResolvedCommentIds] = useState<Set<number>>(new Set())
+
+  const resolveCommentMutation = useMutation({
+    mutationFn: (commentId: number) => api.post(`/jobs/${jobId}/resolve-comment`, { commentId }),
+    onSuccess: (_, commentId) => {
+      setResolvedCommentIds(prev => { const s = new Set(prev); s.add(commentId); return s })
+      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+      setToast({ variant: 'success', message: 'Comment resolved.' })
+    },
+    onError: () => setToast({ variant: 'error', message: 'Failed to resolve comment.' }),
+  })
+
+  const falsePositiveMutation = useMutation({
+    mutationFn: (commentId: number) => api.post(`/jobs/${jobId}/false-positive`, { commentId }),
+    onSuccess: (_, commentId) => {
+      setResolvedCommentIds(prev => { const s = new Set(prev); s.add(commentId); return s })
+      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+      setToast({ variant: 'success', message: 'Marked as false positive.' })
+    },
+    onError: () => setToast({ variant: 'error', message: 'Failed to mark as false positive.' }),
+  })
+
+  const replyCommentMutation = useMutation({
+    mutationFn: ({ commentId, message }: { commentId: number; message: string }) =>
+      api.post(`/jobs/${jobId}/reply-comment`, { commentId, message }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+      setToast({ variant: 'success', message: 'Reply posted.' })
+    },
+    onError: () => setToast({ variant: 'error', message: 'Failed to post reply.' }),
   })
 
   const uploadScytaleMutation = useMutation({
@@ -582,6 +616,12 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 ? (requestFixCommentMutation.variables as { commentId: number })?.commentId
                 : undefined}
               onOpenCommit={setSelectedCommitSha}
+              onResolveComment={commentId => resolveCommentMutation.mutate(commentId)}
+              onFalsePositive={commentId => falsePositiveMutation.mutate(commentId)}
+              onReplyComment={(commentId, message) => replyCommentMutation.mutate({ commentId, message })}
+              resolvedCommentIds={resolvedCommentIds}
+              resolveCommentPendingId={resolveCommentMutation.isPending ? resolveCommentMutation.variables as number : undefined}
+              falsePositivePendingId={falsePositiveMutation.isPending ? falsePositiveMutation.variables as number : undefined}
             />
           )}
 
@@ -604,6 +644,12 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 ? (requestFixCommentMutation.variables as { commentId: number })?.commentId
                 : undefined}
               onOpenCommit={setSelectedCommitSha}
+              onResolveComment={commentId => resolveCommentMutation.mutate(commentId)}
+              onFalsePositive={commentId => falsePositiveMutation.mutate(commentId)}
+              onReplyComment={(commentId, message) => replyCommentMutation.mutate({ commentId, message })}
+              resolvedCommentIds={resolvedCommentIds}
+              resolveCommentPendingId={resolveCommentMutation.isPending ? resolveCommentMutation.variables as number : undefined}
+              falsePositivePendingId={falsePositiveMutation.isPending ? falsePositiveMutation.variables as number : undefined}
             />
           )}
 
@@ -715,12 +761,20 @@ interface ChangedFilesTabProps {
   onFixComment?: (commentId: number, filePath: string, line: number) => void
   fixCommentPendingId?: number
   onOpenCommit?: (sha: string) => void
+  onResolveComment?: (commentId: number) => void
+  onFalsePositive?: (commentId: number) => void
+  onReplyComment?: (commentId: number, message: string) => void
+  resolvedCommentIds?: Set<number>
+  resolveCommentPendingId?: number
+  falsePositivePendingId?: number
 }
 
 function ChangedFilesTab({
   job, diffData, isLoading, isError, reviewComments = [],
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
+  onResolveComment, onFalsePositive, onReplyComment, resolvedCommentIds = new Set(),
+  resolveCommentPendingId, falsePositivePendingId,
 }: ChangedFilesTabProps) {
   // Build a file-keyed map of review comments for inline display
   const commentsByFile = useMemo(() => {
@@ -728,9 +782,45 @@ function ChangedFilesTab({
     reviewComments.forEach(c => { (map[c.filePath] ??= []).push(c) })
     return map
   }, [reviewComments])
+
+  // Flat ordered list for prev/next nav, sorted by file order in diff then line number
+  const allComments = useMemo(() => {
+    if (!diffData) return reviewComments.filter(c => c.commentId > 0)
+    const fileOrder: Record<string, number> = {}
+    diffData.files.forEach((f, i) => { fileOrder[f.filename] = i })
+    return [...reviewComments]
+      .filter(c => c.commentId > 0)
+      .sort((a, b) => {
+        const fa = fileOrder[a.filePath] ?? 999
+        const fb = fileOrder[b.filePath] ?? 999
+        return fa !== fb ? fa - fb : a.line - b.line
+      })
+  }, [reviewComments, diffData])
+
+  const [activeCommentIdx, setActiveCommentIdx] = useState(0)
+  const commentRefs = useRef<Record<number, HTMLTableRowElement | null>>({})
+
+  const scrollToComment = useCallback((idx: number) => {
+    const comment = allComments[idx]
+    if (!comment) return
+    const el = commentRefs.current[comment.commentId]
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [allComments])
+
+  const goToPrev = useCallback(() => {
+    const next = Math.max(0, activeCommentIdx - 1)
+    setActiveCommentIdx(next)
+    scrollToComment(next)
+  }, [activeCommentIdx, scrollToComment])
+
+  const goToNext = useCallback(() => {
+    const next = Math.min(allComments.length - 1, activeCommentIdx + 1)
+    setActiveCommentIdx(next)
+    scrollToComment(next)
+  }, [activeCommentIdx, allComments.length, scrollToComment])
   const sourceBranch = diffData?.sourceBranch || job.sourceBranch || ''
   const targetBranch = diffData?.targetBranch || job.targetBranch || ''
-  const fileRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const fileRefs = useRef<Record<string, FileDiffSectionHandle | null>>({})
   const [viewedFiles, setViewedFiles] = useState<Set<string>>(new Set())
 
   // Expand/collapse-all: seq increments on each action, target is the desired collapsed state
@@ -748,8 +838,29 @@ function ChangedFilesTab({
     }), [])
 
   const scrollTo = useCallback((filename: string) => {
-    fileRefs.current[filename]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+    const handle = fileRefs.current[filename]
+    if (!handle) return
+    // Always expand the file block first so its contents are visible
+    handle.expand()
+    // After the DOM has had a frame to re-render (expansion is synchronous state update),
+    // scroll to the first comment for this file, or to the file header itself.
+    requestAnimationFrame(() => {
+      const fileCommentList = commentsByFile[filename] ?? []
+      if (fileCommentList.length > 0) {
+        // Find the comment with the lowest line number that has a ref registered
+        const sorted = [...fileCommentList].sort((a, b) => a.line - b.line)
+        for (const c of sorted) {
+          const el = commentRefs.current[c.commentId]
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            return
+          }
+        }
+      }
+      // Fallback: scroll to the file header
+      handle.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  }, [commentsByFile, commentRefs])
 
   const expandAll = useCallback(() => {
     setExpandCollapseTarget(false)
@@ -765,11 +876,11 @@ function ChangedFilesTab({
     <div className="flex flex-col flex-1 min-h-0 gap-2">
       {/* Branch context bar */}
       {(sourceBranch || targetBranch) && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-xs shrink-0">
-          <GitBranch size={12} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
-          <span className="font-mono font-medium text-[var(--color-fonts-font-color-primary)]">{sourceBranch || '—'}</span>
-          <ArrowRight size={11} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
-          <span className="font-mono font-medium text-[var(--color-fonts-font-color-primary)]">{targetBranch || '—'}</span>
+        <div className="flex items-center gap-2 px-3 py-3 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-xs shrink-0 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+          <GitCompare size={14} className="shrink-0 text-[var(--color-fonts-font-color-brand)]" />
+          <span className="font-mono font-semibold text-[var(--color-fonts-font-color-primary)]">{sourceBranch || '—'}</span>
+          <ArrowRight size={12} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
+          <span className="font-mono font-semibold text-[var(--color-fonts-font-color-primary)]">{targetBranch || '—'}</span>
           {diffData && (
             <span className="flex items-center gap-2 shrink-0">
               <span className="text-[var(--color-fonts-font-color-support)]">
@@ -801,6 +912,37 @@ function ChangedFilesTab({
                 onClick={onFixPr}
               />
             )}
+          </span>
+        </div>
+      )}
+
+      {/* Prev / Next comment navigator bar */}
+      {allComments.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-card)] border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-xs shrink-0 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+          <MessageSquare size={12} className="shrink-0 text-amber-400" />
+          <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+            Comment {activeCommentIdx + 1} / {allComments.length}
+          </span>
+          <span className="text-[var(--color-fonts-font-color-support)] truncate max-w-[40ch] hidden sm:block">
+            {allComments[activeCommentIdx]?.content.replace(/[#*`_>-]/g, '').trim().slice(0, 60)}
+          </span>
+          <span className="flex items-center gap-1 ml-auto shrink-0">
+            <button
+              onClick={goToPrev}
+              disabled={activeCommentIdx === 0}
+              className="p-1 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] disabled:opacity-30 transition-colors"
+              title="Previous comment"
+            >
+              <ChevronLeft size={13} />
+            </button>
+            <button
+              onClick={goToNext}
+              disabled={activeCommentIdx === allComments.length - 1}
+              className="p-1 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] disabled:opacity-30 transition-colors"
+              title="Next comment"
+            >
+              <ChevronRight size={13} />
+            </button>
           </span>
         </div>
       )}
@@ -841,6 +983,7 @@ function ChangedFilesTab({
             totalDeletions={diffData.totalDeletions}
             viewedFiles={viewedFiles}
             onFileClick={scrollTo}
+            commentsByFile={commentsByFile}
           />
           {/* Right: diff content */}
           <div className="flex-1 overflow-auto bg-[var(--color-cards-card-background)]">
@@ -851,7 +994,7 @@ function ChangedFilesTab({
                 viewed={viewedFiles.has(file.filename)}
                 onToggleViewed={() => toggleViewed(file.filename)}
                 fileComments={commentsByFile[file.filename] ?? []}
-                ref={(el) => { fileRefs.current[file.filename] = el }}
+                ref={(el: FileDiffSectionHandle | null) => { fileRefs.current[file.filename] = el }}
                 onFixComment={onFixComment}
                 fixCommentJobIds={fixCommentJobIds}
                 fixedCommentInfo={fixedCommentInfo}
@@ -860,6 +1003,13 @@ function ChangedFilesTab({
                 initialCollapsed={initialCollapsed}
                 expandCollapseSeq={expandCollapseSeq}
                 expandCollapseTarget={expandCollapseTarget}
+                commentRefs={commentRefs}
+                onResolveComment={onResolveComment}
+                onFalsePositive={onFalsePositive}
+                onReplyComment={onReplyComment}
+                resolvedCommentIds={resolvedCommentIds}
+                resolveCommentPendingId={resolveCommentPendingId}
+                falsePositivePendingId={falsePositivePendingId}
               />
             ))}
           </div>
@@ -884,6 +1034,7 @@ interface FileTreePanelProps {
   totalDeletions: number
   viewedFiles: Set<string>
   onFileClick: (filename: string) => void
+  commentsByFile?: Record<string, ReviewCommentEntry[]>
 }
 
 function buildTree(files: DiffFileEntry[]): Map<string, DiffFileEntry[]> {
@@ -898,7 +1049,7 @@ function buildTree(files: DiffFileEntry[]): Map<string, DiffFileEntry[]> {
   return map
 }
 
-function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onFileClick }: FileTreePanelProps) {
+function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onFileClick, commentsByFile = {} }: FileTreePanelProps) {
   const tree = useMemo(() => buildTree(files), [files])
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
 
@@ -957,6 +1108,7 @@ function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onF
                 file.status === 'added'   ? '+' :
                 file.status === 'removed' ? '−' :
                 '~'
+              const commentCount = commentsByFile[file.filename]?.length ?? 0
               return (
                 <button
                   key={file.filename}
@@ -967,6 +1119,11 @@ function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onF
                   <span className="flex-1 min-w-0 text-[11px] font-mono text-[var(--color-fonts-font-color-primary)] truncate">
                     {filename}
                   </span>
+                  {commentCount > 0 && (
+                    <span className="shrink-0 ml-1 text-[9px] font-bold text-amber-400">
+                      ● {commentCount}
+                    </span>
+                  )}
                   <span className="shrink-0 text-[10px] font-semibold text-emerald-400 ml-1">
                     +{file.additions}
                   </span>
@@ -984,6 +1141,14 @@ function FileTreePanel({ files, totalAdditions, totalDeletions, viewedFiles, onF
 
 import { forwardRef } from 'react'
 
+/** Imperative handle exposed by each FileDiffSection so the file tree can expand + scroll to it. */
+export interface FileDiffSectionHandle {
+  /** Ensure the file block is expanded (unhides the diff hunks). */
+  expand: () => void
+  /** Proxy for the underlying DOM element's scrollIntoView. */
+  scrollIntoView: (options?: ScrollIntoViewOptions) => void
+}
+
 interface FileDiffSectionProps {
   file: DiffFileEntry
   viewed: boolean
@@ -997,13 +1162,22 @@ interface FileDiffSectionProps {
   initialCollapsed?: boolean
   expandCollapseSeq?: number
   expandCollapseTarget?: boolean
+  commentRefs?: MutableRefObject<Record<number, HTMLTableRowElement | null>>
+  onResolveComment?: (commentId: number) => void
+  onFalsePositive?: (commentId: number) => void
+  onReplyComment?: (commentId: number, message: string) => void
+  resolvedCommentIds?: Set<number>
+  resolveCommentPendingId?: number
+  falsePositivePendingId?: number
 }
 
-const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
+const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
   function FileDiffSection({
     file, viewed, onToggleViewed, fileComments = [],
     onFixComment, fixCommentJobIds = {}, fixedCommentInfo = {}, fixCommentPendingId, onOpenCommit,
     initialCollapsed = false, expandCollapseSeq = 0, expandCollapseTarget,
+    commentRefs, onResolveComment, onFalsePositive, onReplyComment,
+    resolvedCommentIds = new Set(), resolveCommentPendingId, falsePositivePendingId,
   }, ref) {
     // Build a line-number → comments map for O(1) lookup
     const commentsByLine = useMemo(() => {
@@ -1028,6 +1202,13 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
     )
 
     const [collapsed, setCollapsed] = useState(initialCollapsed)
+    const divRef = useRef<HTMLDivElement>(null)
+
+    // Expose expand() and scrollIntoView() imperatively to the file-tree sidebar
+    useImperativeHandle(ref, () => ({
+      expand: () => setCollapsed(false),
+      scrollIntoView: (options) => divRef.current?.scrollIntoView(options),
+    }))
 
     // Respond to expand-all / collapse-all signals from the parent
     useEffect(() => {
@@ -1044,47 +1225,76 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
 
     const language = languageFromFilename(file.filename)
 
+    const statusAccentBg =
+      file.status === 'added'   ? 'bg-emerald-500' :
+      file.status === 'removed' ? 'bg-rose-500'    :
+      'bg-amber-500'
+    const statusIconColor =
+      file.status === 'added'   ? 'text-emerald-400' :
+      file.status === 'removed' ? 'text-rose-400'    :
+      'text-amber-400'
+
     return (
-      <div ref={ref} className="border-b border-[var(--color-cards-card-stroke)] last:border-b-0">
+      <div ref={divRef} className="border-b border-[var(--color-cards-card-stroke)] last:border-b-0">
         {/* File header */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--color-cards-card-background)] border-b border-[var(--color-tables-table-header-stroke)] sticky top-0 z-10">
-          <button
-            onClick={() => setCollapsed((v) => !v)}
-            className="shrink-0 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-          >
-            {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
-          </button>
+        <div
+          className="flex items-stretch sticky top-0 z-10 bg-[var(--color-cards-card-background)] border-b border-[var(--color-tables-table-header-stroke)] cursor-pointer"
+          onClick={() => setCollapsed((v) => !v)}
+        >
+          {/* Left accent bar */}
+          <div className={`w-[3px] shrink-0 ${statusAccentBg}`} />
 
-          {/* Breadcrumb path */}
-          <div className="flex items-center gap-0.5 flex-1 min-w-0 text-xs font-mono overflow-hidden">
-            {breadcrumb.map((part, i) => (
-              <Fragment key={i}>
-                {i > 0 && (
-                  <span className="shrink-0 text-[var(--color-fonts-font-color-support)] px-0.5">/</span>
-                )}
-                <span className={`truncate ${i === breadcrumb.length - 1 ? 'font-semibold text-[var(--color-fonts-font-color-primary)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
-                  {part}
-                </span>
-              </Fragment>
-            ))}
+          {/* Icon + breadcrumb + badges */}
+          <div className="flex items-center gap-2 flex-1 px-3 py-2 min-w-0">
+            <FileCode size={13} className={`shrink-0 ${statusIconColor}`} />
+
+            {/* Breadcrumb path */}
+            <div className="flex items-center gap-0.5 flex-1 min-w-0 text-xs font-mono overflow-hidden">
+              {breadcrumb.map((part, i) => (
+                <Fragment key={i}>
+                  {i > 0 && (
+                    <span className="shrink-0 text-[var(--color-fonts-font-color-support)] px-0.5">/</span>
+                  )}
+                  <span className={`truncate ${i === breadcrumb.length - 1 ? 'font-semibold text-[var(--color-fonts-font-color-primary)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
+                    {part}
+                  </span>
+                </Fragment>
+              ))}
+            </div>
+
+            {/* Comment count badge */}
+            {fileComments.length > 0 && (
+              <span className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                <MessageSquare size={8} />
+                {fileComments.length}
+              </span>
+            )}
+
+            {/* Stats + Viewed + Collapse */}
+            <span className="ml-auto flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+              <span className="text-[11px] font-semibold flex items-center gap-1">
+                <span className="text-emerald-400">+{file.additions}</span>
+                {file.deletions > 0 && <span className="text-rose-400">−{file.deletions}</span>}
+              </span>
+
+              <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={viewed}
+                  onChange={onToggleViewed}
+                  className="rounded border-[var(--color-borders-border-primary)] accent-[var(--color-fonts-font-color-brand)]"
+                />
+                <span className="text-[11px] text-[var(--color-fonts-font-color-support)]">Viewed</span>
+              </label>
+
+              <button
+                onClick={e => { e.stopPropagation(); setCollapsed(v => !v) }}
+                className="shrink-0 p-0.5 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+              >
+                {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+              </button>
+            </span>
           </div>
-
-          {/* Stats */}
-          <span className="shrink-0 text-[11px] font-semibold flex items-center gap-1">
-            <span className="text-emerald-400">+{file.additions}</span>
-            {file.deletions > 0 && <span className="text-rose-400">−{file.deletions}</span>}
-          </span>
-
-          {/* Viewed toggle */}
-          <label className="shrink-0 flex items-center gap-1.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={viewed}
-              onChange={onToggleViewed}
-              className="rounded border-[var(--color-borders-border-primary)] accent-[var(--color-fonts-font-color-brand)]"
-            />
-            <span className="text-[11px] text-[var(--color-fonts-font-color-support)]">Viewed</span>
-          </label>
         </div>
 
         {/* Diff hunks */}
@@ -1112,6 +1322,7 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
                             newLine={line.newLine}
                             content={line.content}
                             language={language}
+                            hasComment={lineComments.length > 0}
                           />
                           {lineComments.map((c, ci) => (
                             <InlineCommentRow
@@ -1125,6 +1336,16 @@ const FileDiffSection = forwardRef<HTMLDivElement, FileDiffSectionProps>(
                               isFixPending={fixCommentPendingId === c.commentId}
                               fixedInfo={fixedCommentInfo[c.commentId]}
                               onOpenCommit={onOpenCommit}
+                              commentRef={commentRefs ? el => { commentRefs.current[c.commentId] = el } : undefined}
+                              onResolve={onResolveComment && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
+                                ? () => onResolveComment(c.commentId) : undefined}
+                              onFalsePositive={onFalsePositive && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
+                                ? () => onFalsePositive(c.commentId) : undefined}
+                              onReply={onReplyComment && c.commentId > 0
+                                ? (msg) => onReplyComment(c.commentId, msg) : undefined}
+                              isResolvePending={resolveCommentPendingId === c.commentId}
+                              isFalsePositivePending={falsePositivePendingId === c.commentId}
+                              optimisticallyResolved={resolvedCommentIds.has(c.commentId)}
                             />
                           ))}
                         </Fragment>
@@ -1180,20 +1401,23 @@ const HunkHeaderRow = memo(function HunkHeaderRow({ header }: { header: string }
   )
 })
 
-const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content, language }: {
+const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content, language, hasComment }: {
   type: 'add' | 'del' | 'ctx'
   oldLine: number
   newLine: number
   content: string
   language?: string
+  hasComment?: boolean
 }) {
   // Use bright-base colours at low opacity so the tint is visible in both light and dark themes.
   const rowBg =
+    hasComment    ? 'bg-amber-500/[0.08] hover:bg-amber-500/[0.13]' :
     type === 'add' ? 'bg-emerald-500/[0.13]' :
     type === 'del' ? 'bg-rose-500/[0.13]'    :
     'hover:bg-[var(--color-tables-table-hover)]'
 
   const gutterBg =
+    hasComment    ? 'bg-amber-500/[0.25]' :
     type === 'add' ? 'bg-emerald-500/[0.22]' :
     type === 'del' ? 'bg-rose-500/[0.22]'    :
     'bg-[var(--color-tables-table-row-a)]'
@@ -1226,9 +1450,9 @@ const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content,
       <td className={`${gutterBg} px-2 py-px text-right select-none leading-5 text-[10px] tabular-nums text-[var(--color-fonts-font-color-support)] border-r border-[var(--color-borders-border-primary)]`}>
         {type !== 'del' && newLine > 0 ? newLine : ''}
       </td>
-      {/* +/− prefix */}
-      <td className={`${gutterBg} w-5 px-1 py-px text-center select-none leading-5 font-bold border-r border-[var(--color-borders-border-primary)] ${prefixColor}`}>
-        {prefix !== ' ' ? prefix : ''}
+      {/* +/− prefix (or amber comment dot) */}
+      <td className={`${gutterBg} w-5 px-1 py-px text-center select-none leading-5 font-bold border-r border-[var(--color-borders-border-primary)] ${hasComment ? 'text-amber-400' : prefixColor}`}>
+        {hasComment ? '●' : prefix !== ' ' ? prefix : ''}
       </td>
       {/* Code content — syntax highlighted when language is known */}
       <td className="px-3 py-px leading-5 whitespace-pre text-[13px]">
@@ -1247,6 +1471,7 @@ const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content,
  */
 function ReviewCommentCard({
   comment, onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+  onResolve, onFalsePositive, onReply, isResolvePending, isFalsePositivePending, optimisticallyResolved,
 }: {
   comment: ReviewCommentEntry
   onFix?: () => void
@@ -1254,9 +1479,17 @@ function ReviewCommentCard({
   isFixPending?: boolean
   fixedInfo?: FixedCommentInfo
   onOpenCommit?: (sha: string) => void
+  onResolve?: () => void
+  onFalsePositive?: () => void
+  onReply?: (message: string) => void
+  isResolvePending?: boolean
+  isFalsePositivePending?: boolean
+  optimisticallyResolved?: boolean
 }) {
-  const isResolved = !!comment.resolved
+  const isResolved = optimisticallyResolved || !!comment.resolved
   const [expanded, setExpanded] = useState(!isResolved)
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyText, setReplyText] = useState('')
   const accentColor = isResolved ? 'var(--color-status-text-active)' : 'var(--color-tags-font-attention)'
   const isFixable = comment.line > 0 && comment.commentId > 0
 
@@ -1316,24 +1549,60 @@ function ReviewCommentCard({
         <div className={`px-4 py-3 bot-comment-body${isResolved ? ' is-resolved' : ''}`}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.content}</ReactMarkdown>
         </div>
-        <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)] min-h-[32px]">
-          {isResolved ? (
-            <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
-              Resolved{comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
-              {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
-            </span>
-          ) : fixedInfo ? (
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
-              <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
-              {fixedInfo.commitSha && (
-                <><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span>
-                <button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>
-              )}
+        <div className="flex flex-col border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)]">
+          <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap min-h-[32px]">
+            {isResolved ? (
+              <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+                Resolved{comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
+                {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
+              </span>
+            ) : (
+              <>
+                {onResolve && (
+                  <button onClick={onResolve} disabled={isResolvePending} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-status-text-active)] hover:bg-[var(--color-status-success-background)] transition-colors disabled:opacity-50">
+                    <CheckCheck size={10} /> Resolve
+                  </button>
+                )}
+                {onFalsePositive && (
+                  <button onClick={onFalsePositive} disabled={isFalsePositivePending} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tags-neutral-background)] transition-colors disabled:opacity-50">
+                    <Flag size={10} /> False Positive
+                  </button>
+                )}
+                {fixedInfo ? (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
+                    <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
+                    {fixedInfo.commitSha && (<><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span><button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>)}
+                  </div>
+                ) : isFixable && onFix ? (
+                  <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
+                ) : null}
+                {onReply && (
+                  <button onClick={() => setReplyOpen(v => !v)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tables-table-hover)] transition-colors ml-auto">
+                    <MessageSquare size={10} /> Reply
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          {replyOpen && onReply && !isResolved && (
+            <div className="flex items-end gap-2 px-3 pb-2">
+              <textarea
+                value={replyText}
+                onChange={e => setReplyText(e.target.value)}
+                placeholder="Write a reply…"
+                rows={2}
+                className="flex-1 resize-none text-xs rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] px-2 py-1.5 focus:outline-none focus:border-[var(--color-fonts-font-color-brand)] placeholder:text-[var(--color-fonts-font-color-support)]"
+              />
+              <button
+                onClick={() => { if (replyText.trim()) { onReply(replyText.trim()); setReplyText(''); setReplyOpen(false) } }}
+                disabled={!replyText.trim()}
+                className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded text-[10px] font-medium bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+              >
+                <Send size={10} /> Send
+              </button>
             </div>
-          ) : isFixable && onFix ? (
-            <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
-          ) : null}
+          )}
         </div>
       </div>
     </div>
@@ -1342,6 +1611,7 @@ function ReviewCommentCard({
 
 function InlineCommentRow({
   comment, lineType = 'ctx', onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+  commentRef, onResolve, onFalsePositive, onReply, isResolvePending, isFalsePositivePending, optimisticallyResolved,
 }: {
   comment: ReviewCommentEntry
   /** Type of the diff line this comment is attached to — used to tint the gutter cell. */
@@ -1351,9 +1621,18 @@ function InlineCommentRow({
   isFixPending?: boolean
   fixedInfo?: { fixJobId: string; commitSha?: string }
   onOpenCommit?: (sha: string) => void
+  commentRef?: (el: HTMLTableRowElement | null) => void
+  onResolve?: () => void
+  onFalsePositive?: () => void
+  onReply?: (message: string) => void
+  isResolvePending?: boolean
+  isFalsePositivePending?: boolean
+  optimisticallyResolved?: boolean
 }) {
-  const isResolved = !!comment.resolved
+  const isResolved = optimisticallyResolved || !!comment.resolved
   const [expanded, setExpanded] = useState(!isResolved)
+  const [replyOpen, setReplyOpen] = useState(false)
+  const [replyText, setReplyText] = useState('')
 
   // Saturated accent colour for the left border (font token, not background token)
   const accentColor = isResolved
@@ -1376,7 +1655,7 @@ function InlineCommentRow({
   // ── Collapsed chip ─────────────────────────────────────────────────────────
   if (!expanded) {
     return (
-      <tr className={rowBg}>
+      <tr ref={commentRef} className={rowBg}>
         {/* Gutter — same tint as parent diff line */}
         <td colSpan={3} className={`${gutterBg} border-r border-[var(--color-borders-border-primary)]/30`} />
         {/* Chip in code column */}
@@ -1412,7 +1691,7 @@ function InlineCommentRow({
 
   // ── Expanded card ──────────────────────────────────────────────────────────
   return (
-    <tr className={rowBg}>
+    <tr ref={commentRef} className={rowBg}>
       {/* Gutter — continues the diff line color visually */}
       <td colSpan={3} className={`${gutterBg} border-r border-[var(--color-borders-border-primary)]/30 align-top pt-1.5`} />
       {/* Card floats in the code column */}
@@ -1446,22 +1725,61 @@ function InlineCommentRow({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center gap-3 px-3 py-1.5 border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)] min-h-[32px]">
-            {isResolved ? (
-              <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
-                Resolved
-                {comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
-                {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
-              </span>
-            ) : fixedInfo ? (
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
-                <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
-                {fixedInfo.commitSha && (<><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span><button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>)}
+          <div className="flex flex-col border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)]">
+            <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap min-h-[32px]">
+              {isResolved ? (
+                <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+                  Resolved
+                  {comment.resolvedBy ? <> by <span className="font-medium">{comment.resolvedBy}</span></> : null}
+                  {comment.resolvedAt ? <> · {new Date(comment.resolvedAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</> : null}
+                </span>
+              ) : (
+                <>
+                  {onResolve && (
+                    <button onClick={onResolve} disabled={isResolvePending} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-status-text-active)] hover:bg-[var(--color-status-success-background)] transition-colors disabled:opacity-50">
+                      <CheckCheck size={10} /> Resolve
+                    </button>
+                  )}
+                  {onFalsePositive && (
+                    <button onClick={onFalsePositive} disabled={isFalsePositivePending} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tags-neutral-background)] transition-colors disabled:opacity-50">
+                      <Flag size={10} /> False Positive
+                    </button>
+                  )}
+                  {fixedInfo ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[var(--color-status-success-background)] text-[var(--color-status-text-active)]"><CheckCheck size={9} /> Fixed</span>
+                      <a href={`/jobs/${fixedInfo.fixJobId}`} onClick={e => { e.preventDefault(); window.location.href = `/jobs/${fixedInfo.fixJobId}` }} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.fixJobId.slice(0, 8)}</a>
+                      {fixedInfo.commitSha && (<><span className="text-[10px] text-[var(--color-fonts-font-color-support)]">·</span><button onClick={() => onOpenCommit?.(fixedInfo.commitSha!)} className="text-[10px] font-mono text-[var(--color-fonts-font-color-brand)] hover:underline">{fixedInfo.commitSha.slice(0, 8)}</button></>)}
+                    </div>
+                  ) : isFixable && onFix ? (
+                    <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
+                  ) : null}
+                  {onReply && (
+                    <button onClick={() => setReplyOpen(v => !v)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tables-table-hover)] transition-colors ml-auto">
+                      <MessageSquare size={10} /> Reply
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+            {replyOpen && onReply && !isResolved && (
+              <div className="flex items-end gap-2 px-3 pb-2">
+                <textarea
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  placeholder="Write a reply…"
+                  rows={2}
+                  className="flex-1 resize-none text-xs rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] px-2 py-1.5 focus:outline-none focus:border-[var(--color-fonts-font-color-brand)] placeholder:text-[var(--color-fonts-font-color-support)]"
+                />
+                <button
+                  onClick={() => { if (replyText.trim()) { onReply(replyText.trim()); setReplyText(''); setReplyOpen(false) } }}
+                  disabled={!replyText.trim()}
+                  className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded text-[10px] font-medium bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+                >
+                  <Send size={10} /> Send
+                </button>
               </div>
-            ) : isFixable && onFix ? (
-              <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
-            ) : null}
+            )}
           </div>
         </div>
       </td>
@@ -2170,12 +2488,20 @@ interface ReviewTabProps {
   onFixComment?: (commentId: number, filePath: string, line: number) => void
   fixCommentPendingId?: number
   onOpenCommit?: (sha: string) => void
+  onResolveComment?: (commentId: number) => void
+  onFalsePositive?: (commentId: number) => void
+  onReplyComment?: (commentId: number, message: string) => void
+  resolvedCommentIds?: Set<number>
+  resolveCommentPendingId?: number
+  falsePositivePendingId?: number
 }
 
 function ReviewTab({
   reviewData, isLoading, requestReviewPending, onRequestReview,
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
+  onResolveComment, onFalsePositive, onReplyComment, resolvedCommentIds = new Set(),
+  resolveCommentPendingId, falsePositivePendingId,
 }: ReviewTabProps) {
   const navigate = useNavigate()
 
@@ -2329,6 +2655,15 @@ function ReviewTab({
                 isFixPending={fixCommentPendingId === c.commentId}
                 fixedInfo={fixedCommentInfo[c.commentId]}
                 onOpenCommit={onOpenCommit}
+                onResolve={onResolveComment && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
+                  ? () => onResolveComment(c.commentId) : undefined}
+                onFalsePositive={onFalsePositive && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
+                  ? () => onFalsePositive(c.commentId) : undefined}
+                onReply={onReplyComment && c.commentId > 0
+                  ? (msg) => onReplyComment(c.commentId, msg) : undefined}
+                isResolvePending={resolveCommentPendingId === c.commentId}
+                isFalsePositivePending={falsePositivePendingId === c.commentId}
+                optimisticallyResolved={resolvedCommentIds.has(c.commentId)}
               />
             ))}
           </div>
