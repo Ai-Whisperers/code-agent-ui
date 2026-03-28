@@ -13,10 +13,11 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { ArrowUpCircle, BarChart2, Loader2, X } from 'lucide-react'
+import { ArrowUpCircle, BarChart2, ExternalLink, ShieldCheck, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { Button } from '@/components/ui/Button'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -57,6 +58,7 @@ type RowData = {
 }
 
 export default function QualityReportsPage() {
+  const navigate = useNavigate()
   const [selected, setSelected] = useState<RowData | null>(null)
 
   const { data: repos, isLoading: reposLoading } = useQuery<RepoSettings[]>({
@@ -117,7 +119,7 @@ export default function QualityReportsPage() {
                 { label: 'Security Issues',  tip: 'Total security vulnerabilities detected' },
                 { label: 'Avg Complexity',   tip: 'Average cyclomatic complexity per function' },
                 { label: 'Last Measured',    tip: 'When the last quality report was collected' },
-                { label: '',                 tip: '' },
+                { label: 'Actions',          tip: '' },
               ] as const).map(({ label, tip }) => (
                 <th
                   key={label || 'actions'}
@@ -181,8 +183,44 @@ export default function QualityReportsPage() {
                     <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
                       {row.report ? new Date(row.report.measuredAt).toLocaleString() : '—'}
                     </td>
-                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-brand)]">
-                      View
+                    <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1.5">
+                        <Tooltip text="View quality report summary" position="top">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<ExternalLink size={12} />}
+                            onClick={() => setSelected(row)}
+                          >
+                            View
+                          </Button>
+                        </Tooltip>
+                        <Tooltip
+                          text={
+                            row.report?.coverage
+                              ? `Line: ${row.report.coverage.lineRate?.toFixed(1)}%  Branch: ${row.report.coverage.branchRate?.toFixed(1)}%  Method: ${row.report.coverage.methodRate?.toFixed(1)}%\nOpen coverage detail`
+                              : 'Open coverage detail'
+                          }
+                          position="top"
+                        >
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            icon={<ShieldCheck size={12} />}
+                            onClick={() =>
+                              navigate({
+                                to: '/metrics/quality/$workspace/$repoSlug',
+                                params: {
+                                  workspace: row.repo.workspace,
+                                  repoSlug: row.repo.repoSlug,
+                                },
+                              })
+                            }
+                          >
+                            Coverage
+                          </Button>
+                        </Tooltip>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -474,12 +512,7 @@ function ReportDialog({
               )}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-icons-icon)] transition-colors"
-          >
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="xs" icon={<X size={14} />} onClick={onClose} aria-label="Close" />
         </div>
 
         {/* Body */}
@@ -535,39 +568,31 @@ function ReportDialog({
               </p>
             )}
             {versionOutdated && (
-              <button
+              <Button
+                variant="danger"
+                size="md"
+                icon={<ArrowUpCircle size={14} />}
+                loading={upgradeJobMutation.isPending}
+                disabled={upgradeJobMutation.isPending || upgradeJobMutation.isSuccess || hasActivePlan}
                 onClick={() => {
                   if (!upgradeJobMutation.isPending && !upgradeJobMutation.isSuccess && !hasActivePlan) {
                     upgradeJobMutation.mutate()
                   }
                 }}
-                disabled={upgradeJobMutation.isPending || upgradeJobMutation.isSuccess || hasActivePlan}
-                className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] text-sm font-medium hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
               >
-                {upgradeJobMutation.isPending ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <ArrowUpCircle size={15} />
-                )}
                 {upgradeJobMutation.isPending ? 'Starting…' : 'Run Upgrade'}
-              </button>
+              </Button>
             )}
-            <button
-              onClick={() => {
-                if (!qualityJobMutation.isPending) {
-                  qualityJobMutation.mutate()
-                }
-              }}
+            <Button
+              variant="primary"
+              size="md"
+              icon={<BarChart2 size={14} />}
+              loading={qualityJobMutation.isPending}
               disabled={qualityJobMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-sm font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              onClick={() => { if (!qualityJobMutation.isPending) qualityJobMutation.mutate() }}
             >
-              {qualityJobMutation.isPending ? (
-                <Loader2 size={15} className="animate-spin" />
-              ) : (
-                <BarChart2 size={15} />
-              )}
               {qualityJobMutation.isPending ? 'Starting…' : 'Run Quality Report'}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

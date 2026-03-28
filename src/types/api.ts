@@ -182,6 +182,12 @@ export interface ExecutionPlan {
 
 // ---- Quality Reports ----
 
+export interface PackageLineCoverage {
+  name: string
+  linesCovered: number
+  linesMissed: number
+}
+
 export interface CoverageSection {
   lineRate?: number
   branchRate?: number
@@ -191,6 +197,11 @@ export interface CoverageSection {
   linesMissed?: number
   branchesCovered?: number
   branchesMissed?: number
+  methodsCovered?: number
+  methodsMissed?: number
+  classesCovered?: number
+  classesMissed?: number
+  packages?: PackageLineCoverage[]
 }
 
 export interface LinterSection {

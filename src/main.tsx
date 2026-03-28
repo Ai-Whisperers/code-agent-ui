@@ -25,6 +25,7 @@ import PlansPage from '@/pages/Plans'
 import PlanDetail from '@/pages/PlanDetail'
 import NewPlan from '@/pages/NewPlan'
 import QualityReportsPage from '@/pages/QualityReports'
+import CoverageDetail from '@/pages/CoverageDetail'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import DeveloperScorecardPage from '@/pages/DeveloperScorecard'
 import AiStatsPage from '@/pages/AiStats'
@@ -173,6 +174,15 @@ const qualityRoute = createRoute({
   component: QualityReportsPage,
 })
 
+const coverageDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/quality/$workspace/$repoSlug',
+  component: function CoverageDetailRoute() {
+    const { workspace, repoSlug } = coverageDetailRoute.useParams()
+    return <CoverageDetail workspace={workspace} repoSlug={repoSlug} />
+  },
+})
+
 const reviewMetricsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/reviews',
@@ -302,6 +312,7 @@ const routeTree = rootRoute.addChildren([
     newPlanRoute,
     planDetailRoute,
     qualityRoute,
+    coverageDetailRoute,
     reviewMetricsRoute,
     developerScorecardRoute,
     aiStatsRoute,
