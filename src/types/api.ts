@@ -27,6 +27,11 @@ export type JobType =
   | 'REVIEW_FEATURE'
   | 'REVIEW_USERSTORY'
 
+export interface JobCoverageData {
+  before?: CoverageSection
+  after?: CoverageSection
+}
+
 export interface JobStatusResponse {
   jobId: string
   jobType: JobType
@@ -43,6 +48,7 @@ export interface JobStatusResponse {
   jiraKey?: string
   sourceBranch?: string
   targetBranch?: string
+  coverageData?: JobCoverageData
 }
 
 // ---- PR Diff ----

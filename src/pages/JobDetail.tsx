@@ -1,10 +1,10 @@
-import { useState, useCallback, useRef, Fragment } from 'react'
+import { useState, useCallback, useRef, Fragment, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Eye,
   GitBranch, ArrowRight, ChevronDown, ChevronRight,
-  FolderOpen, Folder,
+  FolderOpen, Folder, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
@@ -17,7 +17,7 @@ import { AiCallModal } from '@/components/ui/AiCallModal'
 import api from '@/lib/api'
 import type {
   JobStatusResponse, JobAiCallsResponse, AiCallRecord,
-  JobDiffResponse, DiffFileEntry,
+  JobDiffResponse, DiffFileEntry, JobCoverageData, PackageLineCoverage,
 } from '@/types/api'
 
 interface JobDetailProps {
@@ -26,7 +26,7 @@ interface JobDetailProps {
 
 const ACTIVE_STATUSES = new Set(['RUNNING', 'PENDING', 'QUEUED'])
 
-type Tab = 'summary' | 'ai-calls' | 'changed-files'
+type Tab = 'summary' | 'ai-calls' | 'changed-files' | 'coverage'
 
 export default function JobDetail({ jobId }: JobDetailProps) {
   const navigate = useNavigate()
@@ -267,6 +267,14 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 Changed Files
               </TabButton>
             )}
+            {job.coverageData && (
+              <TabButton
+                active={activeTab === 'coverage'}
+                onClick={() => setActiveTab('coverage')}
+              >
+                Coverage
+              </TabButton>
+            )}
           </div>
 
           {/* Summary tab */}
@@ -315,6 +323,11 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               isLoading={diffLoading}
               isError={diffError}
             />
+          )}
+
+          {/* Coverage tab */}
+          {activeTab === 'coverage' && job.coverageData && (
+            <CoverageTab coverageData={job.coverageData} />
           )}
         </div>
       ) : (
@@ -943,5 +956,245 @@ function StatChip({ label, value }: { label: string; value: string }) {
       <span>{label}: </span>
       <span className="font-medium text-[var(--color-fonts-font-color-primary)]">{value}</span>
     </span>
+  )
+}
+
+// ── Coverage tab ──────────────────────────────────────────────────────────────
+
+function pkgLineRate(p: PackageLineCoverage) {
+  const total = p.linesCovered + p.linesMissed
+  return total > 0 ? (100 * p.linesCovered) / total : 0
+}
+
+function rateBadgeClass(rate: number) {
+  const base = 'text-xs font-semibold px-2 py-0.5 rounded-[var(--border-radius-tag)]'
+  if (rate >= 80) return `${base} bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]`
+  if (rate >= 50) return `${base} bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]`
+  return `${base} bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]`
+}
+
+function deltaBadge(delta: number | null) {
+  if (delta === null) return <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+  const abs = Math.abs(delta).toFixed(1)
+  if (delta > 0.05)
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-[var(--color-tags-font-success)]">
+        <TrendingUp size={11} />+{abs}%
+      </span>
+    )
+  if (delta < -0.05)
+    return (
+      <span className="inline-flex items-center gap-0.5 text-xs font-semibold text-[var(--color-tags-font-critical)]">
+        <TrendingDown size={11} />−{abs}%
+      </span>
+    )
+  return (
+    <span className="inline-flex items-center gap-0.5 text-xs text-[var(--color-fonts-font-color-support)]">
+      <Minus size={11} />{abs}%
+    </span>
+  )
+}
+
+interface CoverageMetricCardProps {
+  label: string
+  before?: number
+  after?: number
+}
+
+function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
+  const afterVal = after ?? 0
+  const delta = before != null && after != null ? after - before : null
+  const color =
+    afterVal >= 80
+      ? 'var(--color-status-border-success)'
+      : afterVal >= 50
+      ? 'var(--color-status-border-attention)'
+      : 'var(--color-status-border-critical)'
+
+  return (
+    <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] p-4 flex flex-col gap-2">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">{label}</p>
+      <div className="flex items-end gap-2">
+        <span className="text-2xl font-bold" style={{ color }}>
+          {after !== undefined ? `${afterVal.toFixed(1)}%` : '—'}
+        </span>
+        {before !== undefined && (
+          <span className="text-xs text-[var(--color-fonts-font-color-support)] mb-0.5">
+            from {before.toFixed(1)}%
+          </span>
+        )}
+      </div>
+      {delta !== null && (
+        <div className="flex items-center gap-1">
+          {deltaBadge(delta)}
+        </div>
+      )}
+      <div className="w-full h-1.5 rounded-full bg-[var(--color-neutral-200)] overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${Math.min(100, afterVal)}%`, backgroundColor: color }}
+        />
+      </div>
+    </div>
+  )
+}
+
+function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
+  const { before, after } = coverageData
+
+  type SortKey = 'name' | 'beforeRate' | 'afterRate' | 'delta'
+  type SortDir = 'asc' | 'desc'
+  const [sortKey, setSortKey] = useState<SortKey>('delta')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+
+  // Build merged package list
+  const mergedPackages = useMemo(() => {
+    const map = new Map<string, { before?: PackageLineCoverage; after?: PackageLineCoverage }>()
+    for (const p of before?.packages ?? []) {
+      map.set(p.name, { before: p })
+    }
+    for (const p of after?.packages ?? []) {
+      const existing = map.get(p.name) ?? {}
+      map.set(p.name, { ...existing, after: p })
+    }
+    return Array.from(map.entries()).map(([name, { before: b, after: a }]) => ({
+      name,
+      beforeRate: b ? pkgLineRate(b) : null,
+      afterRate: a ? pkgLineRate(a) : null,
+      delta: b != null && a != null ? pkgLineRate(a) - pkgLineRate(b) : null,
+    }))
+  }, [before, after])
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir('desc') }
+  }
+
+  const sorted = [...mergedPackages].sort((a, b) => {
+    let av: number | string, bv: number | string
+    if (sortKey === 'name') { av = a.name; bv = b.name }
+    else if (sortKey === 'beforeRate') { av = a.beforeRate ?? -1; bv = b.beforeRate ?? -1 }
+    else if (sortKey === 'afterRate') { av = a.afterRate ?? -1; bv = b.afterRate ?? -1 }
+    else { av = a.delta ?? -999; bv = b.delta ?? -999 }
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+
+  const improved = mergedPackages.filter(p => (p.delta ?? 0) > 0.05).length
+  const regressed = mergedPackages.filter(p => (p.delta ?? 0) < -0.05).length
+
+  return (
+    <div className="flex flex-col gap-4 pb-4">
+      {/* Aggregate metric cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <CoverageMetricCard label="Line Coverage"   before={before?.lineRate}   after={after?.lineRate} />
+        <CoverageMetricCard label="Branch Coverage" before={before?.branchRate} after={after?.branchRate} />
+        <CoverageMetricCard label="Method Coverage" before={before?.methodRate} after={after?.methodRate} />
+        <CoverageMetricCard label="Class Coverage"  before={before?.classRate}  after={after?.classRate} />
+      </div>
+
+      {/* Package diff table */}
+      {mergedPackages.length > 0 && (
+        <TableCard
+          title="Package / Namespace Coverage"
+          subtitle={
+            mergedPackages.length > 0
+              ? `${mergedPackages.length} packages · ${improved} improved · ${regressed} regressed`
+              : undefined
+          }
+          maxHeight="9999px"
+        >
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
+                <CovSortHeader label="Package / Namespace" sortKey="name"       current={sortKey} dir={sortDir} onSort={handleSort} />
+                <CovSortHeader label="Before"              sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
+                <CovSortHeader label="After"               sortKey="afterRate"  current={sortKey} dir={sortDir} onSort={handleSort} />
+                <CovSortHeader label="Change"              sortKey="delta"      current={sortKey} dir={sortDir} onSort={handleSort} />
+                <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] w-40">
+                  Coverage Bar
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map(pkg => (
+                <tr
+                  key={pkg.name}
+                  className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+                >
+                  <td className="px-4 py-1.5 font-mono text-[11px] text-[var(--color-fonts-font-color-primary)] max-w-xs truncate">
+                    {pkg.name.replace(/\//g, '.')}
+                  </td>
+                  <td className="px-4 py-1.5">
+                    {pkg.beforeRate != null
+                      ? <span className={rateBadgeClass(pkg.beforeRate)}>{pkg.beforeRate.toFixed(1)}%</span>
+                      : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
+                  </td>
+                  <td className="px-4 py-1.5">
+                    {pkg.afterRate != null
+                      ? <span className={rateBadgeClass(pkg.afterRate)}>{pkg.afterRate.toFixed(1)}%</span>
+                      : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
+                  </td>
+                  <td className="px-4 py-1.5">
+                    {deltaBadge(pkg.delta)}
+                  </td>
+                  <td className="px-4 py-1.5 w-40">
+                    <div className="relative w-full h-2 rounded-full bg-[var(--color-neutral-200)] overflow-hidden">
+                      {pkg.beforeRate != null && (
+                        <div
+                          className="absolute h-full rounded-full opacity-30"
+                          style={{
+                            width: `${Math.min(100, pkg.beforeRate)}%`,
+                            backgroundColor: 'var(--color-fonts-font-color-support)',
+                          }}
+                        />
+                      )}
+                      {pkg.afterRate != null && (
+                        <div
+                          className="absolute h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(100, pkg.afterRate)}%`,
+                            backgroundColor:
+                              pkg.afterRate >= 80 ? 'var(--color-status-border-success)'
+                              : pkg.afterRate >= 50 ? 'var(--color-status-border-attention)'
+                              : 'var(--color-status-border-critical)',
+                          }}
+                        />
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+    </div>
+  )
+}
+
+function CovSortHeader({
+  label, sortKey, current, dir, onSort,
+}: {
+  label: string
+  sortKey: 'name' | 'beforeRate' | 'afterRate' | 'delta'
+  current: 'name' | 'beforeRate' | 'afterRate' | 'delta'
+  dir: 'asc' | 'desc'
+  onSort: (k: 'name' | 'beforeRate' | 'afterRate' | 'delta') => void
+}) {
+  const active = current === sortKey
+  return (
+    <th
+      className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer select-none hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active
+          ? (dir === 'asc' ? <ChevronDown size={11} className="rotate-180" /> : <ChevronDown size={11} />)
+          : <ChevronDown size={11} className="opacity-30" />}
+      </span>
+    </th>
   )
 }
