@@ -41,6 +41,38 @@ export interface JobStatusResponse {
   queuePosition?: number
   priority?: number
   jiraKey?: string
+  sourceBranch?: string
+  targetBranch?: string
+}
+
+// ---- PR Diff ----
+
+export interface DiffLineEntry {
+  type: 'add' | 'del' | 'ctx'
+  oldLine: number
+  newLine: number
+  content: string
+}
+
+export interface DiffHunkEntry {
+  header: string
+  lines: DiffLineEntry[]
+}
+
+export interface DiffFileEntry {
+  filename: string
+  status: 'added' | 'modified' | 'removed'
+  additions: number
+  deletions: number
+  hunks: DiffHunkEntry[]
+}
+
+export interface JobDiffResponse {
+  sourceBranch: string
+  targetBranch: string
+  totalAdditions: number
+  totalDeletions: number
+  files: DiffFileEntry[]
 }
 
 export interface RunFixRequest {
