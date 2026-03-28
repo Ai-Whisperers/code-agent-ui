@@ -195,7 +195,7 @@ h3 {
 .token.string,
 .token.char,
 .token.builtin,
-.token.inserted          { color: #7ee787; }
+.token.inserted          { color: #408746; }
 .token.operator,
 .token.entity,
 .token.url,
@@ -205,7 +205,7 @@ h3 {
 .token.attr-value,
 .token.keyword           { color: #ff7b72; }
 .token.function,
-.token.class-name        { color: #d2a8ff; }
+.token.class-name        { color: #9b4cf0; }
 .token.regex,
 .token.important,
 .token.variable          { color: #ffa657; }
