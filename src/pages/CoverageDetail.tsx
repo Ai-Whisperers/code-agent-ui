@@ -1,6 +1,6 @@
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, Fragment } from 'react'
 import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import {
@@ -75,7 +75,7 @@ function rateBadgeClass(rate: number) {
 type SortKey = 'name' | 'lineRate' | 'linesCovered' | 'linesMissed'
 type SortDir = 'asc' | 'desc'
 
-function packageLineRate(p: PackageLineCoverage) {
+export function packageLineRate(p: PackageLineCoverage) {
   const total = p.linesCovered + p.linesMissed
   return total > 0 ? (100 * p.linesCovered) / total : 0
 }
@@ -461,7 +461,7 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
 
 // ── Confirm dialog ────────────────────────────────────────────────────────────
 
-function GenerateTestsConfirmDialog({
+export function GenerateTestsConfirmDialog({
   packages,
   modelName,
   inputCostPerM,
@@ -603,7 +603,7 @@ function GenerateTestsConfirmDialog({
                   const jobPkgCount = Math.min(effectiveBatch, activePackages.length - jobIndex * effectiveBatch)
                   const canRemoveJob = jobPkgCount < total
                   return (
-                    <>
+                    <Fragment key={pkg.name}>
                       {showJobDivider && (
                         <tr key={`divider-${jobIndex}`} className="bg-[var(--color-cards-card-background-hover)]">
                           <td className="px-3 py-1 text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
@@ -626,7 +626,7 @@ function GenerateTestsConfirmDialog({
                           </td>
                         </tr>
                       )}
-                      <tr key={pkg.name} className="border-b border-[var(--color-borders-border-primary)]">
+                      <tr className="border-b border-[var(--color-borders-border-primary)]">
                         <td className="px-3 py-1 font-mono text-[11px] text-[var(--color-fonts-font-color-primary)] max-w-[260px] truncate">
                           {pkg.name.replace(/\//g, '.')}
                         </td>
@@ -652,7 +652,7 @@ function GenerateTestsConfirmDialog({
                           )}
                         </td>
                       </tr>
-                    </>
+                    </Fragment>
                   )
                 })}
                 <tr className="bg-[var(--color-cards-card-background-hover)]">
