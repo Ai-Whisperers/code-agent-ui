@@ -13,13 +13,15 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { ArrowLeft, BarChart2, ChevronUp, ChevronDown, Loader2 } from 'lucide-react'
+import { ArrowLeft, BarChart2, ChevronUp, ChevronDown, Loader2, FlaskConical } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
-import type { QualityReport, PackageLineCoverage } from '@/types/api'
+import type { QualityReport, PackageLineCoverage, RepoSettings } from '@/types/api'
+
+const BITBUCKET_BASE_URL = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
 
@@ -68,6 +70,15 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('lineRate')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
 
+  const { data: repos } = useQuery<RepoSettings[]>({
+    queryKey: ['repos'],
+    queryFn: () => api.get('/settings/repos').then((r) => r.data).catch(() => []),
+  })
+
+  const repoSettings = repos?.find(
+    (r) => r.workspace === workspace && r.repoSlug === repoSlug,
+  )
+
   const { data: report, isLoading } = useQuery<QualityReport>({
     queryKey: ['quality-report', workspace, repoSlug, 'main'],
     queryFn: () =>
@@ -90,6 +101,26 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
           repoUrl: `${workspace}/${repoSlug}`,
         })
         .then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+    },
+  })
+
+  const generateTestsMutation = useMutation({
+    mutationFn: () => {
+      const gitBase = (repoSettings?.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')
+      const repoUrl = `${gitBase}/${workspace}/${repoSlug}.git`
+      const date = new Date().toISOString().slice(0, 10)
+      const branchName = `agent/tests/improve-coverage-${date}`
+      const targetFiles = (report?.coverage?.packages ?? [])
+        .filter((p) => packageLineRate(p) < 50)
+        .sort((a, b) => packageLineRate(a) - packageLineRate(b))
+        .slice(0, 20)
+        .map((p) => p.name)
+      return api
+        .post('/run/generate-tests', { repoUrl, branchName, targetFiles })
+        .then((r) => r.data as { jobId: string })
+    },
     onSuccess: (data) => {
       if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
     },
@@ -168,6 +199,24 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
             >
               Quality Reports
             </Button>
+            <Tooltip
+              text={
+                (report?.coverage?.packages ?? []).filter((p) => packageLineRate(p) < 50).length > 0
+                  ? `Generate tests for ${(report?.coverage?.packages ?? []).filter((p) => packageLineRate(p) < 50).length} packages with < 50% line coverage`
+                  : 'Generate tests to improve coverage'
+              }
+              position="bottom"
+            >
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={generateTestsMutation.isPending ? undefined : <FlaskConical size={13} />}
+                loading={generateTestsMutation.isPending}
+                onClick={() => { if (!generateTestsMutation.isPending) generateTestsMutation.mutate() }}
+              >
+                {generateTestsMutation.isPending ? 'Starting…' : 'Generate Tests'}
+              </Button>
+            </Tooltip>
             <Button
               variant="primary"
               size="sm"
