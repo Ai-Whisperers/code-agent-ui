@@ -1,5 +1,5 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import {
   Chart as ChartJS,
@@ -18,6 +18,8 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
+import { Toast } from '@/components/ui/Toast'
+import type { ToastConfig } from '@/components/ui/Toast'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
@@ -393,6 +395,9 @@ function ReportDialog({
   const queryClient = useQueryClient()
   const { repo, report } = row
 
+  const [toast, setToast] = useState<ToastConfig | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
+
   const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
   const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
 
@@ -422,9 +427,21 @@ function ReportDialog({
         .post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`, { repoUrl })
         .then((r) => r.data as { jobId: string }),
     onSuccess: (data) => {
-      if (data?.jobId) {
-        navigate({ to: '/jobs/$id', params: { id: data.jobId } })
-      }
+      setToast({
+        variant: 'success',
+        message: 'Quality report job started successfully.',
+        ...(data?.jobId
+          ? {
+              action: {
+                label: 'View Job',
+                onClick: () => navigate({ to: '/jobs/$id', params: { id: data.jobId } }),
+              },
+            }
+          : {}),
+      })
+    },
+    onError: () => {
+      setToast({ variant: 'error', message: 'Failed to start quality report job. Please try again.' })
     },
   })
 
@@ -555,14 +572,16 @@ function ReportDialog({
             </p>
           )}
 
+          {toast && <Toast {...toast} onClose={dismissToast} />}
+
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-cards-card-stroke)]">
-            {(qualityJobMutation.isError || upgradeJobMutation.isError) && (
+            {upgradeJobMutation.isError && (
               <p className="mr-auto text-xs text-[var(--color-status-border-critical)]">
-                Failed to start job. Please try again.
+                Failed to start upgrade job. Please try again.
               </p>
             )}
-            {!qualityJobMutation.isError && !upgradeJobMutation.isError && hasActivePlan && (
+            {!upgradeJobMutation.isError && hasActivePlan && (
               <p className="mr-auto text-xs text-[var(--color-tags-font-attention)]">
                 An upgrade plan is already running for this repository.
               </p>
@@ -588,10 +607,10 @@ function ReportDialog({
               size="md"
               icon={<BarChart2 size={14} />}
               loading={qualityJobMutation.isPending}
-              disabled={qualityJobMutation.isPending}
-              onClick={() => { if (!qualityJobMutation.isPending) qualityJobMutation.mutate() }}
+              disabled={qualityJobMutation.isPending || qualityJobMutation.isSuccess}
+              onClick={() => { if (!qualityJobMutation.isPending && !qualityJobMutation.isSuccess) qualityJobMutation.mutate() }}
             >
-              {qualityJobMutation.isPending ? 'Starting…' : 'Run Quality Report'}
+              {qualityJobMutation.isPending ? 'Starting…' : qualityJobMutation.isSuccess ? 'Job Queued' : 'Run Quality Report'}
             </Button>
           </div>
         </div>
