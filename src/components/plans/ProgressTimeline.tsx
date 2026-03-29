@@ -1,4 +1,5 @@
-import { CheckCircle, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import type { ExecutionPlan, PlanPhase, PlanStep } from '@/types/api'
 
 interface ProgressTimelineProps {
@@ -56,6 +57,7 @@ const STEP_STATUS_CLASSES: Record<string, string> = {
 }
 
 export default function ProgressTimeline({ plan, isLive = false }: ProgressTimelineProps) {
+  const navigate = useNavigate()
   if (!plan.planData?.phases?.length) {
     return (
       <p className="text-sm text-[var(--color-fonts-font-color-support)]">No structured phases available.</p>
@@ -161,13 +163,30 @@ export default function ProgressTimeline({ plan, isLive = false }: ProgressTimel
                           <p className="text-xs font-medium text-[var(--color-fonts-font-color-primary)] truncate">
                             {step.title}
                           </p>
-                          <span className={`text-[10px] font-medium shrink-0 ${STEP_STATUS_CLASSES[step.status] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
-                            {step.status}
-                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[10px] font-medium ${STEP_STATUS_CLASSES[step.status] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
+                              {step.status}
+                            </span>
+                            {step.jobId && (
+                              <button
+                                onClick={() => navigate({ to: '/jobs/$id', params: { id: step.jobId! } })}
+                                className="flex items-center gap-0.5 text-[10px] font-medium text-[var(--color-fonts-font-color-brand)] hover:underline"
+                                title={`View job ${step.jobId}`}
+                              >
+                                <ExternalLink size={10} />
+                                Job
+                              </button>
+                            )}
+                          </div>
                         </div>
                         {step.description && (
                           <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5 truncate">
                             {step.description}
+                          </p>
+                        )}
+                        {step.jobId && (
+                          <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mt-0.5 font-mono">
+                            {step.jobId}
                           </p>
                         )}
                         {step.status === 'FAILED' && step.errorMessage && (

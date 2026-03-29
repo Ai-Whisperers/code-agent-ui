@@ -9,15 +9,24 @@ import {
   GitBranch,
   Loader2,
   Play,
+  Shield,
+  Upload,
   XCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
 import api from '@/lib/api'
-import type { AiCallSummaryByJobType, ExecutionPlan, JobStatusResponse } from '@/types/api'
+import type {
+  AiCallSummaryByJobType,
+  ExecutionPlan,
+  JobStatusResponse,
+  Soc2AuditResponse,
+  SlaStatus,
+} from '@/types/api'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 
 function StatCard({
   label,
@@ -264,6 +273,138 @@ function JobActivitySection({ data }: { data: AiCallSummaryByJobType | undefined
   )
 }
 
+function SlaBadge({ status, deadline }: { status: SlaStatus; deadline?: string }) {
+  const map: Record<SlaStatus, { label: string; cls: string }> = {
+    ON_TRACK:       { label: 'On Track',    cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
+    AT_RISK:        { label: 'At Risk',     cls: 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]' },
+    OVERDUE:        { label: 'Overdue',     cls: 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]' },
+    MET:            { label: 'SLA Met',     cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
+    MISSED:         { label: 'SLA Missed',  cls: 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]' },
+    NOT_APPLICABLE: { label: 'N/A',         cls: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]' },
+  }
+  const entry = map[status] ?? map.NOT_APPLICABLE
+  const deadlineStr = deadline ? new Date(deadline).toLocaleDateString() : null
+  return (
+    <Tooltip text={deadlineStr ? `Deadline: ${deadlineStr}` : 'No SLA configured'}>
+      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${entry.cls}`}>
+        {entry.label}
+      </span>
+    </Tooltip>
+  )
+}
+
+function Soc2Section() {
+  const navigate = useNavigate()
+
+  const { data } = useQuery<Soc2AuditResponse>({
+    queryKey: ['dashboard-soc2'],
+    queryFn: () =>
+      api.get('/compliance/soc2', { params: { limit: 100 } }).then((r) => r.data).catch(() => null),
+    refetchInterval: 60_000,
+  })
+
+  const items = data?.items ?? []
+  if (items.length === 0) return null
+
+  const overdue       = items.filter((j) => j.slaStatus === 'OVERDUE')
+  const atRisk        = items.filter((j) => j.slaStatus === 'AT_RISK')
+  const noReview      = items.filter((j) => j.reviewStatus === 'NONE').length
+  const scytalePending = items.filter((j) => !j.scytaleUploaded && j.jobStatus === 'SUCCESS').length
+
+  const criticalItems = [...overdue, ...atRisk].slice(0, 4)
+
+  return (
+    <TableCard
+      className="mb-4"
+      title="SOC II Compliance"
+      subtitle={`${data?.total ?? items.length} tracked`}
+      toolbar={
+        <Button variant="ghost" size="sm" onClick={() => navigate({ to: '/compliance/soc2' })}>
+          View all
+        </Button>
+      }
+    >
+      {/* KPI strip */}
+      <div className="flex flex-wrap gap-x-6 gap-y-1 px-3 py-2 border-b border-[var(--color-cards-card-stroke)]">
+        {[
+          { label: 'Overdue SLA',     value: overdue.length,    urgent: overdue.length > 0 },
+          { label: 'At Risk',         value: atRisk.length,     warn: atRisk.length > 0 },
+          { label: 'Awaiting Review', value: noReview,          warn: noReview > 0 },
+          { label: 'Scytale Pending', value: scytalePending,    warn: scytalePending > 0 },
+        ].map(({ label, value, urgent, warn }) => (
+          <div key={label} className="flex items-center gap-1.5">
+            <span className="text-[10px] text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
+              {label}
+            </span>
+            <span
+              className={`text-sm font-bold ${
+                urgent
+                  ? 'text-[var(--color-tags-font-critical)]'
+                  : warn
+                    ? 'text-[var(--color-tags-font-attention)]'
+                    : 'text-[var(--color-fonts-font-color-primary)]'
+              }`}
+            >
+              {value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Critical items */}
+      {criticalItems.length > 0 && (
+        <table className="w-full text-xs">
+          <tbody className="divide-y divide-[var(--color-cards-card-stroke)]">
+            {criticalItems.map((job) => (
+              <tr
+                key={job.jobId}
+                className="hover:bg-[var(--color-cards-card-background-hover)] transition-colors cursor-pointer"
+                onClick={() => navigate({ to: '/jobs/$id', params: { id: job.jobId } })}
+              >
+                <td className="px-3 py-2 font-mono text-[11px] text-[var(--color-fonts-font-color-support)] w-24">
+                  {job.jiraKey ?? job.jobId.slice(0, 8) + '…'}
+                </td>
+                <td className="px-3 py-2 text-[var(--color-fonts-font-color-primary)] capitalize">
+                  {job.jobType.replace(/_/g, ' ').toLowerCase()}
+                </td>
+                <td className="px-3 py-2">
+                  <SlaBadge status={job.slaStatus} deadline={job.slaDeadline} />
+                </td>
+                <td className="px-3 py-2">
+                  {job.scytaleUploaded ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+                      <Upload size={10} /> Uploaded
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                      <Upload size={10} /> Pending
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-[10px] text-[var(--color-fonts-font-color-support)] text-right whitespace-nowrap">
+                  {job.slaDeadline
+                    ? new Date(job.slaDeadline).toLocaleDateString()
+                    : new Date(job.createdAt).toLocaleDateString()}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <ArrowRight size={12} className="text-[var(--color-icons-icon)] ml-auto" />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {criticalItems.length === 0 && (
+        <div className="flex items-center gap-2 px-3 py-3 text-xs text-[var(--color-fonts-font-color-support)]">
+          <Shield size={14} className="opacity-50" />
+          All tracked jobs are on track. No SLA issues detected.
+        </div>
+      )}
+    </TableCard>
+  )
+}
+
 export default function Dashboard() {
   const user = useStore(authStore, (s) => s.user)!
   const navigate = useNavigate()
@@ -379,6 +520,8 @@ export default function Dashboard() {
       {activePlans.length > 0 && <ActivePlansSection plans={activePlans} />}
 
       <JobActivitySection data={activityData} />
+
+      <Soc2Section />
 
       <TableCard title="Quick Actions" className="mb-4">
         <div className="flex flex-wrap gap-2 p-3">

@@ -287,9 +287,11 @@ export type PlanStatus = 'DRAFT' | 'APPROVED' | 'EXECUTING' | 'PAUSED' | 'CANCEL
 export interface PlanStep {
   stepId: string
   order: number
+  jobType?: string
   title: string
   description?: string
   status: string
+  jobId?: string | null
   errorMessage?: string | null
 }
 
