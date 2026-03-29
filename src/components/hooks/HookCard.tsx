@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Power, Trash2 } from 'lucide-react'
+import { Pencil, Trash2 } from 'lucide-react'
 import type { AutomationHook } from '@/types/api'
 import { getCategories, subTriggerLabel, CATEGORY_COLORS } from './hookConstants'
+import { Button } from '@/components/ui/Button'
+import { Tooltip } from '@/components/ui/Tooltip'
 
 interface Props {
   hook: AutomationHook
@@ -82,39 +84,54 @@ export function HookCard({ hook, onEdit, onToggle, onDelete, isToggling, isDelet
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0 ml-4">
-        <button
-          onClick={onToggle}
-          disabled={isToggling}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] text-xs font-medium transition-colors disabled:opacity-60 ${
-            hook.enabled
-              ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] hover:opacity-80'
-              : 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] hover:opacity-80'
-          }`}
-        >
-          <Power size={12} />
-          {hook.enabled ? 'Enabled' : 'Disabled'}
-        </button>
+      <div className="flex items-center gap-3 shrink-0 ml-4">
+        {/* Toggle switch */}
+        <Tooltip text={hook.enabled ? 'Enabled — click to disable' : 'Disabled — click to enable'}>
+          <button
+            onClick={onToggle}
+            disabled={isToggling}
+            role="switch"
+            aria-checked={hook.enabled}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none disabled:opacity-60 ${
+              hook.enabled
+                ? 'bg-emerald-500'
+                : 'bg-[var(--color-inputs-input-border)]'
+            }`}
+          >
+            <span
+              className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                hook.enabled ? 'translate-x-[18px]' : 'translate-x-[2px]'
+              }`}
+            />
+          </button>
+        </Tooltip>
 
-        <button
-          onClick={onEdit}
-          className="px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-        >
-          Edit
-        </button>
+        {/* Edit button */}
+        <Tooltip text="Edit hook">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Pencil size={12} />}
+            onClick={onEdit}
+          >
+            Edit
+          </Button>
+        </Tooltip>
 
-        <button
-          onClick={handleDeleteClick}
-          disabled={isDeleting}
-          title={confirmDelete ? 'Click again to confirm deletion' : 'Delete hook'}
-          className={`p-1.5 rounded-[var(--border-radius-button-small)] transition-colors disabled:opacity-60 ${
-            confirmDelete
-              ? 'bg-[var(--color-status-critical-background)] text-[var(--color-status-border-critical)]'
-              : 'text-[var(--color-icons-icon)] hover:bg-[var(--color-status-critical-background)] hover:text-[var(--color-status-border-critical)]'
-          }`}
-        >
-          <Trash2 size={14} />
-        </button>
+        {/* Delete button */}
+        <Tooltip text={confirmDelete ? 'Click again to confirm deletion' : 'Delete hook'}>
+          <button
+            onClick={handleDeleteClick}
+            disabled={isDeleting}
+            className={`p-1.5 rounded transition-colors disabled:opacity-60 ${
+              confirmDelete
+                ? 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+                : 'text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]'
+            }`}
+          >
+            <Trash2 size={14} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   )
