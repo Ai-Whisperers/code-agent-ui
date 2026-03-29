@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Pencil,
   Trash2,
@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select, type SelectOption } from '@/components/ui/Select'
+import { Toast } from '@/components/ui/Toast'
 import api from '@/lib/api'
 import type { SystemSetting, UpsertSettingRequest, CloudAccount, CloudAccountType } from '@/types/api'
 
@@ -483,15 +486,10 @@ const TABS: TabDef[] = [
   { id: 'security',        label: 'Security',         groupIds: ['security'] },
 ]
 
-const GROUP_BY_ID = new Map(SETTING_GROUPS.map((g) => [g.id, g]))
-
 // ── Shared input styles ────────────────────────────────────────────────────────
 
 const inputCls =
   'w-full h-8 px-3 text-sm font-mono rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)]'
-
-const selectCls =
-  'w-full h-8 px-3 text-sm rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] cursor-pointer'
 
 const textareaCls =
   'w-full px-3 py-2 text-sm font-mono rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] resize-none'
@@ -600,14 +598,15 @@ function BooleanSettingRow({
           dimmed={!isOverridden}
         />
         {isOverridden && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             title="Reset to default"
             onClick={() => onDelete(meta.key)}
             disabled={isDeleting}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
-          >
-            <Trash2 size={13} />
-          </button>
+            icon={<Trash2 size={13} />}
+            className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
+          />
         )}
       </div>
     </div>
@@ -691,24 +690,25 @@ function EditableSettingRow({
             </span>
           )}
 
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             title="Edit"
             onClick={startEdit}
             disabled={editing || isSaving}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors disabled:opacity-40"
-          >
-            <Pencil size={13} />
-          </button>
+            icon={<Pencil size={13} />}
+          />
 
           {isOverridden && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               title="Reset to default"
               onClick={() => onDelete(meta.key)}
               disabled={isDeleting || editing}
-              className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
-            >
-              <Trash2 size={13} />
-            </button>
+              icon={<Trash2 size={13} />}
+              className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
+            />
           )}
         </div>
       </div>
@@ -720,18 +720,15 @@ function EditableSettingRow({
             {/* Input element */}
             <div className="relative flex-1">
               {inputType === 'select' ? (
-                <select
+                <Select
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  autoFocus
-                  className={selectCls}
-                >
-                  {(meta.options ?? []).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setInputValue}
+                  options={(meta.options ?? []).map((opt): SelectOption => ({
+                    value: opt,
+                    label: opt === '' ? '— none (use primary) —' : opt,
+                  }))}
+                  placeholder="Select a value…"
+                />
               ) : inputType === 'textarea' ? (
                 <textarea
                   value={inputValue}
@@ -762,32 +759,35 @@ function EditableSettingRow({
                 />
               )}
               {isSecret && inputType !== 'textarea' && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowSecret((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                >
-                  {showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
-                </button>
+                  icon={showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1"
+                />
               )}
             </div>
 
             {/* Save / Cancel */}
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleSave}
               disabled={!inputValue.trim() || isSaving}
               title="Save"
-              className="p-1.5 rounded-[var(--border-radius-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
-            >
-              <Check size={14} />
-            </button>
-            <button
+              icon={<Check size={13} />}
+              className="shrink-0"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={cancelEdit}
               title="Cancel"
-              className="p-1.5 rounded-[var(--border-radius-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors shrink-0"
-            >
-              <X size={14} />
-            </button>
+              icon={<X size={13} />}
+              className="shrink-0"
+            />
           </div>
 
           {isSecret && (
@@ -885,28 +885,6 @@ function SettingSection({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Toast list ─────────────────────────────────────────────────────────────────
-
-function ToastList({ toasts }: { toasts: ToastMsg[] }) {
-  if (toasts.length === 0) return null
-  return (
-    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`px-4 py-2.5 rounded-[var(--border-radius-card)] shadow-lg text-sm font-medium ${
-            t.type === 'success'
-              ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] border border-[var(--color-tags-font-success)]'
-              : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] border border-[var(--color-tags-font-critical)]'
-          }`}
-        >
-          {t.text}
-        </div>
-      ))}
     </div>
   )
 }
@@ -1025,9 +1003,7 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <Cloud size={15} />
             {isEdit ? `Edit — ${initial.name}` : 'Add Cloud Account'}
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]">
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={16} />} />
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
@@ -1036,8 +1012,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               ID *
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={id}
               onChange={(e) => setId(e.target.value)}
               disabled={isEdit}
@@ -1056,8 +1032,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Name *
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Engie AWS Production"
@@ -1070,8 +1046,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Description
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description"
@@ -1083,15 +1059,11 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Type *
             </label>
-            <select
-              className={selectCls}
+            <Select
               value={type}
-              onChange={(e) => handleTypeChange(e.target.value as CloudAccountType)}
-            >
-              {CLOUD_ACCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+              onChange={(v) => handleTypeChange(v as CloudAccountType)}
+              options={CLOUD_ACCOUNT_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] }))}
+            />
           </div>
 
           {/* Provider-specific credentials */}
@@ -1124,21 +1096,22 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
                       />
                     ) : (
                       <div className="relative">
-                        <input
+                        <Input
                           type={f.isSecret && !show ? 'password' : 'text'}
-                          className={`${inputCls} ${f.isSecret ? 'pr-8' : ''}`}
+                          className={`w-full text-sm h-8 ${f.isSecret ? 'pr-8' : ''}`}
                           value={masked ? '' : val}
                           onChange={(e) => updateCred(f.key, e.target.value)}
                           placeholder={masked ? '(stored — enter new value to replace)' : f.placeholder}
                         />
                         {f.isSecret && (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => toggleShow(f.key)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                          >
-                            {show ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
+                            icon={show ? <EyeOff size={13} /> : <Eye size={13} />}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1"
+                          />
                         )}
                       </div>
                     )}
@@ -1155,19 +1128,18 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-            onClick={onClose}
-          >
+          <Button variant="secondary" size="md" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            loading={isSaving}
             onClick={handleSubmit}
             disabled={!id.trim() || !name.trim() || isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+            Save
+          </Button>
         </div>
       </div>
     </div>
@@ -1183,7 +1155,6 @@ function CloudAccountsSection() {
   function addToast(text: string, type: 'success' | 'error') {
     const id = ++toastId
     setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }
 
   const { data: accounts, isLoading } = useQuery<CloudAccount[]>({
@@ -1282,21 +1253,22 @@ function CloudAccountsSection() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     title="Edit"
                     onClick={() => setEditAccount(account)}
-                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                  <button
+                    icon={<Pencil size={13} />}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     title="Delete"
                     onClick={() => deleteMutation.mutate(account.id)}
                     disabled={deleteMutation.isPending}
-                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                    icon={<Trash2 size={13} />}
+                    className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
+                  />
                 </div>
               </div>
             )
@@ -1313,7 +1285,15 @@ function CloudAccountsSection() {
         />
       )}
 
-      <ToastList toasts={toasts} />
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.text}
+          variant={t.type}
+          duration={3500}
+          onClose={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+        />
+      ))}
     </div>
   )
 }
@@ -1331,13 +1311,38 @@ export default function SystemSettingsPage() {
   function addToast(text: string, type: 'success' | 'error') {
     const id = ++toastId
     setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }
 
   const { data: settingsList, isLoading } = useQuery<SystemSetting[]>({
     queryKey: ['system-settings'],
     queryFn: () => api.get('/settings').then((r) => r.data).catch(() => []),
   })
+
+  const { data: claudeModelsData } = useQuery<{ id: string; displayName: string }[]>({
+    queryKey: ['claude-models'],
+    queryFn: () => api.get('/models/claude').then((r) => r.data).catch(() => []),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const claudeModelOptions: string[] = useMemo(
+    () => (claudeModelsData && claudeModelsData.length > 0 ? claudeModelsData.map((m) => m.id) : CLAUDE_MODELS),
+    [claudeModelsData],
+  )
+
+  const effectiveGroups: SettingGroup[] = useMemo(
+    () =>
+      SETTING_GROUPS.map((group) => ({
+        ...group,
+        settings: group.settings.map((s) =>
+          s.options === CLAUDE_MODELS
+            ? { ...s, options: claudeModelOptions }
+            : s.options && s.options.length > 1 && s.options[0] === '' && s.options.slice(1).join() === CLAUDE_MODELS.join()
+              ? { ...s, options: ['', ...claudeModelOptions] }
+              : s,
+        ),
+      })),
+    [claudeModelOptions],
+  )
 
   const overrides = new Map<string, SystemSetting>(
     (Array.isArray(settingsList) ? settingsList : []).map((s) => [s.key, s]),
@@ -1371,10 +1376,15 @@ export default function SystemSettingsPage() {
 
   const handleDelete = (key: string) => deleteMutation.mutate(key)
 
+  const effectiveGroupById = useMemo(
+    () => new Map(effectiveGroups.map((g) => [g.id, g])),
+    [effectiveGroups],
+  )
+
   const lowerSearch = search.toLowerCase().trim()
   const isSearching = lowerSearch.length > 0
 
-  const searchGroups = SETTING_GROUPS.map((group) => ({
+  const searchGroups = effectiveGroups.map((group) => ({
     ...group,
     settings: group.settings.filter(
       (s) =>
@@ -1386,15 +1396,15 @@ export default function SystemSettingsPage() {
 
   const currentTab = TABS.find((t) => t.id === activeTab) ?? TABS[0]
   const tabGroups = currentTab.groupIds
-    .map((id) => GROUP_BY_ID.get(id))
+    .map((id) => effectiveGroupById.get(id))
     .filter((g): g is SettingGroup => !!g)
 
   const totalOverridden = overrides.size
-  const totalSettings = SETTING_GROUPS.reduce((n, g) => n + g.settings.length, 0)
+  const totalSettings = effectiveGroups.reduce((n, g) => n + g.settings.length, 0)
 
   function tabOverrideCount(tab: TabDef) {
     return tab.groupIds
-      .flatMap((id) => GROUP_BY_ID.get(id)?.settings ?? [])
+      .flatMap((id) => effectiveGroupById.get(id)?.settings ?? [])
       .filter((s) => overrides.has(s.key)).length
   }
 
@@ -1415,12 +1425,12 @@ export default function SystemSettingsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <input
+        <Input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search all settings…"
-          className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
+          className="h-8 w-64 text-sm"
         />
         <span className="ml-auto text-xs text-[var(--color-fonts-font-color-support)]">
           {isLoading ? '…' : `${totalOverridden} of ${totalSettings} settings overridden`}
@@ -1498,7 +1508,15 @@ export default function SystemSettingsPage() {
         </>
       )}
 
-      <ToastList toasts={toasts} />
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.text}
+          variant={t.type}
+          duration={3500}
+          onClose={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+        />
+      ))}
     </main>
   )
 }

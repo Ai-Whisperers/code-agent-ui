@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Save, Eye, RotateCcw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
 import type { PromptTemplate } from '@/types/api'
 
@@ -97,32 +98,35 @@ export default function PromptsPage() {
               <div className="flex items-center justify-between">
                 <h3>{selected.key}</h3>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    icon={<Eye size={13} />}
+                    loading={previewLoading}
                     onClick={handlePreview}
-                    disabled={previewLoading}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
                   >
-                    <Eye size={13} />
-                    {previewLoading ? 'Loading…' : 'Preview'}
-                  </button>
+                    Preview
+                  </Button>
                   {selected.isOverride && (
-                    <button
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<RotateCcw size={13} />}
+                      loading={deleteMutation.isPending}
                       onClick={() => deleteMutation.mutate()}
-                      disabled={deleteMutation.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] text-xs font-medium hover:opacity-80 transition-opacity"
                     >
-                      <RotateCcw size={13} />
                       Reset to Default
-                    </button>
+                    </Button>
                   )}
-                  <button
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={<Save size={13} />}
+                    loading={saveMutation.isPending}
                     onClick={() => saveMutation.mutate()}
-                    disabled={saveMutation.isPending}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white text-xs font-medium hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-60 transition-colors"
                   >
-                    <Save size={13} />
-                    {saveMutation.isPending ? 'Saving…' : 'Save'}
-                  </button>
+                    Save
+                  </Button>
                 </div>
               </div>
 

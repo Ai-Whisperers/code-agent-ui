@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import {
   ChevronDown,
   ChevronRight,
@@ -17,6 +17,14 @@ import {
   Upload,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Toast } from '@/components/ui/Toast'
+import type { ToastConfig } from '@/components/ui/Toast'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { TableCard } from '@/components/ui/TableCard'
+import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
 import type {
   KnowledgeStatsResponse,
@@ -28,54 +36,14 @@ import type {
   StaticFileSource,
 } from '@/types/api'
 
-// ── Shared input styles ────────────────────────────────────────────────────────
-
-const inputCls =
-  'w-full h-8 px-3 text-sm font-mono rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)]'
-
-const selectCls =
-  'h-8 px-3 text-sm rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] cursor-pointer'
-
-// ── Toast ──────────────────────────────────────────────────────────────────────
-
-interface ToastMsg {
-  id: number
-  text: string
-  type: 'success' | 'error'
-}
-
-let toastId = 0
-
-function ToastList({ toasts }: { toasts: ToastMsg[] }) {
-  if (toasts.length === 0) return null
-  return (
-    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`px-4 py-2.5 rounded-[var(--border-radius-card)] shadow-lg text-sm font-medium ${
-            t.type === 'success'
-              ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] border border-[var(--color-tags-font-success)]'
-              : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] border border-[var(--color-tags-font-critical)]'
-          }`}
-        >
-          {t.text}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Accordion wrapper ──────────────────────────────────────────────────────────
+// ── Accordion wrapper (used for non-table sections) ───────────────────────────
 
 function Section({
   title,
-  badge,
   defaultOpen = true,
   children,
 }: {
   title: string
-  badge?: React.ReactNode
   defaultOpen?: boolean
   children: React.ReactNode
 }) {
@@ -85,19 +53,16 @@ function Section({
     <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] overflow-hidden mb-3">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-left"
+        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-left"
       >
-        <div className="flex items-center gap-3">
-          {open ? (
-            <ChevronDown size={15} className="text-[var(--color-fonts-font-color-support)]" />
-          ) : (
-            <ChevronRight size={15} className="text-[var(--color-fonts-font-color-support)]" />
-          )}
-          <span className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
-            {title}
-          </span>
-        </div>
-        {badge}
+        {open ? (
+          <ChevronDown size={15} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
+        ) : (
+          <ChevronRight size={15} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
+        )}
+        <span className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+          {title}
+        </span>
       </button>
       {open && (
         <div className="border-t border-[var(--color-cards-card-stroke)]">{children}</div>
@@ -120,9 +85,7 @@ function SourceTypeBadge({ type }: { type: string }) {
   if (lower === 'static-file')
     cls = 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
   return (
-    <span
-      className={`text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] font-medium ${cls}`}
-    >
+    <span className={`text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] font-medium ${cls}`}>
       {type}
     </span>
   )
@@ -152,31 +115,27 @@ function StatsSection({
   const totalCount = stats.reduce((n, s) => n + s.count, 0)
 
   return (
-    <Section
+    <TableCard
       title="Index Stats"
-      defaultOpen={true}
-      badge={
-        !isLoading && (
-          <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
-            {totalCount.toLocaleString()} documents
-          </span>
-        )
-      }
-    >
-      <div className="px-4 py-3 flex items-center justify-between border-b border-[var(--color-cards-card-stroke)]">
-        <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-          Document counts and last indexed time per source type.
-        </p>
-        <button
-          onClick={onRefresh}
+      subtitle={!isLoading ? `${totalCount.toLocaleString()} documents` : undefined}
+      toolbar={
+        <Button
+          variant="secondary"
+          size="sm"
+          loading={isRefreshing}
           disabled={isRefreshing || isLoading}
-          title="Refresh stats"
-          className="flex items-center gap-1.5 px-3 h-7 text-xs rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
+          icon={<RefreshCw size={12} />}
+          onClick={onRefresh}
         >
-          <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
           Refresh
-        </button>
-      </div>
+        </Button>
+      }
+      maxHeight="auto"
+      className="mb-3"
+    >
+      <p className="px-4 py-2.5 text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+        Document counts and last indexed time per source type.
+      </p>
 
       {isLoading ? (
         <div className="p-4 space-y-2">
@@ -219,7 +178,7 @@ function StatsSection({
           </tbody>
         </table>
       )}
-    </Section>
+    </TableCard>
   )
 }
 
@@ -272,26 +231,23 @@ function IndexManagementSection({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <input
+          <Input
             type="text"
             value={jiraProject}
             onChange={(e) => setJiraProject(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleJira()}
             placeholder="PROJECT-KEY"
-            className={`${inputCls} w-40`}
+            className="w-40 font-mono"
           />
-          <button
+          <Button
+            variant="primary"
+            size="md"
+            loading={triggering === 'jira'}
+            icon={<Play size={12} />}
             onClick={handleJira}
-            disabled={triggering === 'jira'}
-            className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
           >
-            {triggering === 'jira' ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Play size={12} />
-            )}
             Index
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -310,26 +266,23 @@ function IndexManagementSection({
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <input
+          <Input
             type="text"
             value={confluenceSpace}
             onChange={(e) => setConfluenceSpace(e.target.value.toUpperCase())}
             onKeyDown={(e) => e.key === 'Enter' && handleConfluence()}
             placeholder="SPACE-KEY"
-            className={`${inputCls} w-40`}
+            className="w-40 font-mono"
           />
-          <button
+          <Button
+            variant="primary"
+            size="md"
+            loading={triggering === 'confluence'}
+            icon={<Play size={12} />}
             onClick={handleConfluence}
-            disabled={triggering === 'confluence'}
-            className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
           >
-            {triggering === 'confluence' ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Play size={12} />
-            )}
             Index
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -347,18 +300,15 @@ function IndexManagementSection({
             sources). This may take several minutes.
           </p>
         </div>
-        <button
+        <Button
+          variant="danger"
+          size="md"
+          loading={triggering === 'all'}
+          icon={<RefreshCw size={12} />}
           onClick={() => onTrigger('all')}
-          disabled={triggering === 'all'}
-          className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-tags-critical-background)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] hover:opacity-80 disabled:opacity-40 transition-opacity shrink-0"
         >
-          {triggering === 'all' ? (
-            <RefreshCw size={12} className="animate-spin" />
-          ) : (
-            <RefreshCw size={12} />
-          )}
           Reindex All
-        </button>
+        </Button>
       </div>
     </Section>
   )
@@ -412,6 +362,7 @@ function WebDocSourcesSection({
   const qc = useQueryClient()
   const [showAddForm, setShowAddForm] = useState(false)
   const [crawlingId, setCrawlingId] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null)
   const [form, setForm] = useState<WebDocSourceCreateRequest>({
     name: '',
     baseUrl: '',
@@ -478,241 +429,256 @@ function WebDocSourcesSection({
     addMutation.mutate(form)
   }
 
-  function handleDelete(id: string, name: string) {
-    if (!window.confirm(`Delete web doc source "${name}" and all its indexed content?`)) return
-    deleteMutation.mutate(id)
-  }
-
   return (
-    <Section
-      title="Web Documentation Sources"
-      defaultOpen={true}
-      badge={
-        !isLoading && sources.length > 0 ? (
-          <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
-            {sources.length} source{sources.length !== 1 ? 's' : ''}
-          </span>
-        ) : undefined
-      }
-    >
-      {/* Header row */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-cards-card-stroke)]">
-        <p className="text-xs text-[var(--color-fonts-font-color-support)]">
+    <>
+      <TableCard
+        title="Web Documentation Sources"
+        subtitle={
+          !isLoading && sources.length > 0
+            ? `${sources.length} source${sources.length !== 1 ? 's' : ''}`
+            : undefined
+        }
+        toolbar={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={crawlAllMutation.isPending}
+              disabled={crawlAllMutation.isPending || sources.length === 0}
+              icon={<Globe size={12} />}
+              onClick={() => crawlAllMutation.mutate()}
+            >
+              Crawl All
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<Plus size={12} />}
+              onClick={() => setShowAddForm((v) => !v)}
+            >
+              Add Source
+            </Button>
+          </>
+        }
+        maxHeight="auto"
+        className="mb-3"
+      >
+        <p className="px-4 py-2.5 text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
           Register external documentation sites to crawl and index. Crawls run automatically every
           Friday night when the scheduler is enabled.
         </p>
-        <div className="flex items-center gap-2 shrink-0 ml-3">
-          <button
-            onClick={() => crawlAllMutation.mutate()}
-            disabled={crawlAllMutation.isPending || sources.length === 0}
-            className="flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
-          >
-            {crawlAllMutation.isPending ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Globe size={12} />
-            )}
-            Crawl All
-          </button>
-          <button
-            onClick={() => setShowAddForm((v) => !v)}
-            className="flex items-center gap-1.5 px-3 h-7 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity"
-          >
-            <Plus size={12} />
-            Add Source
-          </button>
-        </div>
-      </div>
 
-      {/* Source list */}
-      {isLoading ? (
-        <div className="p-4 space-y-2">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
-          ))}
-        </div>
-      ) : sources.length === 0 && !showAddForm ? (
-        <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
-          No web documentation sources registered. Add one to get started.
-        </div>
-      ) : (
-        <table className="w-full text-xs">
-          {sources.length > 0 && (
-            <>
-              <thead>
-                <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
-                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
-                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Base URL</th>
-                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Last Crawled</th>
-                  <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
-                  <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sources.map((source) => (
-                  <tr
-                    key={source.id}
-                    className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-                  >
-                    <td className="px-4 py-1.5">
-                      <div className="flex items-center gap-2">
-                        {source.lastCrawlError ? (
-                          <span title={source.lastCrawlError}>
-                          <AlertCircle
-                            size={13}
-                            className="text-[var(--color-tags-font-critical)] shrink-0"
-                          />
-                          </span>
-                        ) : source.lastCrawlChunks != null && source.lastCrawlChunks > 0 ? (
-                          <CheckCircle
-                            size={13}
-                            className="text-[var(--color-tags-font-success)] shrink-0"
-                          />
-                        ) : null}
-                        <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
-                          {source.name}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <a
-                        href={source.baseUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-mono text-[var(--color-buttons-button-primary)] hover:underline truncate max-w-48 block"
-                      >
-                        {source.baseUrl}
-                      </a>
-                    </td>
-                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                      {source.lastCrawledAt
-                        ? new Date(source.lastCrawledAt).toLocaleString()
-                        : '—'}
-                    </td>
-                    <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
-                      {source.lastCrawlChunks != null ? source.lastCrawlChunks.toLocaleString() : '—'}
-                    </td>
-                    <td className="px-4 py-1.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => crawlMutation.mutate(source.id)}
-                          disabled={crawlingId === source.id}
-                          title="Crawl now"
-                          className="flex items-center gap-1 px-2 h-6 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
-                        >
-                          {crawlingId === source.id ? (
-                            <RefreshCw size={11} className="animate-spin" />
-                          ) : (
-                            <Play size={11} />
-                          )}
-                          Crawl
-                        </button>
-                        <button
-                          onClick={() => handleDelete(source.id, source.name)}
-                          disabled={deleteMutation.isPending}
-                          title="Delete source"
-                          className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </td>
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+            ))}
+          </div>
+        ) : sources.length === 0 && !showAddForm ? (
+          <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+            No web documentation sources registered. Add one to get started.
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            {sources.length > 0 && (
+              <>
+                <thead>
+                  <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+                    <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
+                    <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Base URL</th>
+                    <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Last Crawled</th>
+                    <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
+                    <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </>
-          )}
-        </table>
-      )}
+                </thead>
+                <tbody>
+                  {sources.map((source) => (
+                    <tr
+                      key={source.id}
+                      className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+                    >
+                      <td className="px-4 py-1.5">
+                        <div className="flex items-center gap-2">
+                          {source.lastCrawlError ? (
+                            <Tooltip text={source.lastCrawlError}>
+                              <AlertCircle
+                                size={13}
+                                className="text-[var(--color-tags-font-critical)] shrink-0"
+                              />
+                            </Tooltip>
+                          ) : source.lastCrawlChunks != null && source.lastCrawlChunks > 0 ? (
+                            <CheckCircle
+                              size={13}
+                              className="text-[var(--color-tags-font-success)] shrink-0"
+                            />
+                          ) : null}
+                          <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
+                            {source.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <a
+                          href={source.baseUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[var(--color-buttons-button-primary)] hover:underline truncate max-w-48 block"
+                        >
+                          {source.baseUrl}
+                        </a>
+                      </td>
+                      <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                        {source.lastCrawledAt
+                          ? new Date(source.lastCrawledAt).toLocaleString()
+                          : '—'}
+                      </td>
+                      <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
+                        {source.lastCrawlChunks != null ? source.lastCrawlChunks.toLocaleString() : '—'}
+                      </td>
+                      <td className="px-4 py-1.5 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            loading={crawlingId === source.id}
+                            icon={<Play size={11} />}
+                            onClick={() => crawlMutation.mutate(source.id)}
+                          >
+                            Crawl
+                          </Button>
+                          <Tooltip text="Delete source">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              icon={<Trash2 size={12} />}
+                              disabled={deleteMutation.isPending}
+                              onClick={() => setDeleteConfirm({ id: source.id, name: source.name })}
+                            />
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </>
+            )}
+          </table>
+        )}
 
-      {/* Add source form */}
-      {showAddForm && (
-        <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-4 bg-[var(--color-navigation-menu-item-hover-background)]">
-          <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">
-            Add Web Documentation Source
-          </p>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-                Name *
-              </label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Quarkus Guides"
-                className={inputCls}
-              />
+        {/* Add source form */}
+        {showAddForm && (
+          <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-4 bg-[var(--color-navigation-menu-item-hover-background)]">
+            <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">
+              Add Web Documentation Source
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                  Name *
+                </label>
+                <Input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="e.g. Quarkus Guides"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                  Base URL *
+                </label>
+                <Input
+                  type="text"
+                  value={form.baseUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                  placeholder="https://quarkus.io/guides/"
+                  className="w-full"
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                  Allowed Path Prefix *{' '}
+                  <span className="italic">(only links under this prefix will be followed)</span>
+                </label>
+                <Input
+                  type="text"
+                  value={form.allowedPathPrefix}
+                  onChange={(e) => setForm((f) => ({ ...f, allowedPathPrefix: e.target.value }))}
+                  placeholder="https://quarkus.io/guides/"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                  Max Pages
+                </label>
+                <Input
+                  type="number"
+                  value={form.maxPages ?? 500}
+                  min={1}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, maxPages: parseInt(e.target.value) || 500 }))
+                  }
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                  Crawl Delay (ms)
+                </label>
+                <Input
+                  type="number"
+                  value={form.crawlDelayMs ?? 500}
+                  min={0}
+                  step={100}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, crawlDelayMs: parseInt(e.target.value) || 500 }))
+                  }
+                  className="w-full"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-                Base URL *
-              </label>
-              <input
-                type="text"
-                value={form.baseUrl}
-                onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                placeholder="https://quarkus.io/guides/"
-                className={inputCls}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-                Allowed Path Prefix * <span className="italic">(only links under this prefix will be followed)</span>
-              </label>
-              <input
-                type="text"
-                value={form.allowedPathPrefix}
-                onChange={(e) => setForm((f) => ({ ...f, allowedPathPrefix: e.target.value }))}
-                placeholder="https://quarkus.io/guides/"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-                Max Pages
-              </label>
-              <input
-                type="number"
-                value={form.maxPages ?? 500}
-                min={1}
-                onChange={(e) => setForm((f) => ({ ...f, maxPages: parseInt(e.target.value) || 500 }))}
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-                Crawl Delay (ms)
-              </label>
-              <input
-                type="number"
-                value={form.crawlDelayMs ?? 500}
-                min={0}
-                step={100}
-                onChange={(e) => setForm((f) => ({ ...f, crawlDelayMs: parseInt(e.target.value) || 500 }))}
-                className={inputCls}
-              />
+            <div className="flex items-center gap-2 mt-3">
+              <Button
+                variant="primary"
+                size="md"
+                loading={addMutation.isPending}
+                icon={<Plus size={12} />}
+                onClick={handleAdd}
+              >
+                Register Source
+              </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => setShowAddForm(false)}
+              >
+                Cancel
+              </Button>
             </div>
           </div>
-          <div className="flex items-center gap-2 mt-3">
-            <button
-              onClick={handleAdd}
-              disabled={addMutation.isPending}
-              className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity"
-            >
-              {addMutation.isPending ? <RefreshCw size={12} className="animate-spin" /> : <Plus size={12} />}
-              Register Source
-            </button>
-            <button
-              onClick={() => setShowAddForm(false)}
-              className="px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        )}
+      </TableCard>
+
+      {deleteConfirm && (
+        <ConfirmDialog
+          title={`Delete "${deleteConfirm.name}"?`}
+          variant="danger"
+          icon={<Trash2 size={16} />}
+          confirmLabel="Delete"
+          isPending={deleteMutation.isPending}
+          onConfirm={() => {
+            deleteMutation.mutate(deleteConfirm.id)
+            setDeleteConfirm(null)
+          }}
+          onCancel={() => setDeleteConfirm(null)}
+        >
+          This will permanently remove the web doc source and all its indexed content. This cannot
+          be undone.
+        </ConfirmDialog>
       )}
-    </Section>
+    </>
   )
 }
 
@@ -727,6 +693,7 @@ function StaticFilesSection({
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [name, setName] = useState('')
   const [reindexingId, setReindexingId] = useState<string | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; name: string } | null>(null)
 
   const { data: files = [], isLoading } = useQuery<StaticFileSource[]>({
     queryKey: ['static-file-sources'],
@@ -790,172 +757,188 @@ function StaticFilesSection({
     uploadMutation.mutate({ file: selectedFile, displayName: name })
   }
 
-  function handleDelete(id: string, fileName: string) {
-    if (!window.confirm(`Delete "${fileName}" and all its indexed content?`)) return
-    deleteMutation.mutate(id)
-  }
-
   return (
-    <Section
-      title="Static Files"
-      defaultOpen={true}
-      badge={
-        !isLoading && files.length > 0 ? (
-          <span className="text-xs px-2 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
-            {files.length} file{files.length !== 1 ? 's' : ''}
-          </span>
-        ) : undefined
-      }
-    >
-      {/* Upload area */}
-      <div className="px-4 py-4 border-b border-[var(--color-cards-card-stroke)]">
-        <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-3">
-          Upload <code className="font-mono">.txt</code>,{' '}
-          <code className="font-mono">.md</code> or{' '}
-          <code className="font-mono">.pdf</code> files to index into the knowledge base.
-          Files are stored in S3 and indexed automatically on upload.
-        </p>
-        <div className="flex items-end gap-3 flex-wrap">
-          <div>
-            <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-              File *
-            </label>
-            <input
-              type="file"
-              accept=".txt,.md,.pdf"
-              onChange={handleFileChange}
-              className="text-xs text-[var(--color-fonts-font-color-primary)] file:mr-3 file:h-8 file:px-3 file:text-xs file:font-medium file:rounded-[var(--border-radius-button-small)] file:border file:border-[var(--color-inputs-input-border)] file:bg-[var(--color-buttons-button-back)] file:text-[var(--color-fonts-font-color-buttons)] file:cursor-pointer hover:file:bg-[var(--color-buttons-button-back-hover)] file:transition-colors"
-            />
+    <>
+      <TableCard
+        title="Static Files"
+        subtitle={
+          !isLoading && files.length > 0
+            ? `${files.length} file${files.length !== 1 ? 's' : ''}`
+            : undefined
+        }
+        maxHeight="auto"
+        className="mb-3"
+      >
+        {/* Upload area */}
+        <div className="px-4 py-4 border-b border-[var(--color-cards-card-stroke)]">
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-3">
+            Upload <code className="font-mono">.txt</code>,{' '}
+            <code className="font-mono">.md</code> or{' '}
+            <code className="font-mono">.pdf</code> files to index into the knowledge base.
+            Files are stored in S3 and indexed automatically on upload.
+          </p>
+          <div className="flex items-end gap-3 flex-wrap">
+            <div>
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                File *
+              </label>
+              <input
+                type="file"
+                accept=".txt,.md,.pdf"
+                onChange={handleFileChange}
+                className="text-xs text-[var(--color-fonts-font-color-primary)] file:mr-3 file:h-8 file:px-3 file:text-xs file:font-medium file:rounded-[var(--border-radius-button-small)] file:border file:border-[var(--color-inputs-input-border)] file:bg-[var(--color-buttons-button-back)] file:text-[var(--color-fonts-font-color-buttons)] file:cursor-pointer hover:file:bg-[var(--color-buttons-button-back-hover)] file:transition-colors"
+              />
+            </div>
+            <div className="flex-1 min-w-40">
+              <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
+                Display name (optional)
+              </label>
+              <Input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Architecture Overview"
+                className="w-full"
+              />
+            </div>
+            <Button
+              variant="primary"
+              size="md"
+              loading={uploadMutation.isPending}
+              disabled={!selectedFile || uploadMutation.isPending}
+              icon={<Upload size={12} />}
+              onClick={handleUpload}
+            >
+              Upload & Index
+            </Button>
           </div>
-          <div className="flex-1 min-w-40">
-            <label className="block text-xs text-[var(--color-fonts-font-color-support)] mb-1">
-              Display name (optional)
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Architecture Overview"
-              className={inputCls}
-            />
-          </div>
-          <button
-            onClick={handleUpload}
-            disabled={!selectedFile || uploadMutation.isPending}
-            className="flex items-center gap-1.5 px-3 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
-          >
-            {uploadMutation.isPending ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Upload size={12} />
-            )}
-            Upload & Index
-          </button>
         </div>
-      </div>
 
-      {/* File list */}
-      {isLoading ? (
-        <div className="p-4 space-y-2">
-          {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
-          ))}
-        </div>
-      ) : files.length === 0 ? (
-        <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
-          No files uploaded yet. Upload a file above to get started.
-        </div>
-      ) : (
-        <table className="w-full text-xs">
-          <thead>
-            <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
-              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
-              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">File</th>
-              <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Indexed</th>
-              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Size</th>
-              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
-              <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {files.map((f) => (
-              <tr
-                key={f.id}
-                className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-              >
-                <td className="px-4 py-1.5">
-                  <div className="flex items-center gap-2">
-                    {f.indexError ? (
-                      <span title={f.indexError}>
-                      <AlertCircle
-                        size={13}
-                        className="text-[var(--color-tags-font-critical)] shrink-0"
-                      />
-                      </span>
-                    ) : f.chunkCount != null && f.chunkCount > 0 ? (
-                      <CheckCircle
-                        size={13}
-                        className="text-[var(--color-tags-font-success)] shrink-0"
-                      />
-                    ) : (
-                      <FileText
-                        size={13}
-                        className="text-[var(--color-fonts-font-color-support)] shrink-0"
-                      />
-                    )}
-                    <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
-                      {f.name}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)] truncate max-w-40">
-                  {f.originalFilename}
-                </td>
-                <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                  {f.indexedAt ? new Date(f.indexedAt).toLocaleString() : '—'}
-                </td>
-                <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
-                  {formatFileSize(f.fileSize)}
-                </td>
-                <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
-                  {f.chunkCount != null ? f.chunkCount.toLocaleString() : '—'}
-                </td>
-                <td className="px-4 py-1.5 text-right">
-                  <div className="flex items-center justify-end gap-1">
-                    <button
-                      onClick={() => reindexMutation.mutate(f.id)}
-                      disabled={reindexingId === f.id}
-                      title="Reindex file"
-                      className="flex items-center gap-1 px-2 h-6 text-xs font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors disabled:opacity-40"
-                    >
-                      <RefreshCw
-                        size={11}
-                        className={reindexingId === f.id ? 'animate-spin' : ''}
-                      />
-                      Reindex
-                    </button>
-                    <button
-                      onClick={() => handleDelete(f.id, f.name)}
-                      disabled={deleteMutation.isPending}
-                      title="Delete file"
-                      className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
+        {/* File list */}
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="h-12 skeleton-shimmer rounded-[var(--border-radius-card)]" />
             ))}
-          </tbody>
-        </table>
+          </div>
+        ) : files.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+            No files uploaded yet. Upload a file above to get started.
+          </div>
+        ) : (
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+                <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Name</th>
+                <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">File</th>
+                <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Indexed</th>
+                <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Size</th>
+                <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Chunks</th>
+                <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {files.map((f) => (
+                <tr
+                  key={f.id}
+                  className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+                >
+                  <td className="px-4 py-1.5">
+                    <div className="flex items-center gap-2">
+                      {f.indexError ? (
+                        <Tooltip text={f.indexError}>
+                          <AlertCircle
+                            size={13}
+                            className="text-[var(--color-tags-font-critical)] shrink-0"
+                          />
+                        </Tooltip>
+                      ) : f.chunkCount != null && f.chunkCount > 0 ? (
+                        <CheckCircle
+                          size={13}
+                          className="text-[var(--color-tags-font-success)] shrink-0"
+                        />
+                      ) : (
+                        <FileText
+                          size={13}
+                          className="text-[var(--color-fonts-font-color-support)] shrink-0"
+                        />
+                      )}
+                      <span className="font-medium text-[var(--color-fonts-font-color-headings)] truncate max-w-36">
+                        {f.name}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)] truncate max-w-40">
+                    {f.originalFilename}
+                  </td>
+                  <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                    {f.indexedAt ? new Date(f.indexedAt).toLocaleString() : '—'}
+                  </td>
+                  <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
+                    {formatFileSize(f.fileSize)}
+                  </td>
+                  <td className="px-4 py-1.5 text-right font-mono text-[var(--color-fonts-font-color-primary)]">
+                    {f.chunkCount != null ? f.chunkCount.toLocaleString() : '—'}
+                  </td>
+                  <td className="px-4 py-1.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        loading={reindexingId === f.id}
+                        icon={<RefreshCw size={11} />}
+                        onClick={() => reindexMutation.mutate(f.id)}
+                      >
+                        Reindex
+                      </Button>
+                      <Tooltip text="Delete file">
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={<Trash2 size={12} />}
+                          disabled={deleteMutation.isPending}
+                          onClick={() => setDeleteConfirm({ id: f.id, name: f.name })}
+                        />
+                      </Tooltip>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </TableCard>
+
+      {deleteConfirm && (
+        <ConfirmDialog
+          title={`Delete "${deleteConfirm.name}"?`}
+          variant="danger"
+          icon={<Trash2 size={16} />}
+          confirmLabel="Delete"
+          isPending={deleteMutation.isPending}
+          onConfirm={() => {
+            deleteMutation.mutate(deleteConfirm.id)
+            setDeleteConfirm(null)
+          }}
+          onCancel={() => setDeleteConfirm(null)}
+        >
+          This will permanently remove the file and all its indexed content. This cannot be undone.
+        </ConfirmDialog>
       )}
-    </Section>
+    </>
   )
 }
 
 // ── Semantic search section ────────────────────────────────────────────────────
 
 const SOURCE_TYPES = ['jira', 'confluence', 'web-docs', 'static-file']
+
+const TOP_K_OPTIONS = [
+  { value: '5', label: '5' },
+  { value: '10', label: '10' },
+  { value: '20', label: '20' },
+  { value: '50', label: '50' },
+]
 
 function SemanticSearchSection() {
   const [query, setQuery] = useState('')
@@ -991,28 +974,25 @@ function SemanticSearchSection() {
     <Section title="Semantic Search" defaultOpen={false}>
       {/* Search form */}
       <div className="px-4 py-4 space-y-3 border-b border-[var(--color-cards-card-stroke)]">
-        {/* Query input */}
         <div className="flex gap-2">
-          <input
+          <Input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
             placeholder="Search knowledge base…"
-            className={`${inputCls} flex-1`}
+            className="flex-1"
           />
-          <button
-            onClick={handleSearch}
+          <Button
+            variant="primary"
+            size="md"
+            loading={isFetching}
             disabled={!query.trim() || isFetching}
-            className="flex items-center gap-1.5 px-4 h-8 text-xs font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
+            icon={<Search size={12} />}
+            onClick={handleSearch}
           >
-            {isFetching ? (
-              <RefreshCw size={12} className="animate-spin" />
-            ) : (
-              <Search size={12} />
-            )}
             Search
-          </button>
+          </Button>
         </div>
 
         {/* Filters row */}
@@ -1024,17 +1004,15 @@ function SemanticSearchSection() {
               {SOURCE_TYPES.map((src) => {
                 const active = selectedSources.includes(src)
                 return (
-                  <button
+                  <Button
                     key={src}
+                    variant={active ? 'primary' : 'secondary'}
+                    size="sm"
                     onClick={() => toggleSource(src)}
-                    className={`text-xs px-2.5 py-1 rounded-[var(--border-radius-tag)] border transition-colors capitalize ${
-                      active
-                        ? 'bg-[var(--color-buttons-button-primary)] text-white border-[var(--color-buttons-button-primary)]'
-                        : 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border-[var(--color-inputs-input-border)] hover:border-[var(--color-buttons-button-primary)]'
-                    }`}
+                    className="capitalize"
                   >
                     {src}
-                  </button>
+                  </Button>
                 )
               })}
               {selectedSources.length === 0 && (
@@ -1048,17 +1026,12 @@ function SemanticSearchSection() {
           {/* Top-K */}
           <div className="flex items-center gap-2">
             <span className="text-xs text-[var(--color-fonts-font-color-support)]">Top K:</span>
-            <select
+            <Select
               value={topK}
-              onChange={(e) => setTopK(e.target.value)}
-              className={`${selectCls} h-7 text-xs w-20`}
-            >
-              {['5', '10', '20', '50'].map((v) => (
-                <option key={v} value={v}>
-                  {v}
-                </option>
-              ))}
-            </select>
+              onChange={setTopK}
+              options={TOP_K_OPTIONS}
+              className="w-20"
+            />
           </div>
         </div>
       </div>
@@ -1099,15 +1072,13 @@ function SemanticSearchSection() {
 export default function KnowledgeIndexPage() {
   const qc = useQueryClient()
   const [triggering, setTriggering] = useState<string | null>(null)
-  const [toasts, setToasts] = useState<ToastMsg[]>([])
+  const [toast, setToast] = useState<ToastConfig | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
 
   function addToast(text: string, type: 'success' | 'error') {
-    const id = ++toastId
-    setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+    setToast({ message: text, variant: type, duration: 3500 })
   }
 
-  // Stats query
   const {
     data: statsData,
     isLoading: statsLoading,
@@ -1128,7 +1099,6 @@ export default function KnowledgeIndexPage() {
       ]
     : []
 
-  // Index mutation
   const indexMutation = useMutation({
     mutationFn: ({
       type,
@@ -1188,7 +1158,7 @@ export default function KnowledgeIndexPage() {
 
       <SemanticSearchSection />
 
-      <ToastList toasts={toasts} />
+      {toast && <Toast {...toast} onClose={dismissToast} />}
     </main>
   )
 }

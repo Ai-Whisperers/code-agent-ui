@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { FilterSelect } from '@/components/ui/FilterSelect'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
@@ -169,8 +170,8 @@ function AuditRow({ entry }: { entry: WebhookAuditEntry }) {
 }
 
 export default function WebhookAuditLogPage() {
-  const [platformFilter, setPlatformFilter] = useState<string>('all')
-  const [actionFilter, setActionFilter] = useState<string>('all')
+  const [platformFilter, setPlatformFilter] = useState('')
+  const [actionFilter, setActionFilter] = useState('')
 
   const { data, isLoading, refetch, isFetching } = useQuery<WebhookAuditEntry[]>({
     queryKey: ['webhook-audit'],
@@ -181,8 +182,8 @@ export default function WebhookAuditLogPage() {
   const entries = Array.isArray(data) ? data : []
 
   const filtered = entries.filter((e) => {
-    if (platformFilter !== 'all' && e.platform !== platformFilter) return false
-    if (actionFilter !== 'all' && e.action !== actionFilter) return false
+    if (platformFilter && e.platform !== platformFilter) return false
+    if (actionFilter && e.action !== actionFilter) return false
     return true
   })
 
@@ -209,36 +210,18 @@ export default function WebhookAuditLogPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-            Platform
-          </label>
-          <select
-            value={platformFilter}
-            onChange={(e) => setPlatformFilter(e.target.value)}
-            className="px-2 py-1 text-sm rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-          >
-            <option value="all">All</option>
-            {platforms.map((p) => (
-              <option key={p} value={p}>{PLATFORM_LABELS[p] ?? p}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-            Action
-          </label>
-          <select
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            className="px-2 py-1 text-sm rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-          >
-            <option value="all">All</option>
-            {actions.map((a) => (
-              <option key={a} value={a}>{ACTION_STYLES[a]?.label ?? a}</option>
-            ))}
-          </select>
-        </div>
+        <FilterSelect
+          value={platformFilter}
+          onChange={setPlatformFilter}
+          placeholder="All platforms"
+          options={platforms.map((p) => ({ value: p, label: PLATFORM_LABELS[p] ?? p }))}
+        />
+        <FilterSelect
+          value={actionFilter}
+          onChange={setActionFilter}
+          placeholder="All actions"
+          options={actions.map((a) => ({ value: a, label: ACTION_STYLES[a]?.label ?? a }))}
+        />
       </div>
 
       {/* Table */}

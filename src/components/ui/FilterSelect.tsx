@@ -38,9 +38,11 @@ export function FilterSelect({
       // Rough estimates: 220 px wide, 28 px per row + padding
       const estW = 220
       const estH = (options.length + 1) * 26 + 12
+      const noRoomBelow = rect.bottom + estH > window.innerHeight
+      const hasRoomAbove = rect.top - estH >= 0
       setFlip({
         x: rect.left + estW > window.innerWidth,
-        y: rect.bottom + estH > window.innerHeight,
+        y: noRoomBelow && hasRoomAbove,
       })
     }
     setOpen((v) => !v)

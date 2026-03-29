@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { RadioGroup } from '@/components/ui/RadioGroup'
 import api from '@/lib/api'
 import type { AutomationHook } from '@/types/api'
 import { CATEGORIES, getCategories } from '@/components/hooks/hookConstants'
@@ -117,21 +118,12 @@ export default function HooksPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {CATEGORIES.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setCategoryFilter(cat)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-full transition-colors ${
-                categoryFilter === cat
-                  ? 'bg-[var(--color-filters-filter-active)] text-[var(--color-fonts-font-color-buttons)]'
-                  : 'bg-[var(--color-filters-filter-background)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-filters-filter-hover)]'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
-        </div>
+        <RadioGroup
+          variant="pills"
+          options={CATEGORIES.map(cat => ({ value: cat, label: cat }))}
+          value={categoryFilter}
+          onChange={(v) => setCategoryFilter(v as TriggerCategory)}
+        />
       </div>
 
       {/* Hook list */}
