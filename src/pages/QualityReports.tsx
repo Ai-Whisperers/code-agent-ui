@@ -20,12 +20,15 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldCheck,
+  Wrench,
   X,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import { VersionBadge } from '@/components/VersionBadge'
@@ -71,6 +74,7 @@ type RowData = {
 export default function QualityReportsPage() {
   const navigate = useNavigate()
   const [selected, setSelected] = useState<RowData | null>(null)
+  const [fixTarget, setFixTarget] = useState<RowData | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const { data: repos, isLoading: reposLoading } = useQuery<RepoSettings[]>({
@@ -210,8 +214,20 @@ export default function QualityReportsPage() {
                       <td className="px-4 py-1.5">
                         <ScoreBadge score={row.mainReport?.score} />
                       </td>
-                      <td className="px-4 py-1.5">
-                        <LinterErrorsBadge count={row.mainReport?.linter?.errorCount} />
+                      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <LinterErrorsBadge count={row.mainReport?.linter?.errorCount} />
+                          {(row.mainReport?.linter?.errorCount ?? 0) > 0 && (
+                            <Tooltip text="Queue a Fix job to resolve linter errors" position="top">
+                              <button
+                                onClick={() => setFixTarget(row)}
+                                className="p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-buttons-button-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+                              >
+                                <Wrench size={12} />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-1.5">
                         <SecurityBadge
@@ -295,6 +311,13 @@ export default function QualityReportsPage() {
           row={selected}
           latestVersions={latestVersions}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {fixTarget && (
+        <FixLinterDialog
+          row={fixTarget}
+          onClose={() => setFixTarget(null)}
         />
       )}
     </main>
@@ -630,7 +653,7 @@ function ReportDialog({
   const [toast, setToast] = useState<ToastConfig | null>(null)
   const dismissToast = useCallback(() => setToast(null), [])
 
-  const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+  const bitbucketBase = (repo.gitPlatformUrl ?? import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org').replace(/\/$/, '')
   const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
 
   const { data: mainHistory } = useQuery<QualityReport[]>({
@@ -931,6 +954,143 @@ function BranchPanel({
           No report available.
         </p>
       )}
+    </div>
+  )
+}
+
+// ── Fix Linter Dialog ─────────────────────────────────────────────────────────
+
+const BITBUCKET_BASE_URL = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+
+function FixLinterDialog({ row, onClose }: { row: RowData; onClose: () => void }) {
+  const navigate = useNavigate()
+
+  const errorCount   = row.mainReport?.linter?.errorCount   ?? 0
+  const warningCount = row.mainReport?.linter?.warningCount ?? 0
+  const repoSlug     = row.repo.repoSlug
+  const date         = new Date().toISOString().slice(0, 10)
+
+  const [branchName, setBranchName]     = useState(`agent/fix-linter-${repoSlug}-${date}`)
+  const [targetBranch, setTargetBranch] = useState('develop')
+  const [prompt, setPrompt]             = useState(
+    `Fix all linter errors in this repository. The latest quality report found ${errorCount} linter error(s)` +
+    (warningCount > 0 ? ` and ${warningCount} warning(s)` : '') +
+    `. Focus on fixing all errors so the linter passes cleanly. Do not change any business logic.`,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  const repoUrl = `${(row.repo.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')}/${row.repo.workspace}/${repoSlug}.git`
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api
+        .post('/run-fix', {
+          repoUrl,
+          branchName: branchName.trim() || `agent/fix-linter-${repoSlug}-${date}`,
+          prompt,
+          targetBranch,
+        })
+        .then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      onClose()
+      if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(msg ?? 'Failed to queue the fix job. Please try again.')
+    },
+  })
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_8px_32px_rgba(0,0,0,0.24)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-small-section-background)]">
+          <div className="flex items-center gap-2">
+            <Wrench size={16} className="text-[var(--color-buttons-button-primary)]" />
+            <div>
+              <h3 className="font-semibold text-sm">Fix Linter Errors</h3>
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+                {row.repo.workspace} / {repoSlug} &mdash; {errorCount} error{errorCount !== 1 ? 's' : ''}
+                {warningCount > 0 ? `, ${warningCount} warning${warningCount !== 1 ? 's' : ''}` : ''}
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="xs" icon={<X size={14} />} onClick={onClose} aria-label="Close" />
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Branch name */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Branch name
+            </label>
+            <Input
+              type="text"
+              value={branchName}
+              onChange={(e) => setBranchName(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Target branch */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Target branch
+            </label>
+            <Select
+              value={targetBranch}
+              onChange={setTargetBranch}
+              options={[
+                { value: 'develop', label: 'develop' },
+                { value: 'main', label: 'main' },
+              ]}
+            />
+          </div>
+
+          {/* Prompt */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Prompt
+            </label>
+            <textarea
+              rows={4}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full text-xs border border-[var(--color-cards-card-stroke)] rounded px-2 py-1 bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] resize-y hover:border-[var(--color-buttons-button-primary)] focus:border-[var(--color-buttons-button-primary)] focus:outline-none transition-all"
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-[var(--color-status-border-critical)]">{error}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-cards-card-stroke)]">
+          <Button variant="secondary" size="md" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            icon={mutation.isPending ? undefined : <Wrench size={13} />}
+            loading={mutation.isPending}
+            disabled={mutation.isPending}
+            onClick={() => { setError(null); mutation.mutate() }}
+          >
+            {mutation.isPending ? 'Queueing…' : 'Queue Fix Job'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

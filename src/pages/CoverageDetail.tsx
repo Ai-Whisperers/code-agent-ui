@@ -354,24 +354,26 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
   // ── Mutations ───────────────────────────────────────────────────────────────
 
   const mainJobMutation = useMutation({
-    mutationFn: () =>
-      api
-        .post(`/metrics/quality-reports/${workspace}/${repoSlug}/main`, {
-          repoUrl: `${workspace}/${repoSlug}`,
-        })
-        .then((r) => r.data as { jobId: string }),
+    mutationFn: () => {
+      const gitBase = (repoSettings?.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')
+      const repoUrl = `${gitBase}/${workspace}/${repoSlug}.git`
+      return api
+        .post(`/metrics/quality-reports/${workspace}/${repoSlug}/main`, { repoUrl })
+        .then((r) => r.data as { jobId: string })
+    },
     onSuccess: (data) => {
       if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
     },
   })
 
   const developJobMutation = useMutation({
-    mutationFn: () =>
-      api
-        .post(`/metrics/quality-reports/${workspace}/${repoSlug}/develop`, {
-          repoUrl: `${workspace}/${repoSlug}`,
-        })
-        .then((r) => r.data as { jobId: string }),
+    mutationFn: () => {
+      const gitBase = (repoSettings?.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')
+      const repoUrl = `${gitBase}/${workspace}/${repoSlug}.git`
+      return api
+        .post(`/metrics/quality-reports/${workspace}/${repoSlug}/develop`, { repoUrl })
+        .then((r) => r.data as { jobId: string })
+    },
     onSuccess: (data) => {
       if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
     },
@@ -544,9 +546,24 @@ export default function CoverageDetail({ workspace, repoSlug }: Props) {
           <Loader2 size={24} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
         </div>
       ) : !coverage ? (
-        <div className="flex items-center justify-center py-20 text-sm text-[var(--color-fonts-font-color-support)]">
-          No coverage data available for <span className="font-semibold mx-1">{activeTab}</span>.
-          Run a quality report to collect coverage metrics.
+        <div className="flex flex-col items-center justify-center py-20 gap-2 text-sm text-[var(--color-fonts-font-color-support)]">
+          {activeReport ? (
+            <>
+              <p>
+                A quality report exists for <span className="font-semibold">{activeTab}</span> (
+                {new Date(activeReport.measuredAt).toLocaleString()}), but it contains no coverage data.
+              </p>
+              <p className="text-xs">
+                This usually means the test suite did not run or JaCoCo/coverage tooling is not configured on this branch.
+                Re-run the quality report to try again.
+              </p>
+            </>
+          ) : (
+            <p>
+              No quality report found for <span className="font-semibold">{activeTab}</span>.
+              Use the <span className="font-semibold">Run Report</span> button above to collect metrics.
+            </p>
+          )}
         </div>
       ) : (
         <div className="flex flex-col gap-4 pb-4">
