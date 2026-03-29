@@ -274,7 +274,7 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
+        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-4 min-h-0">
           {messages.map(msg => (
             <MessageBubble key={msg.id} message={msg} />
           ))}

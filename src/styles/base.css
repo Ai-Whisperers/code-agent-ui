@@ -6,6 +6,64 @@ body {
   font-size: 14px;
 }
 
+/* ── Global styled scrollbar ───────────────────────────────────────────────── */
+/* Applied globally so every scrollable container in the app gets a slim,      */
+/* theme-aware scrollbar that replaces the macOS overlay auto-hide behaviour.  */
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+}
+
+/* WebKit / Blink (Chrome, Safari, Edge) — defining ::-webkit-scrollbar forces */
+/* the browser to use a classic always-visible scrollbar instead of the macOS  */
+/* overlay one, so the track and thumb are always shown when overflow is active. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* No border-radius on the track — a rounded track acts as overflow:hidden and  */
+/* clips the thumb as it moves, making it disappear at certain scroll positions. */
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 9999px;
+  min-height: 40px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-buttons-button-primary);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dark mode: use light-on-dark colours */
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-buttons-button-primary);
+}
+
+/* Retain .custom-scrollbar as a no-op alias so existing class usages compile */
+.custom-scrollbar {}
+
 .application-menu-text {
   color: var(--color-fonts-font-color-primary, #004766);
   font-family: Lato;

@@ -54,6 +54,8 @@ export default function Chat() {
   const [existingContext, setExistingContext] = useState<ConversationContext | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
   const chatInputRef = useRef<ChatInputHandle>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
@@ -64,6 +66,17 @@ export default function Chat() {
     return () => {
       abortControllerRef.current?.abort()
     }
+  }, [])
+
+  // Track whether the user is scrolled to (or near) the bottom of the messages container
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    const onScroll = () => {
+      isAtBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
   // Function to load existing attachments
@@ -169,18 +182,31 @@ export default function Chat() {
     fetchLinkedPlans()
   }, [params.conversationId])
 
-  // Scroll handling
+  // Scroll handling — only scroll when the user is already at (or near) the bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    }
   }, [messages])
 
+  // When streaming starts the user just hit Send — force scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    if (isStreaming) {
+      isAtBottomRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    }
   }, [isStreaming])
+
+  // Follow streaming tokens as they arrive
+  useEffect(() => {
+    if (isStreaming && isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [streamingContent, isStreaming])
 
   // Scroll when new tool logs are added
   useEffect(() => {
-    if (streamingThinkingSteps.length > 0 && isStreaming) {
+    if (streamingThinkingSteps.length > 0 && isStreaming && isAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [streamingThinkingSteps, isStreaming])
@@ -869,7 +895,7 @@ export default function Chat() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-8 py-6 space-y-6">
           {messages.length === 0 && !isStreaming && (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
               <div className="w-14 h-14 rounded-2xl bg-[var(--color-buttons-button-primary)] flex items-center justify-center shadow-lg">
