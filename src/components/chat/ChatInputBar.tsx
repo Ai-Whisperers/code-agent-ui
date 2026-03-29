@@ -34,6 +34,8 @@ type ChatInputBarProps = {
   onImplementPlan?: (plan: ExecutionPlan) => void
   onDismissPlan?: (planId: string) => void
   canPlan?: boolean
+  /** When true, hides the attachment/context (+) button and the mode-switcher button. */
+  simplified?: boolean
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 10MB
@@ -44,7 +46,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false },
+  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false, simplified = false },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -69,8 +71,12 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
 
-  // Initialize attachments with existing attachments when they change
+  // Initialize attachments with existing attachments when they change.
+  // Skip entirely in simplified mode — no attachments are supported there, and
+  // the prop defaults to a new `[]` reference on every render which would cause
+  // an infinite setState → re-render loop.
   useEffect(() => {
+    if (simplified) return
     setAttachments(existingAttachments)
     // Fetch presigned URLs for existing image attachments
     existingAttachments.forEach(async (attachment) => {
@@ -86,7 +92,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         } catch { /* silent */ }
       }
     })
-  }, [existingAttachments])
+  }, [simplified, existingAttachments])
 
   // Initialize context with existing context when it changes
   useEffect(() => {
@@ -685,8 +691,8 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         )}
 
         <div className="flex items-center gap-2 p-3">        
-        {/* Context and attachment menu */}
-        <div className="relative" ref={contextMenuRef}>
+        {/* Context and attachment menu — hidden in simplified mode */}
+        {!simplified && <div className="relative" ref={contextMenuRef}>
           <button
             onClick={() => setShowContextMenu(!showContextMenu)}
             disabled={isStreaming || uploading}
@@ -778,10 +784,10 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
               </button>
             </div>
           )}
-        </div>
+        </div>}
 
-        {/* Mode switcher button */}
-        <div className="relative" ref={modeMenuRef}>
+        {/* Mode switcher button — hidden in simplified mode */}
+        {!simplified && <div className="relative" ref={modeMenuRef}>
           <button
             onClick={() => setShowModeMenu(!showModeMenu)}
             disabled={isStreaming}
@@ -826,7 +832,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
               )}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Input field */}
         <textarea
@@ -886,10 +892,12 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         </div>
       )}
       
-      <p className="text-xs text-gray-500 mt-2 text-center">
-        Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
-        syntax-highlighted code.
-      </p>
+      {!simplified && (
+        <p className="text-xs text-gray-500 mt-2 text-center">
+          Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
+          syntax-highlighted code.
+        </p>
+      )}
 
 
       {/* Context Selection Dialogs */}

@@ -51,6 +51,8 @@ export interface JobStatusResponse {
   sourceBranch?: string
   targetBranch?: string
   coverageData?: JobCoverageData
+  workspace?: string
+  repoSlug?: string
   // SOC II / SLA fields
   jiraIssueType?: string
   jiraPriority?: string
@@ -117,6 +119,8 @@ export interface ReviewCommentEntry {
   resolved: boolean
   resolvedAt?: string | null
   resolvedBy?: string | null
+  /** ID of the parent comment this is a reply to. 0 or absent means root (top-level) comment. */
+  parentId?: number
 }
 
 export interface JobReviewResponse {

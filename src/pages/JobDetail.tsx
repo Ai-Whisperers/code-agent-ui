@@ -48,8 +48,8 @@ import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Eye,
   GitBranch, ArrowRight, ChevronDown, ChevronRight, ChevronUp, ChevronLeft,
   FolderOpen, Folder, TrendingUp, TrendingDown, Minus,
-  ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, Printer, Wrench, CheckCheck,
-  FileCode, Flag, Send, GitCompare,
+  ShieldCheck, AlertTriangle, Bot, Clock, MessageSquare, MessagesSquare, Printer, Wrench, CheckCheck,
+  FileCode, Flag, GitCompare,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from './Dashboard'
@@ -59,12 +59,13 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import { AiCallModal } from '@/components/ui/AiCallModal'
+import { CommentChatDialog, type CommentChatAction } from '@/components/CommentChatDialog'
 import api from '@/lib/api'
 import type {
   JobStatusResponse, JobAiCallsResponse, AiCallRecord,
   JobDiffResponse, DiffFileEntry, JobCoverageData, PackageLineCoverage,
   JobReviewResponse, ReviewCommentEntry, JobEvidenceResponse,
-  PrCommitEntry, JobCommitsResponse,
+  PrCommitEntry, JobCommitsResponse, QualityReport, CoverageSection,
 } from '@/types/api'
 
 interface JobDetailProps {
@@ -138,6 +139,19 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     queryKey: ['commit-diff', jobId, selectedCommitSha],
     queryFn: () => api.get(`/jobs/${jobId}/commits/${selectedCommitSha}/diff`).then((r) => r.data),
     enabled: !!selectedCommitSha,
+    retry: false,
+  })
+
+  // Fetch the latest quality report for this repo when the Coverage tab is open so we can
+  // use it as the authoritative baseline instead of the job's own before-snapshot.
+  const { data: qualityReport } = useQuery<QualityReport>({
+    queryKey: ['quality-report', job?.workspace, job?.repoSlug, job?.targetBranch ?? 'main'],
+    queryFn: () =>
+      api
+        .get(`/metrics/quality-reports/${job!.workspace}/${job!.repoSlug}/${job!.targetBranch ?? 'main'}`)
+        .then((r) => r.data)
+        .catch(() => null),
+    enabled: activeTab === 'coverage' && !!job?.workspace && !!job?.repoSlug,
     retry: false,
   })
 
@@ -254,15 +268,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     onError: () => setToast({ variant: 'error', message: 'Failed to mark as false positive.' }),
   })
 
-  const replyCommentMutation = useMutation({
-    mutationFn: ({ commentId, message }: { commentId: number; message: string }) =>
-      api.post(`/jobs/${jobId}/reply-comment`, { commentId, message }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['job-review', jobId] })
-      setToast({ variant: 'success', message: 'Reply posted.' })
-    },
-    onError: () => setToast({ variant: 'error', message: 'Failed to post reply.' }),
-  })
+  const [chatComment, setChatComment] = useState<ReviewCommentEntry | null>(null)
 
   const uploadScytaleMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${jobId}/evidence/upload-scytale`),
@@ -590,12 +596,14 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
           {/* AI Calls tab */}
           {activeTab === 'ai-calls' && (
-            <AiCallsCard
-              aiData={aiData}
-              isLoading={aiLoading}
-              isActive={isActive}
-              onViewCall={setSelectedCall}
-            />
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <AiCallsCard
+                aiData={aiData}
+                isLoading={aiLoading}
+                isActive={isActive}
+                onViewCall={setSelectedCall}
+              />
+            </div>
           )}
 
           {/* Review tab */}
@@ -618,7 +626,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               onOpenCommit={setSelectedCommitSha}
               onResolveComment={commentId => resolveCommentMutation.mutate(commentId)}
               onFalsePositive={commentId => falsePositiveMutation.mutate(commentId)}
-              onReplyComment={(commentId, message) => replyCommentMutation.mutate({ commentId, message })}
+              onChatComment={setChatComment}
               resolvedCommentIds={resolvedCommentIds}
               resolveCommentPendingId={resolveCommentMutation.isPending ? resolveCommentMutation.variables as number : undefined}
               falsePositivePendingId={falsePositiveMutation.isPending ? falsePositiveMutation.variables as number : undefined}
@@ -646,7 +654,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               onOpenCommit={setSelectedCommitSha}
               onResolveComment={commentId => resolveCommentMutation.mutate(commentId)}
               onFalsePositive={commentId => falsePositiveMutation.mutate(commentId)}
-              onReplyComment={(commentId, message) => replyCommentMutation.mutate({ commentId, message })}
+              onChatComment={setChatComment}
               resolvedCommentIds={resolvedCommentIds}
               resolveCommentPendingId={resolveCommentMutation.isPending ? resolveCommentMutation.variables as number : undefined}
               falsePositivePendingId={falsePositiveMutation.isPending ? falsePositiveMutation.variables as number : undefined}
@@ -674,7 +682,10 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
           {/* Coverage tab */}
           {activeTab === 'coverage' && job.coverageData && (
-            <CoverageTab coverageData={job.coverageData} />
+            <CoverageTab
+              coverageData={job.coverageData}
+              qualityReportCoverage={qualityReport?.coverage}
+            />
           )}
 
           {/* Evidence tab */}
@@ -698,13 +709,31 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
       {showFixPrConfirm && (
         <FixPrConfirmDialog
-          openComments={(reviewData?.comments ?? []).filter(c => !c.resolved)}
+          openComments={(reviewData?.comments ?? []).filter(c => !c.resolved && !c.parentId)}
           isPending={requestFixPrMutation.isPending}
           onConfirm={() => {
             requestFixPrMutation.mutate()
             setShowFixPrConfirm(false)
           }}
           onCancel={() => setShowFixPrConfirm(false)}
+        />
+      )}
+
+      {chatComment && (
+        <CommentChatDialog
+          comment={chatComment}
+          jobId={jobId}
+          onClose={() => setChatComment(null)}
+          onAction={(type: CommentChatAction, meta?: string) => {
+            if (type === 'resolved' || type === 'false_positive') {
+              setResolvedCommentIds(prev => new Set([...prev, chatComment.commentId]))
+            }
+            if (type === 'fix_started' && meta) {
+              const fixJobId = meta
+              setFixCommentJobIds(prev => ({ ...prev, [chatComment.commentId]: fixJobId }))
+            }
+            qc.invalidateQueries({ queryKey: ['job-review', jobId] })
+          }}
         />
       )}
     </main>
@@ -763,7 +792,7 @@ interface ChangedFilesTabProps {
   onOpenCommit?: (sha: string) => void
   onResolveComment?: (commentId: number) => void
   onFalsePositive?: (commentId: number) => void
-  onReplyComment?: (commentId: number, message: string) => void
+  onChatComment?: (comment: ReviewCommentEntry) => void
   resolvedCommentIds?: Set<number>
   resolveCommentPendingId?: number
   falsePositivePendingId?: number
@@ -773,23 +802,23 @@ function ChangedFilesTab({
   job, diffData, isLoading, isError, reviewComments = [],
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
-  onResolveComment, onFalsePositive, onReplyComment, resolvedCommentIds = new Set(),
+  onResolveComment, onFalsePositive, onChatComment, resolvedCommentIds = new Set(),
   resolveCommentPendingId, falsePositivePendingId,
 }: ChangedFilesTabProps) {
-  // Build a file-keyed map of review comments for inline display
+  // Build a file-keyed map of review comments for inline display (all comments including replies)
   const commentsByFile = useMemo(() => {
     const map: Record<string, ReviewCommentEntry[]> = {}
     reviewComments.forEach(c => { (map[c.filePath] ??= []).push(c) })
     return map
   }, [reviewComments])
 
-  // Flat ordered list for prev/next nav, sorted by file order in diff then line number
+  // Flat ordered list for prev/next nav — only root comments, sorted by file order then line
   const allComments = useMemo(() => {
-    if (!diffData) return reviewComments.filter(c => c.commentId > 0)
+    const rootComments = reviewComments.filter(c => c.commentId > 0 && !c.parentId)
+    if (!diffData) return rootComments
     const fileOrder: Record<string, number> = {}
     diffData.files.forEach((f, i) => { fileOrder[f.filename] = i })
-    return [...reviewComments]
-      .filter(c => c.commentId > 0)
+    return [...rootComments]
       .sort((a, b) => {
         const fa = fileOrder[a.filePath] ?? 999
         const fb = fileOrder[b.filePath] ?? 999
@@ -803,8 +832,16 @@ function ChangedFilesTab({
   const scrollToComment = useCallback((idx: number) => {
     const comment = allComments[idx]
     if (!comment) return
-    const el = commentRefs.current[comment.commentId]
-    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    // Expand the file section first so the comment row is in the DOM
+    const handle = fileRefs.current[comment.filePath]
+    if (handle) {
+      handle.expand()
+      requestAnimationFrame(() => {
+        commentRefs.current[comment.commentId]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+    } else {
+      commentRefs.current[comment.commentId]?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
   }, [allComments])
 
   const goToPrev = useCallback(() => {
@@ -1006,7 +1043,7 @@ function ChangedFilesTab({
                 commentRefs={commentRefs}
                 onResolveComment={onResolveComment}
                 onFalsePositive={onFalsePositive}
-                onReplyComment={onReplyComment}
+                onChatComment={onChatComment}
                 resolvedCommentIds={resolvedCommentIds}
                 resolveCommentPendingId={resolveCommentPendingId}
                 falsePositivePendingId={falsePositivePendingId}
@@ -1165,7 +1202,7 @@ interface FileDiffSectionProps {
   commentRefs?: MutableRefObject<Record<number, HTMLTableRowElement | null>>
   onResolveComment?: (commentId: number) => void
   onFalsePositive?: (commentId: number) => void
-  onReplyComment?: (commentId: number, message: string) => void
+  onChatComment?: (comment: ReviewCommentEntry) => void
   resolvedCommentIds?: Set<number>
   resolveCommentPendingId?: number
   falsePositivePendingId?: number
@@ -1176,15 +1213,23 @@ const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
     file, viewed, onToggleViewed, fileComments = [],
     onFixComment, fixCommentJobIds = {}, fixedCommentInfo = {}, fixCommentPendingId, onOpenCommit,
     initialCollapsed = false, expandCollapseSeq = 0, expandCollapseTarget,
-    commentRefs, onResolveComment, onFalsePositive, onReplyComment,
+    commentRefs, onResolveComment, onFalsePositive, onChatComment,
     resolvedCommentIds = new Set(), resolveCommentPendingId, falsePositivePendingId,
   }, ref) {
-    // Build a line-number → comments map for O(1) lookup
-    const commentsByLine = useMemo(() => {
+    // Separate root comments from replies
+    const rootFileComments = useMemo(() => fileComments.filter(c => !c.parentId), [fileComments])
+    const repliesByParentId = useMemo(() => {
       const map: Record<number, ReviewCommentEntry[]> = {}
-      fileComments.forEach(c => { if (c.line > 0) (map[c.line] ??= []).push(c) })
+      fileComments.filter(c => c.parentId).forEach(c => { (map[c.parentId!] ??= []).push(c) })
       return map
     }, [fileComments])
+
+    // Build a line-number → root-comments map for O(1) lookup
+    const commentsByLine = useMemo(() => {
+      const map: Record<number, ReviewCommentEntry[]> = {}
+      rootFileComments.forEach(c => { if (c.line > 0) (map[c.line] ??= []).push(c) })
+      return map
+    }, [rootFileComments])
 
     // Collect rendered line numbers to detect orphan comments
     const renderedLines = useMemo(() => {
@@ -1197,8 +1242,8 @@ const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
     }, [file.hunks])
 
     const orphanComments = useMemo(
-      () => fileComments.filter(c => c.line === 0 || !renderedLines.has(c.line)),
-      [fileComments, renderedLines]
+      () => rootFileComments.filter(c => c.line === 0 || !renderedLines.has(c.line)),
+      [rootFileComments, renderedLines]
     )
 
     const [collapsed, setCollapsed] = useState(initialCollapsed)
@@ -1328,6 +1373,7 @@ const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
                             <InlineCommentRow
                               key={ci}
                               comment={c}
+                              replies={repliesByParentId[c.commentId]}
                               lineType={line.type}
                               onFix={onFixComment && c.commentId > 0 && !fixedCommentInfo[c.commentId]
                                 ? () => onFixComment(c.commentId, c.filePath, c.line)
@@ -1341,8 +1387,8 @@ const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
                                 ? () => onResolveComment(c.commentId) : undefined}
                               onFalsePositive={onFalsePositive && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
                                 ? () => onFalsePositive(c.commentId) : undefined}
-                              onReply={onReplyComment && c.commentId > 0
-                                ? (msg) => onReplyComment(c.commentId, msg) : undefined}
+                              onChat={onChatComment && c.commentId > 0
+                                ? () => onChatComment(c) : undefined}
                               isResolvePending={resolveCommentPendingId === c.commentId}
                               isFalsePositivePending={falsePositivePendingId === c.commentId}
                               optimisticallyResolved={resolvedCommentIds.has(c.commentId)}
@@ -1470,10 +1516,11 @@ const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, content,
  * where there is no table context.
  */
 function ReviewCommentCard({
-  comment, onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
-  onResolve, onFalsePositive, onReply, isResolvePending, isFalsePositivePending, optimisticallyResolved,
+  comment, replies, onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+  onResolve, onFalsePositive, onChat, isResolvePending, isFalsePositivePending, optimisticallyResolved,
 }: {
   comment: ReviewCommentEntry
+  replies?: ReviewCommentEntry[]
   onFix?: () => void
   isFixRunning?: boolean
   isFixPending?: boolean
@@ -1481,15 +1528,13 @@ function ReviewCommentCard({
   onOpenCommit?: (sha: string) => void
   onResolve?: () => void
   onFalsePositive?: () => void
-  onReply?: (message: string) => void
+  onChat?: () => void
   isResolvePending?: boolean
   isFalsePositivePending?: boolean
   optimisticallyResolved?: boolean
 }) {
   const isResolved = optimisticallyResolved || !!comment.resolved
   const [expanded, setExpanded] = useState(!isResolved)
-  const [replyOpen, setReplyOpen] = useState(false)
-  const [replyText, setReplyText] = useState('')
   const accentColor = isResolved ? 'var(--color-status-text-active)' : 'var(--color-tags-font-attention)'
   const isFixable = comment.line > 0 && comment.commentId > 0
 
@@ -1549,6 +1594,27 @@ function ReviewCommentCard({
         <div className={`px-4 py-3 bot-comment-body${isResolved ? ' is-resolved' : ''}`}>
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.content}</ReactMarkdown>
         </div>
+        {/* Reply thread — rendered inside the card, no action bar */}
+        {replies && replies.length > 0 && (
+          <div className="border-t border-[var(--color-borders-border-primary)]/20">
+            {replies.map((reply, ri) => (
+              <div key={ri} className="flex gap-2 px-3 py-2.5 border-b border-[var(--color-borders-border-primary)]/10 last:border-b-0 bg-[var(--color-cards-card-background-hover)]/50">
+                <div className="shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
+                    <Bot size={10} />
+                  </span>
+                  {ri < replies.length - 1 && <span className="w-px flex-1 bg-[var(--color-borders-border-primary)]/30 min-h-[8px]" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-[10px] font-semibold text-[var(--color-fonts-font-color-support)]">Review Agent</span>
+                  <div className="bot-comment-body text-xs mt-0.5">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{reply.content}</ReactMarkdown>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex flex-col border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)]">
           <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap min-h-[32px]">
             {isResolved ? (
@@ -1577,32 +1643,14 @@ function ReviewCommentCard({
                 ) : isFixable && onFix ? (
                   <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
                 ) : null}
-                {onReply && (
-                  <button onClick={() => setReplyOpen(v => !v)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tables-table-hover)] transition-colors ml-auto">
-                    <MessageSquare size={10} /> Reply
+                {onChat && (
+                  <button onClick={onChat} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-pink-500/15 hover:text-pink-500 transition-colors ml-auto">
+                    <MessagesSquare size={10} /> Chat
                   </button>
                 )}
               </>
             )}
           </div>
-          {replyOpen && onReply && !isResolved && (
-            <div className="flex items-end gap-2 px-3 pb-2">
-              <textarea
-                value={replyText}
-                onChange={e => setReplyText(e.target.value)}
-                placeholder="Write a reply…"
-                rows={2}
-                className="flex-1 resize-none text-xs rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] px-2 py-1.5 focus:outline-none focus:border-[var(--color-fonts-font-color-brand)] placeholder:text-[var(--color-fonts-font-color-support)]"
-              />
-              <button
-                onClick={() => { if (replyText.trim()) { onReply(replyText.trim()); setReplyText(''); setReplyOpen(false) } }}
-                disabled={!replyText.trim()}
-                className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded text-[10px] font-medium bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-              >
-                <Send size={10} /> Send
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </div>
@@ -1610,10 +1658,11 @@ function ReviewCommentCard({
 }
 
 function InlineCommentRow({
-  comment, lineType = 'ctx', onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
-  commentRef, onResolve, onFalsePositive, onReply, isResolvePending, isFalsePositivePending, optimisticallyResolved,
+  comment, replies, lineType = 'ctx', onFix, isFixRunning, isFixPending, fixedInfo, onOpenCommit,
+  commentRef, onResolve, onFalsePositive, onChat, isResolvePending, isFalsePositivePending, optimisticallyResolved,
 }: {
   comment: ReviewCommentEntry
+  replies?: ReviewCommentEntry[]
   /** Type of the diff line this comment is attached to — used to tint the gutter cell. */
   lineType?: 'add' | 'del' | 'ctx'
   onFix?: () => void
@@ -1624,15 +1673,13 @@ function InlineCommentRow({
   commentRef?: (el: HTMLTableRowElement | null) => void
   onResolve?: () => void
   onFalsePositive?: () => void
-  onReply?: (message: string) => void
+  onChat?: () => void
   isResolvePending?: boolean
   isFalsePositivePending?: boolean
   optimisticallyResolved?: boolean
 }) {
   const isResolved = optimisticallyResolved || !!comment.resolved
   const [expanded, setExpanded] = useState(!isResolved)
-  const [replyOpen, setReplyOpen] = useState(false)
-  const [replyText, setReplyText] = useState('')
 
   // Saturated accent colour for the left border (font token, not background token)
   const accentColor = isResolved
@@ -1724,6 +1771,28 @@ function InlineCommentRow({
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{comment.content}</ReactMarkdown>
           </div>
 
+          {/* Reply thread — nested inside the card, no action bar */}
+          {replies && replies.length > 0 && (
+            <div className="border-t border-[var(--color-borders-border-primary)]/20">
+              {replies.map((reply, ri) => (
+                <div key={ri} className="flex gap-2 px-3 py-2.5 border-b border-[var(--color-borders-border-primary)]/10 last:border-b-0 bg-[var(--color-cards-card-background-hover)]/50">
+                  <div className="shrink-0 flex flex-col items-center gap-1 pt-0.5">
+                    <span className="w-5 h-5 rounded-full flex items-center justify-center bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
+                      <Bot size={10} />
+                    </span>
+                    {ri < replies.length - 1 && <span className="w-px flex-1 bg-[var(--color-borders-border-primary)]/30 min-h-[8px]" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-[10px] font-semibold text-[var(--color-fonts-font-color-support)]">Review Agent</span>
+                    <div className="bot-comment-body text-xs mt-0.5">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{reply.content}</ReactMarkdown>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Footer */}
           <div className="flex flex-col border-t border-[var(--color-borders-border-primary)]/20 bg-[var(--color-cards-card-background-hover)]">
             <div className="flex items-center gap-2 px-3 py-1.5 flex-wrap min-h-[32px]">
@@ -1754,32 +1823,14 @@ function InlineCommentRow({
                   ) : isFixable && onFix ? (
                     <FixCommentButton isRunning={!!isFixRunning} isPending={!!isFixPending} onClick={onFix} />
                   ) : null}
-                  {onReply && (
-                    <button onClick={() => setReplyOpen(v => !v)} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-tables-table-hover)] transition-colors ml-auto">
-                      <MessageSquare size={10} /> Reply
+                  {onChat && (
+                    <button onClick={onChat} className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium text-[var(--color-fonts-font-color-support)] hover:bg-pink-500/15 hover:text-pink-500 transition-colors ml-auto">
+                      <MessagesSquare size={10} /> Chat
                     </button>
                   )}
                 </>
               )}
             </div>
-            {replyOpen && onReply && !isResolved && (
-              <div className="flex items-end gap-2 px-3 pb-2">
-                <textarea
-                  value={replyText}
-                  onChange={e => setReplyText(e.target.value)}
-                  placeholder="Write a reply…"
-                  rows={2}
-                  className="flex-1 resize-none text-xs rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] px-2 py-1.5 focus:outline-none focus:border-[var(--color-fonts-font-color-brand)] placeholder:text-[var(--color-fonts-font-color-support)]"
-                />
-                <button
-                  onClick={() => { if (replyText.trim()) { onReply(replyText.trim()); setReplyText(''); setReplyOpen(false) } }}
-                  disabled={!replyText.trim()}
-                  className="shrink-0 flex items-center gap-1 px-2 py-1.5 rounded text-[10px] font-medium bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
-                >
-                  <Send size={10} /> Send
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </td>
@@ -2035,7 +2086,7 @@ function AiCallsCard({ aiData, isLoading, isActive, onViewCall }: AiCallsCardPro
   ) : null
 
   return (
-    <TableCard title="AI Calls" subtitle={aiData ? `${aiData.totalCalls} calls` : undefined} toolbar={statStrip}>
+    <TableCard title="AI Calls" subtitle={aiData ? `${aiData.totalCalls} calls` : undefined} toolbar={statStrip} maxHeight="auto">
       <table className="w-full text-xs">
         <thead className="sticky top-0 z-10">
           <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
@@ -2255,9 +2306,24 @@ function CoverageMetricCard({ label, before, after }: CoverageMetricCardProps) {
   )
 }
 
-function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
-  const { before, after } = coverageData
-  // True when we only have a baseline snapshot (no post-generation measurement)
+function CoverageTab({
+  coverageData,
+  qualityReportCoverage,
+}: {
+  coverageData: JobCoverageData
+  qualityReportCoverage?: CoverageSection
+}) {
+  // When a quality report with coverage exists, use it as the authoritative baseline.
+  // The job's own snapshot (after if available, otherwise before) becomes the "after" side.
+  const hasQualityBaseline = qualityReportCoverage != null
+  const before: CoverageSection | undefined = hasQualityBaseline
+    ? qualityReportCoverage
+    : coverageData.before
+  const after: CoverageSection | undefined = hasQualityBaseline
+    ? (coverageData.after ?? coverageData.before)
+    : coverageData.after
+
+  // True when we only have a single snapshot (no post-generation measurement to compare)
   const baselineOnly = after == null
 
   type SortKey = 'name' | 'beforeRate' | 'afterRate' | 'delta'
@@ -2302,6 +2368,9 @@ function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
   const improved = mergedPackages.filter(p => (p.delta ?? 0) > 0.05).length
   const regressed = mergedPackages.filter(p => (p.delta ?? 0) < -0.05).length
 
+  const beforeLabel = hasQualityBaseline ? 'Quality Report' : 'Before'
+  const afterLabel = 'After'
+
   return (
     <div className="flex flex-col gap-4 pb-4">
       {/* Aggregate metric cards */}
@@ -2328,12 +2397,12 @@ function CoverageTab({ coverageData }: { coverageData: JobCoverageData }) {
               <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
                 <CovSortHeader label="Package / Namespace" sortKey="name"       current={sortKey} dir={sortDir} onSort={handleSort} />
                 {baselineOnly ? (
-                  <CovSortHeader label="Coverage (baseline)" sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
+                  <CovSortHeader label={`Coverage (${beforeLabel.toLowerCase()})`} sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
                 ) : (
                   <>
-                    <CovSortHeader label="Before"            sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
-                    <CovSortHeader label="After"             sortKey="afterRate"  current={sortKey} dir={sortDir} onSort={handleSort} />
-                    <CovSortHeader label="Change"            sortKey="delta"      current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <CovSortHeader label={beforeLabel}  sortKey="beforeRate" current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <CovSortHeader label={afterLabel}   sortKey="afterRate"  current={sortKey} dir={sortDir} onSort={handleSort} />
+                    <CovSortHeader label="Change"       sortKey="delta"      current={sortKey} dir={sortDir} onSort={handleSort} />
                   </>
                 )}
                 <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] w-40">
@@ -2490,7 +2559,7 @@ interface ReviewTabProps {
   onOpenCommit?: (sha: string) => void
   onResolveComment?: (commentId: number) => void
   onFalsePositive?: (commentId: number) => void
-  onReplyComment?: (commentId: number, message: string) => void
+  onChatComment?: (comment: ReviewCommentEntry) => void
   resolvedCommentIds?: Set<number>
   resolveCommentPendingId?: number
   falsePositivePendingId?: number
@@ -2500,7 +2569,7 @@ function ReviewTab({
   reviewData, isLoading, requestReviewPending, onRequestReview,
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
-  onResolveComment, onFalsePositive, onReplyComment, resolvedCommentIds = new Set(),
+  onResolveComment, onFalsePositive, onChatComment, resolvedCommentIds = new Set(),
   resolveCommentPendingId, falsePositivePendingId,
 }: ReviewTabProps) {
   const navigate = useNavigate()
@@ -2566,7 +2635,13 @@ function ReviewTab({
     ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
     : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
 
-  const comments = (reviewData.comments ?? []).filter(c => c.filePath && c.filePath.trim() !== '')
+  const allFileComments = (reviewData.comments ?? []).filter(c => c.filePath && c.filePath.trim() !== '')
+  // Only root comments appear as top-level cards; replies are threaded under their parent.
+  const comments = allFileComments.filter(c => !c.parentId)
+  const repliesByParentId: Record<number, ReviewCommentEntry[]> = {}
+  allFileComments.filter(c => c.parentId).forEach(c => {
+    (repliesByParentId[c.parentId!] ??= []).push(c)
+  })
   const commentsByFile: Record<string, ReviewCommentEntry[]> = {}
   comments.forEach(c => { (commentsByFile[c.filePath] ??= []).push(c) })
 
@@ -2648,6 +2723,7 @@ function ReviewTab({
               <ReviewCommentCard
                 key={i}
                 comment={c}
+                replies={repliesByParentId[c.commentId]}
                 onFix={onFixComment && c.commentId > 0 && !fixedCommentInfo[c.commentId]
                   ? () => onFixComment(c.commentId, c.filePath, c.line)
                   : undefined}
@@ -2659,8 +2735,8 @@ function ReviewTab({
                   ? () => onResolveComment(c.commentId) : undefined}
                 onFalsePositive={onFalsePositive && c.commentId > 0 && !resolvedCommentIds.has(c.commentId)
                   ? () => onFalsePositive(c.commentId) : undefined}
-                onReply={onReplyComment && c.commentId > 0
-                  ? (msg) => onReplyComment(c.commentId, msg) : undefined}
+                onChat={onChatComment && c.commentId > 0
+                  ? () => onChatComment(c) : undefined}
                 isResolvePending={resolveCommentPendingId === c.commentId}
                 isFalsePositivePending={falsePositivePendingId === c.commentId}
                 optimisticallyResolved={resolvedCommentIds.has(c.commentId)}

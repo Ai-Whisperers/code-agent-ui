@@ -9,6 +9,10 @@ interface TableCardProps {
    * Controls the scrollable body height.
    * - `'none'` (default): fills available flex space when the card is a flex child;
    *   renders at natural height otherwise.
+   * - `'auto'`: natural height with no internal overflow; the nearest scrolling
+   *   ancestor (typically an outer wrapper) handles scrolling. Use this when you
+   *   want `position: sticky` on a `<thead>` to stick relative to an outer scroll
+   *   container rather than an internal one.
    * - Any CSS length string (e.g. `'400px'`): applied as `max-height`.
    */
   maxHeight?: string
@@ -25,6 +29,7 @@ export function TableCard({
   children,
 }: TableCardProps) {
   const isFill = maxHeight === 'none'
+  const isAuto = maxHeight === 'auto'
 
   return (
     <div
@@ -52,13 +57,15 @@ export function TableCard({
         )}
       </div>
 
-      {/* Scrollable body — title bar is above this container, so horizontal
-          scrolling of wide tables never affects the toolbar position.
-          In fill mode (maxHeight === 'none') the body stretches to consume all
-          remaining flex space; in explicit-height mode a max-height is applied. */}
+      {/* Body — three modes:
+          - fill (maxHeight='none'): stretches via flex-1, scrolls internally.
+          - auto (maxHeight='auto'): natural height, no overflow set; scrolling is
+            delegated to the nearest outer scroll container so that a sticky <thead>
+            sticks relative to that outer container instead of an inner one.
+          - explicit (any CSS length): capped at maxHeight, scrolls internally. */}
       <div
-        className={`overflow-auto ${isFill ? 'flex-1 min-h-0' : ''}`}
-        style={!isFill ? { maxHeight } : undefined}
+        className={`${isAuto ? '' : isFill ? 'overflow-auto flex-1 min-h-0' : 'overflow-auto'}`}
+        style={!isFill && !isAuto ? { maxHeight } : undefined}
       >
         {children}
       </div>
