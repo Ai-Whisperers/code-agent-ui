@@ -17,7 +17,7 @@ import {
   MessageBubble,
   ThinkingPanel,
   ConversationSidebar,
-  MarkdownMessage,
+  StreamingMarkdownMessage,
   redactSecrets,
   loadMessagesFromStorage,
   saveMessagesToStorage,
@@ -361,6 +361,14 @@ export default function Chat() {
                 break
               }
               case 'done': {
+                // Cancel any pending RAF and flush the final accumulated content
+                // synchronously so the last tokens are never silently dropped.
+                if (streamingRafRef.current) {
+                  cancelAnimationFrame(streamingRafRef.current)
+                  streamingRafRef.current = null
+                }
+                setStreamingContent(accumulatedContent)
+
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   role: 'assistant',
@@ -373,10 +381,6 @@ export default function Chat() {
                   if (convId) saveMessagesToStorage(convId, next)
                   return next
                 })
-                if (streamingRafRef.current) {
-                  cancelAnimationFrame(streamingRafRef.current)
-                  streamingRafRef.current = null
-                }
                 setStreamingContent('')
                 setStreamingThinkingSteps([])
                 setIsStreaming(false)
@@ -899,7 +903,7 @@ export default function Chat() {
                     <ThinkingPanel steps={streamingThinkingSteps} isLive={true} />
                   )}
                   {streamingContent ? (
-                    <MarkdownMessage content={streamingContent} />
+                    <StreamingMarkdownMessage content={streamingContent} />
                   ) : (
                     <div className="flex items-center gap-1.5 py-1">
                       <span

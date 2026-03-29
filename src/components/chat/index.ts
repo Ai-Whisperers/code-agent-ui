@@ -7,6 +7,8 @@ export type { ChatInputHandle } from './ChatInputBar'
 
 export { MessageBubble } from './MessageBubble'
 export { MarkdownMessage } from './MarkdownMessage'
+export { StreamingMarkdownMessage } from './StreamingMarkdownMessage'
+export { patchStreamingContent, DIAGRAM_LOADING_PLACEHOLDER } from './streamingUtils'
 export { MermaidDiagram } from './MermaidDiagram'
 export { ChartBlock } from './ChartBlock'
 export { ThinkingPanel } from './ThinkingPanel'

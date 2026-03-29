@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { X, FileCode, Bot, Loader2 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
-import { MessageBubble, MarkdownMessage, ThinkingPanel, ChatInputBar } from '@/components/chat'
+import { MessageBubble, StreamingMarkdownMessage, ThinkingPanel, ChatInputBar } from '@/components/chat'
 import type { ChatInputHandle } from '@/components/chat'
 import type { ChatMessage, ThinkingStep, ChatEvent, ReviewCommentEntry } from '@/types/api'
 
@@ -204,16 +204,19 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
       if (err instanceof Error && err.name === 'AbortError') return
       accumulatedContent = accumulatedContent || 'Something went wrong. Please try again.'
     } finally {
+      // Cancel pending RAF and flush final accumulated content so the last
+      // tokens are never silently dropped before the message is committed.
       if (streamingRafRef.current) {
         cancelAnimationFrame(streamingRafRef.current)
         streamingRafRef.current = null
       }
+      setStreamingContent(accumulatedContent)
 
       // Commit the streamed assistant message
       const assistantMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: streamingContentRef.current || accumulatedContent,
+        content: accumulatedContent,
         thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
       }
 
@@ -287,7 +290,7 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
                   <ThinkingPanel steps={streamingThinkingSteps} isLive />
                 )}
                 {streamingContent ? (
-                  <MarkdownMessage content={streamingContent} />
+                  <StreamingMarkdownMessage content={streamingContent} />
                 ) : (
                   <div className="flex items-center gap-1.5">
                     <Loader2 size={13} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
