@@ -109,6 +109,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       },
       { key: 'bitbucket.user', label: 'App Password Username', description: 'Fallback — Bitbucket username for App Password auth (leave blank when using OAuth).' },
       { key: 'bitbucket.app.password', label: 'App Password', description: 'Fallback — Bitbucket App Password (leave blank when using OAuth).', isSecret: true },
+      { key: 'bitbucket.webhook.sync.enabled', label: 'Webhook Sync', description: 'Automatically register agent webhooks on Bitbucket repositories during sync', defaultValue: 'true', inputType: 'boolean' },
     ],
   },
   {
@@ -158,6 +159,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       },
       { key: 'jira.user', label: 'Service Account Username', description: 'Fallback — Jira username or email for server-side bot operations (leave blank when using OAuth for all access).' },
       { key: 'jira.api.token', label: 'Service Account API Token', description: 'Fallback — Jira API token for the service account above.', isSecret: true },
+      { key: 'jira.transition.in-progress', label: 'Transition: In Progress', description: 'Jira transition ID to move ticket to "In Progress"' },
       { key: 'jira.transition.in-review', label: 'Transition: In Review', description: 'Jira transition ID to move ticket to "In Review"' },
       { key: 'jira.transition.done', label: 'Transition: Done', description: 'Jira transition ID to move ticket to "Done"' },
       { key: 'jira.transition.rejected', label: 'Transition: Rejected', description: 'Jira transition ID to move ticket to "Rejected"' },
@@ -227,9 +229,13 @@ const SETTING_GROUPS: SettingGroup[] = [
   // ── AWS ───────────────────────────────────────────────────────────────────────
   {
     id: 'aws',
-    label: 'AWS Tools',
+    label: 'AWS / Attachments',
     settings: [
       { key: 'tools.aws.enabled', label: 'AWS Tools Enabled', description: 'Enable AWS CloudWatch, ECS, and Metrics tools for the agent', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'attachment.s3.bucket', label: 'S3 Bucket', description: 'S3 bucket name used for storing file attachments (e.g. knowledge documents, PR diagrams)' },
+      { key: 'attachment.s3.region', label: 'S3 Region', description: 'AWS region where the attachments bucket is located', defaultValue: 'us-east-1' },
+      { key: 'attachment.max-file-size', label: 'Max File Size (bytes)', description: 'Maximum upload size per attachment in bytes', defaultValue: '10485760', inputType: 'number', min: 1024 },
+      { key: 'attachment.allowed-types', label: 'Allowed MIME Types', description: 'Comma-separated list of permitted attachment MIME types', defaultValue: 'image/jpeg,image/png,image/gif,image/webp,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document', inputType: 'textarea' },
     ],
   },
 
@@ -428,6 +434,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Aikido ────────────────────────────────────────────────────────────────────
+  {
+    id: 'aikido',
+    label: 'Aikido Security',
+    settings: [
+      { key: 'aikido.base.url', label: 'Base URL', description: 'Aikido API base URL', defaultValue: 'https://app.aikido.dev' },
+      { key: 'aikido.client.id', label: 'Client ID', description: 'Aikido OAuth 2.0 client ID for API access' },
+      { key: 'aikido.client.secret', label: 'Client Secret', description: 'Aikido OAuth 2.0 client secret for API access', isSecret: true },
+      { key: 'aikido.jira.default-project', label: 'Default Jira Project', description: 'Fallback Jira project key used when creating Bug tickets for Aikido issues (e.g. PROJ). Only used if the repo-settings do not specify a project.' },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -457,7 +475,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
