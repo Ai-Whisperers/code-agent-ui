@@ -160,6 +160,12 @@ const SETTING_GROUPS: SettingGroup[] = [
         description: 'Secret for the Atlassian OAuth 2.0 app above.',
         isSecret: true,
       },
+      {
+        key: 'atlassian.oauth.redirect-uri',
+        label: 'OAuth Redirect URI',
+        description: 'Required when the backend sits behind a TLS-terminating proxy. Set to the exact https:// callback URL registered in your Atlassian OAuth app, e.g. https://code-agent.example.com/api/mcp/oauth/callback. Overrides the browser-derived URL.',
+        defaultValue: '',
+      },
       { key: 'jira.user', label: 'Service Account Username', description: 'Fallback — Jira username or email for server-side bot operations (leave blank when using OAuth for all access).' },
       { key: 'jira.api.token', label: 'Service Account API Token', description: 'Fallback — Jira API token for the service account above.', isSecret: true },
       { key: 'jira.transition.in-progress', label: 'Transition: In Progress', description: 'Jira transition ID to move ticket to "In Progress"' },
