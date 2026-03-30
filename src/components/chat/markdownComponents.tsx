@@ -1,8 +1,7 @@
 import type { Components } from 'react-markdown'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { MermaidDiagram } from './MermaidDiagram'
 import { ChartBlock } from './ChartBlock'
+import { CodeBlock } from './CodeBlock'
 
 export const markdownComponents: Components = {
   pre({ children }) {
@@ -40,22 +39,7 @@ export const markdownComponents: Components = {
       }
     }
 
-    return (
-      <div className="my-3 rounded-[var(--border-radius-card)] overflow-hidden text-sm">
-        <div className="flex items-center px-4 py-1.5 bg-[#282c34] border-b border-white/10">
-          <span className="text-xs font-mono text-[#abb2bf] uppercase tracking-wider">
-            {language}
-          </span>
-        </div>
-        <SyntaxHighlighter
-          language={language}
-          style={oneDark}
-          customStyle={{ margin: 0, borderRadius: 0, fontSize: '0.8125rem' }}
-        >
-          {code}
-        </SyntaxHighlighter>
-      </div>
-    )
+    return <CodeBlock language={language} code={code} />
   },
   h1: ({ children }) => (
     <h1 className="text-xl font-bold text-[var(--color-fonts-font-color-headings)] mt-5 mb-2 first:mt-0">

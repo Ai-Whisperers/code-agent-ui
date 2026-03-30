@@ -715,6 +715,31 @@ export default function Chat() {
     }
   }, [isStreaming, activeConversationId, canPlan])
 
+  const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
+    if (isStreaming) return
+    const msgIndex = messages.findIndex((m) => m.id === messageId)
+    if (msgIndex === -1) return
+
+    if (activeConversationId) {
+      try {
+        await refreshToken()
+        const token = getToken()
+        await fetch(
+          `${import.meta.env.VITE_API_URL}/conversations/${activeConversationId}/messages?fromSequence=${msgIndex}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+        )
+      } catch {
+        // ignore — local truncation proceeds regardless
+      }
+    }
+
+    const truncated = messages.slice(0, msgIndex)
+    setMessages(truncated)
+    if (activeConversationId) saveMessagesToStorage(activeConversationId, truncated)
+
+    sendMessage(newText)
+  }, [isStreaming, messages, activeConversationId, sendMessage])
+
   const handleDismissPlan = useCallback(async (planId: string) => {
     try {
       const token = getToken()
@@ -891,7 +916,11 @@ export default function Chat() {
           )}
 
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onEdit={msg.role === 'user' && !isStreaming ? (newText) => handleEditMessage(msg.id, newText) : undefined}
+            />
           ))}
 
 
