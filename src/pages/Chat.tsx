@@ -11,6 +11,7 @@ import {
 import { refreshToken, getToken } from '@/lib/keycloak'
 import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
+import { chatStreamStore, chatStreamActions } from '@/store/chat-stream-store'
 import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext } from '@/types/api'
 import {
   ChatInputBar,
@@ -33,12 +34,11 @@ export default function Chat() {
   const canPlan = userPermissions.includes('EXECUTE_PLAN_JOBS')
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [streamingContent, setStreamingContent] = useState('')
-  const [streamingThinkingSteps, setStreamingThinkingSteps] = useState<ThinkingStep[]>([])
-  const [isStreaming, setIsStreaming] = useState(false)
+  const { isStreaming, content: streamingContent, thinkingSteps: streamingThinkingSteps, conversationId: streamingConversationId } = useStore(chatStreamStore, (s) => s)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     params.conversationId ?? null,
   )
+  const isViewingStream = isStreaming && streamingConversationId === activeConversationId
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [secretWarning, setSecretWarning] = useState<{
@@ -60,13 +60,6 @@ export default function Chat() {
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
-
-  // Abort any in-flight stream when the component unmounts
-  useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort()
-    }
-  }, [])
 
   // Track whether the user is scrolled to (or near) the bottom of the messages container
   useEffect(() => {
@@ -132,14 +125,13 @@ export default function Chat() {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
       
-      // Reset other state when switching conversations
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
-      setIsStreaming(false)
-      setSecretWarning(null)
-      setActivePlans([])
-      
-      chatInputRef.current?.clear()
+      // Reset other state when switching conversations (skip if resuming an active stream)
+      const isResumingStream = chatStreamStore.state.isStreaming && chatStreamStore.state.conversationId === id
+      if (!isResumingStream) {
+        setSecretWarning(null)
+        setActivePlans([])
+        chatInputRef.current?.clear()
+      }
       
       loadExistingAttachments(id)
       loadExistingContext(id)
@@ -191,25 +183,25 @@ export default function Chat() {
 
   // When streaming starts the user just hit Send — force scroll to bottom
   useEffect(() => {
-    if (isStreaming) {
+    if (isViewingStream) {
       isAtBottomRef.current = true
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
     }
-  }, [isStreaming])
+  }, [isViewingStream])
 
   // Follow streaming tokens as they arrive
   useEffect(() => {
-    if (isStreaming && isAtBottomRef.current) {
+    if (isViewingStream && isAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [streamingContent, isStreaming])
+  }, [streamingContent, isViewingStream])
 
   // Scroll when new tool logs are added
   useEffect(() => {
-    if (streamingThinkingSteps.length > 0 && isStreaming && isAtBottomRef.current) {
+    if (streamingThinkingSteps.length > 0 && isViewingStream && isAtBottomRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [streamingThinkingSteps, isStreaming])
+  }, [streamingThinkingSteps, isViewingStream])
 
   const sendMessage = useCallback(
     async (text: string, attachmentIds?: string[], mode?: 'ask' | 'plan', conversationContext?: ConversationContext) => {
@@ -220,10 +212,12 @@ export default function Chat() {
         role: 'user',
         content: text.trim(),
       }
-      setMessages((prev) => [...prev, userMsg])
-      setIsStreaming(true)
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
+      setMessages((prev) => {
+        const next = [...prev, userMsg]
+        if (activeConversationId) saveMessagesToStorage(activeConversationId, next)
+        return next
+      })
+      chatStreamActions.start(activeConversationId)
       setMobileSidebarOpen(false)
 
       let accumulatedContent = ''
@@ -292,7 +286,7 @@ export default function Chat() {
                 } else {
                   accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
                 }
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               }
               case 'text':
@@ -300,7 +294,7 @@ export default function Chat() {
                 streamingContentRef.current = accumulatedContent
                 if (!streamingRafRef.current) {
                   streamingRafRef.current = requestAnimationFrame(() => {
-                    setStreamingContent(streamingContentRef.current)
+                    chatStreamActions.setContent(streamingContentRef.current)
                     streamingRafRef.current = null
                   })
                 }
@@ -313,7 +307,7 @@ export default function Chat() {
                   status: 'running',
                   startTime: event.timestamp ?? Date.now()
                 })
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               case 'tool_end': {
                 const lastTool = [...accumulatedThinkingSteps].reverse().find(s => s.kind === 'tool' && s.name === event.tool && s.status === 'running')
@@ -322,7 +316,7 @@ export default function Chat() {
                   lastTool.result = event.result
                   lastTool.endTime = event.timestamp ?? Date.now()
                 }
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               }
               case 'plan_start': {
@@ -393,7 +387,7 @@ export default function Chat() {
                   cancelAnimationFrame(streamingRafRef.current)
                   streamingRafRef.current = null
                 }
-                setStreamingContent(accumulatedContent)
+                chatStreamActions.setContent(accumulatedContent)
 
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
@@ -407,9 +401,7 @@ export default function Chat() {
                   if (convId) saveMessagesToStorage(convId, next)
                   return next
                 })
-                setStreamingContent('')
-                setStreamingThinkingSteps([])
-                setIsStreaming(false)
+                chatStreamActions.finish()
                 if (event.conversationId && event.conversationId !== activeConversationId) {
                   setActiveConversationId(event.conversationId)
                   navigate({ to: '/chat/$conversationId', params: { conversationId: event.conversationId } })
@@ -430,9 +422,7 @@ export default function Chat() {
                   cancelAnimationFrame(streamingRafRef.current)
                   streamingRafRef.current = null
                 }
-                setStreamingContent('')
-                setStreamingThinkingSteps([])
-                setIsStreaming(false)
+                chatStreamActions.finish()
                 return
             }
           }
@@ -483,9 +473,7 @@ export default function Chat() {
           cancelAnimationFrame(streamingRafRef.current)
           streamingRafRef.current = null
         }
-        setIsStreaming(false)
-        setStreamingContent('')
-        setStreamingThinkingSteps([])
+        chatStreamActions.finish()
       }
     },
     [isStreaming, activeConversationId, navigate, queryClient],
@@ -495,7 +483,6 @@ export default function Chat() {
     (id: string) => {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
-      setStreamingContent('')
       setMobileSidebarOpen(false)
       navigate({ to: '/chat/$conversationId', params: { conversationId: id } })
     },
@@ -505,7 +492,6 @@ export default function Chat() {
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null)
     setMessages([])
-    setStreamingContent('')
     chatInputRef.current?.clear()
     setMobileSidebarOpen(false)
     navigate({ to: '/chat' })
@@ -560,9 +546,7 @@ export default function Chat() {
 
   const handleImplementPlan = useCallback(async (planId: string) => {
     if (isStreaming || !canPlan) return
-    setIsStreaming(true)
-    setStreamingContent('')
-    setStreamingThinkingSteps([])
+    chatStreamActions.start(activeConversationId)
 
     // Mark plan as executing in local state
     setActivePlans(prev => prev.map(p =>
@@ -617,7 +601,7 @@ export default function Chat() {
               streamingContentRef.current = accumulatedContent
               if (!streamingRafRef.current) {
                 streamingRafRef.current = requestAnimationFrame(() => {
-                  setStreamingContent(streamingContentRef.current)
+                  chatStreamActions.setContent(streamingContentRef.current)
                   streamingRafRef.current = null
                 })
               }
@@ -629,7 +613,7 @@ export default function Chat() {
               } else {
                 accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
               }
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             }
             case 'tool_start':
@@ -640,7 +624,7 @@ export default function Chat() {
                 status: 'running',
                 startTime: event.timestamp ?? Date.now(),
               })
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             case 'tool_end': {
               const lastTool = [...accumulatedThinkingSteps].reverse().find(
@@ -651,7 +635,7 @@ export default function Chat() {
                 lastTool.result = event.result
                 lastTool.endTime = event.timestamp ?? Date.now()
               }
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             }
             case 'done':
@@ -668,9 +652,7 @@ export default function Chat() {
                 },
               ])
               if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-              setStreamingContent('')
-              setStreamingThinkingSteps([])
-              setIsStreaming(false)
+              chatStreamActions.finish()
               return
             case 'error':
               setActivePlans(prev => prev.map(p =>
@@ -685,9 +667,7 @@ export default function Chat() {
                 },
               ])
               if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-              setStreamingContent('')
-              setStreamingThinkingSteps([])
-              setIsStreaming(false)
+              chatStreamActions.finish()
               return
           }
         }
@@ -731,11 +711,9 @@ export default function Chat() {
       }
     } finally {
       if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-      setIsStreaming(false)
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
+      chatStreamActions.finish()
     }
-  }, [isStreaming])
+  }, [isStreaming, activeConversationId, canPlan])
 
   const handleDismissPlan = useCallback(async (planId: string) => {
     try {
@@ -896,7 +874,7 @@ export default function Chat() {
 
         {/* Messages */}
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-8 py-6 space-y-6">
-          {messages.length === 0 && !isStreaming && (
+          {messages.length === 0 && !isViewingStream && (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
               <div className="w-14 h-14 rounded-2xl bg-[var(--color-buttons-button-primary)] flex items-center justify-center shadow-lg">
                 <Bot size={28} className="text-white" />
@@ -918,7 +896,7 @@ export default function Chat() {
 
 
           {/* In-flight assistant message */}
-          {isStreaming && (
+          {isViewingStream && (
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-full bg-[var(--color-buttons-button-primary)] flex items-center justify-center shrink-0 mt-0.5">
                 <Bot size={15} className="text-white" />

@@ -42,7 +42,7 @@ export function RadioGroup({
   if (variant === 'pills') {
     return (
       <div role="radiogroup" className={`flex flex-wrap gap-1.5 ${className ?? ''}`}>
-        {options.map((opt, i) => {
+        {options.map((opt) => {
           if (isSeparator(opt)) return null
           const isActive = opt.value === value
           return (

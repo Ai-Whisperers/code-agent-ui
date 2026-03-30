@@ -232,7 +232,7 @@ export default function Soc2AuditPage() {
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<Soc2AuditResponse>({
     queryKey: ['soc2-audit', statusFilter, slaFilter, reviewFilter, page],
-    queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`),
+    queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`).then(r => r.data),
   })
 
   const items = data?.items ?? []
@@ -321,7 +321,7 @@ export default function Soc2AuditPage() {
       </div>
 
       {/* Table */}
-      <TableCard>
+      <TableCard title="SOC II Jobs">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-tables-table-cell-stroke)] bg-[var(--color-tables-table-header)]">
