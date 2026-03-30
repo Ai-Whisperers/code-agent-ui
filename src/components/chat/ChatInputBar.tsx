@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
+import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -16,7 +16,7 @@ export type ChatInputHandle = {
   clearContext: () => void
 }
 
-type ChatMode = 'ask' | 'plan'
+type ChatMode = 'chat' | 'ask' | 'plan'
 
 type ChatInputBarProps = {
   isStreaming: boolean
@@ -55,7 +55,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [mode, setMode] = useState<ChatMode>('ask')
+  const [mode, setMode] = useState<ChatMode>('chat')
   const [showModeMenu, setShowModeMenu] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [conversationContext, setConversationContext] = useState<ConversationContext | null>(existingContext || null)
@@ -148,7 +148,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     const handleKeydown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === '.') {
         event.preventDefault()
-        if (canPlan) setMode(prevMode => prevMode === 'ask' ? 'plan' : 'ask')
+        setMode(prevMode => {
+          if (prevMode === 'chat') return 'ask'
+          if (prevMode === 'ask') return canPlan ? 'plan' : 'chat'
+          return 'chat'
+        })
       }
     }
 
@@ -157,7 +161,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     return () => {
       document.removeEventListener('keydown', handleKeydown)
     }
-  }, [])
+  }, [canPlan])
 
   const handleSend = (text: string) => {
     if (!text.trim() || isStreaming) return
@@ -171,6 +175,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
     if (trimmedText === '.ask') {
       setMode('ask')
+      setInput('')
+      return
+    }
+    if (trimmedText === '.chat') {
+      setMode('chat')
       setInput('')
       return
     }
@@ -637,10 +646,14 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
-              : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
+              : mode === 'ask'
+                ? 'border border-green-200 rounded-b-xl bg-green-50 focus-within:border-green-400'
+                : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
             : mode === 'plan'
               ? `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400`
-              : `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
+              : mode === 'ask'
+                ? `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-green-50 hover:bg-green-100 border border-green-200 hover:border-green-300 focus-within:border-green-400`
+                : `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
         }`}>
 
         {/* Inline attachments and context - shown at top of input container */}
@@ -794,11 +807,13 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
             className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'plan'
                 ? 'hover:bg-orange-200 text-orange-600'
-                : 'hover:bg-gray-200 text-gray-600'
+                : mode === 'ask'
+                  ? 'hover:bg-green-200 text-green-600'
+                  : 'hover:bg-gray-200 text-gray-600'
             }`}
-            title={`Current mode: ${mode === 'ask' ? 'Ask' : 'Plan'}`}
+            title={`Current mode: ${mode === 'plan' ? 'Plan' : mode === 'ask' ? 'Ask' : 'Chat'}`}
           >
-            {mode === 'ask' ? <MessageSquare size={16} /> : <Lightbulb size={16} />}
+            {mode === 'plan' ? <Lightbulb size={16} /> : mode === 'ask' ? <BookOpen size={16} /> : <MessageSquare size={16} />}
           </button>
 
           {/* Mode selection menu */}
@@ -806,14 +821,26 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[100px] z-10">
               <button
                 onClick={() => {
+                  setMode('chat')
+                  setShowModeMenu(false)
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                  mode === 'chat' ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                }`}
+              >
+                <MessageSquare size={14} />
+                Chat
+              </button>
+              <button
+                onClick={() => {
                   setMode('ask')
                   setShowModeMenu(false)
                 }}
                 className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                  mode === 'ask' ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                  mode === 'ask' ? 'bg-green-50 text-green-700' : 'text-gray-700'
                 }`}
               >
-                <MessageSquare size={14} />
+                <BookOpen size={14} />
                 Ask
               </button>
               {canPlan && (
@@ -844,7 +871,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           placeholder={
             isStreaming
               ? 'Waiting for response…'
-              : mode === 'ask' ? 'Ask anything… (Enter to send, Shift+Enter for newline)' : 'Describe what you want to plan (Enter to send, Shift+Enter for newline)'
+              : mode === 'plan'
+                ? 'Describe what you want to plan (Enter to send, Shift+Enter for newline)'
+                : mode === 'ask'
+                  ? 'Ask a question (read-only, no changes will be made)… (Enter to send, Shift+Enter for newline)'
+                  : 'Ask anything… (Enter to send, Shift+Enter for newline)'
           }
           disabled={isStreaming}
           rows={1}
