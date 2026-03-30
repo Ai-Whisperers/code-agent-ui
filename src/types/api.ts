@@ -239,6 +239,23 @@ export interface RepoSettings {
   archetype?: string
   archetypeVersion?: string
   archived?: boolean
+  description?: string
+  primaryLanguage?: string
+  jiraComponents?: string[]
+  tags?: string[]
+}
+
+// ---- Jira Meta ----
+
+export interface JiraProjectMeta {
+  id: string
+  key: string
+  name: string
+}
+
+export interface JiraComponentMeta {
+  id: string
+  name: string
 }
 
 // ---- Automation Hooks ----

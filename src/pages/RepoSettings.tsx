@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Save, X, RefreshCw, CheckCircle, XCircle } from 'lucide-react'
+import { Save, X, RefreshCw, CheckCircle, XCircle, Search } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { ChipInput } from '@/components/ui/ChipInput'
+import { JiraComponentPicker } from '@/components/repo-settings/JiraComponentPicker'
 import api from '@/lib/api'
 import type { RepoSettings, CodeGraphStatus } from '@/types/api'
 
@@ -382,11 +384,15 @@ function RepoEditor({
 }) {
   const [form, setForm] = useState<RepoSettings>(repo)
   const [rebuildStatus, setRebuildStatus] = useState<'idle' | 'pending' | 'accepted' | 'error'>('idle')
+  const [showJiraPicker, setShowJiraPicker] = useState(false)
+  const [tab, setTab] = useState<'general' | 'ai-context' | 'code-graph'>('general')
 
   const field = (name: keyof RepoSettings) => (value: string) =>
     setForm((p) => ({ ...p, [name]: value }))
   const toggle = (name: keyof RepoSettings) => (value: boolean) =>
     setForm((p) => ({ ...p, [name]: value }))
+  const listField = (name: keyof RepoSettings) => (v: string[]) =>
+    setForm((p) => ({ ...p, [name]: v }))
 
   const handleRebuild = async () => {
     setRebuildStatus('pending')
@@ -400,9 +406,20 @@ function RepoEditor({
   }
 
   return (
-    <div className="w-full max-w-lg rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3>
+    <>
+    {showJiraPicker && (
+      <JiraComponentPicker
+        value={form.jiraComponents ?? []}
+        onChange={listField('jiraComponents')}
+        workspace={form.workspace}
+        repoSlug={form.repoSlug}
+        onClose={() => setShowJiraPicker(false)}
+      />
+    )}
+    <div className="w-[480px] rounded-lg bg-[var(--color-cards-card-background)] shadow-xl">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-4">
+        <h3 className="text-sm font-semibold text-[var(--color-fonts-font-color-primary)] truncate">
           {form.workspace && form.repoSlug
             ? `${form.workspace} / ${form.repoSlug}`
             : 'New Repository'}
@@ -415,96 +432,190 @@ function RepoEditor({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        {(
-          [
-            ['workspace', 'Workspace'],
-            ['repoSlug', 'Repo Slug'],
-            ['confluenceSpaceKey', 'Confluence Space Key'],
-            ['confluenceParentPageId', 'Confluence Parent Page ID'],
-          ] as const
-        ).map(([name, label]) => (
-          <div key={name}>
-            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
-              {label}
-            </label>
-            <input
-              type="text"
-              value={(form[name] as string) ?? ''}
-              onChange={(e) => field(name)(e.target.value)}
-              className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+      {/* Tab bar */}
+      <div className="flex border-b border-[var(--color-cards-card-stroke)] px-6">
+        {(['general', 'ai-context', 'code-graph'] as const).map((t) => {
+          const labels: Record<typeof t, string> = {
+            general: 'General',
+            'ai-context': 'AI Context',
+            'code-graph': 'Code Graph',
+          }
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              className={`pb-2 pt-0.5 mr-5 text-xs font-semibold border-b-2 transition-colors ${
+                tab === t
+                  ? 'border-[var(--color-buttons-button-primary)] text-[var(--color-fonts-font-color-primary)]'
+                  : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
+              }`}
+            >
+              {labels[t]}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Tab body */}
+      <div className="px-6 py-5 space-y-4 h-80 overflow-y-auto">
+        {tab === 'general' && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {(
+                [
+                  ['workspace', 'Workspace'],
+                  ['repoSlug', 'Repo Slug'],
+                  ['confluenceSpaceKey', 'Confluence Space Key'],
+                  ['confluenceParentPageId', 'Confluence Parent Page ID'],
+                ] as const
+              ).map(([name, label]) => (
+                <div key={name}>
+                  <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                    {label}
+                  </label>
+                  <input
+                    type="text"
+                    value={(form[name] as string) ?? ''}
+                    onChange={(e) => field(name)(e.target.value)}
+                    className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-[var(--color-cards-card-stroke)] pt-4">
+              {(
+                [
+                  ['reviewEnabled', 'Code Review'],
+                  ['vectorEnabled', 'Vector Indexing'],
+                  ['docsEnabled', 'Documentation'],
+                  ['upgradeEnabled', 'Dependency Upgrades'],
+                  ['qualityReportEnabled', 'Quality Reports'],
+                  ['archived', 'Archived'],
+                ] as const
+              ).map(([name, label]) => (
+                <Toggle key={name} label={label} value={form[name] as boolean} onChange={toggle(name)} />
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === 'ai-context' && (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                Description
+              </label>
+              <textarea
+                rows={3}
+                value={form.description ?? ''}
+                onChange={(e) => field('description')(e.target.value)}
+                placeholder="What does this service do?"
+                className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide">
+                Primary Language
+              </label>
+              <select
+                value={form.primaryLanguage ?? ''}
+                onChange={(e) => field('primaryLanguage')(e.target.value)}
+                className="w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
+              >
+                <option value="">— select —</option>
+                <option value="java">Java</option>
+                <option value="typescript">TypeScript</option>
+                <option value="python">Python</option>
+                <option value="go">Go</option>
+                <option value="dotnet">.NET</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] uppercase tracking-wide">
+                  Jira Components
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowJiraPicker(true)}
+                  className="flex items-center gap-1 px-2 py-1 text-[10px] font-medium rounded border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
+                >
+                  <Search size={11} />
+                  Browse Jira
+                </button>
+              </div>
+              <ChipInput
+                value={form.jiraComponents ?? []}
+                onChange={listField('jiraComponents')}
+                placeholder="Type component and press Enter…"
+                hint="Components used to route Jira issues to this repo"
+              />
+            </div>
+            <ChipInput
+              label="Tags"
+              value={form.tags ?? []}
+              onChange={listField('tags')}
+              placeholder="billing, stripe, webhooks…"
+              hint="Free-form domain tags for AI context"
             />
           </div>
-        ))}
-      </div>
+        )}
 
-      <div className="border-t border-[var(--color-cards-card-stroke)] pt-4 mb-4">
-        {(
-          [
-            ['reviewEnabled', 'Code Review'],
-            ['vectorEnabled', 'Vector Indexing'],
-            ['docsEnabled', 'Documentation'],
-            ['upgradeEnabled', 'Dependency Upgrades'],
-            ['qualityReportEnabled', 'Quality Reports'],
-            ['archived', 'Archived'],
-          ] as const
-        ).map(([name, label]) => (
-          <Toggle key={name} label={label} value={form[name] as boolean} onChange={toggle(name)} />
-        ))}
-      </div>
-
-      <div className="border-t border-[var(--color-cards-card-stroke)] pt-4 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-input-label)] mb-3">
-          Code Graph
-        </p>
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-[var(--color-fonts-font-color-support)]">
-            {graphStatus ? (
-              <>
-                <span className="text-[var(--color-fonts-font-color-primary)] font-medium">
-                  {graphStatus.nodeCount.toLocaleString()} nodes
-                </span>
-                {' · last updated '}
-                <span className="text-[var(--color-fonts-font-color-primary)]">
-                  {graphStatus.lastUpdatedAt
-                    ? new Date(graphStatus.lastUpdatedAt).toLocaleString()
-                    : '—'}
-                </span>
-              </>
-            ) : (
-              <span>No code graph built yet</span>
+        {tab === 'code-graph' && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-[var(--color-fonts-font-color-support)]">
+                {graphStatus ? (
+                  <>
+                    <span className="text-[var(--color-fonts-font-color-primary)] font-medium">
+                      {graphStatus.nodeCount.toLocaleString()} nodes
+                    </span>
+                    {' · last updated '}
+                    <span className="text-[var(--color-fonts-font-color-primary)]">
+                      {graphStatus.lastUpdatedAt
+                        ? new Date(graphStatus.lastUpdatedAt).toLocaleString()
+                        : '—'}
+                    </span>
+                  </>
+                ) : (
+                  <span>No code graph built yet</span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleRebuild}
+                disabled={rebuildStatus === 'pending'}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw size={12} className={rebuildStatus === 'pending' ? 'animate-spin' : ''} />
+                {rebuildStatus === 'pending'
+                  ? 'Starting…'
+                  : rebuildStatus === 'accepted'
+                  ? 'Queued'
+                  : rebuildStatus === 'error'
+                  ? 'Failed — retry'
+                  : 'Force Rebuild'}
+              </button>
+            </div>
+            {rebuildStatus === 'accepted' && (
+              <p className="text-xs text-[var(--color-tags-font-success)]">
+                Rebuild accepted — runs in background
+                {form.vectorEnabled ? ', including embeddings.' : '.'}
+              </p>
+            )}
+            {rebuildStatus === 'error' && (
+              <p className="text-xs text-[var(--color-tags-font-error)]">
+                Failed to start rebuild. Check server logs.
+              </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={handleRebuild}
-            disabled={rebuildStatus === 'pending'}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-[var(--color-inputs-input-border)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-xs font-medium hover:bg-[var(--color-buttons-button-back-hover)] disabled:opacity-50 transition-colors"
-          >
-            <RefreshCw size={12} className={rebuildStatus === 'pending' ? 'animate-spin' : ''} />
-            {rebuildStatus === 'pending'
-              ? 'Starting…'
-              : rebuildStatus === 'accepted'
-              ? 'Queued'
-              : rebuildStatus === 'error'
-              ? 'Failed — retry'
-              : 'Force Rebuild'}
-          </button>
-        </div>
-        {rebuildStatus === 'accepted' && (
-          <p className="mt-2 text-xs text-[var(--color-tags-font-success)]">
-            Rebuild accepted — runs in background
-            {form.vectorEnabled ? ', including embeddings.' : '.'}
-          </p>
-        )}
-        {rebuildStatus === 'error' && (
-          <p className="mt-2 text-xs text-[var(--color-tags-font-error)]">
-            Failed to start rebuild. Check server logs.
-          </p>
         )}
       </div>
 
-      <div className="flex gap-2">
+      {/* Footer */}
+      <div className="flex gap-2 px-6 pb-5 pt-2 border-t border-[var(--color-cards-card-stroke)]">
         <button
           onClick={() => onSave(form)}
           disabled={isSaving}
@@ -521,5 +632,6 @@ function RepoEditor({
         </button>
       </div>
     </div>
+    </>
   )
 }
