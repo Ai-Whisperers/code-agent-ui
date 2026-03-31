@@ -71,13 +71,35 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
-    id: 'voyage',
-    label: 'Voyage AI (Embeddings)',
+    id: 'bedrock',
+    label: 'AWS Bedrock (Embeddings)',
     settings: [
-      { key: 'voyage.api.key', label: 'API Key', description: 'API key for Voyage AI embedding service', isSecret: true },
-      { key: 'voyage.model', label: 'Model', description: 'Voyage AI embedding model', defaultValue: 'voyage-code-3', inputType: 'select', options: ['voyage-code-3', 'voyage-3', 'voyage-3-lite'] },
-      { key: 'voyage.batch-size', label: 'Batch Size', description: 'Number of documents per embedding request', defaultValue: '128', inputType: 'number', min: 1 },
-      { key: 'embedding.max-source-chars', label: 'Max Source Chars per Embedding', description: 'Maximum characters per source document sent to embedding', defaultValue: '16000', inputType: 'number', min: 1000, step: 1000 },
+      { key: 'bedrock.region', label: 'Region', description: 'AWS region for Bedrock API calls. All data stays within this region.', defaultValue: 'eu-central-1' },
+      {
+        key: 'bedrock.code.embedding.model',
+        label: 'Code Embedding Model',
+        description: 'Embedding model for code indexing and semantic code search (→ code_embeddings table). Query and document embeddings must use the same model.',
+        defaultValue: 'cohere.embed-multilingual-v3',
+        inputType: 'select',
+        options: ['cohere.embed-multilingual-v3', 'cohere.embed-english-v3', 'amazon.titan-embed-text-v2:0'],
+      },
+      {
+        key: 'bedrock.text.embedding.model',
+        label: 'Text Embedding Model',
+        description: 'Embedding model for knowledge base indexing and search — Jira, Confluence, web docs (→ knowledge_embeddings table).',
+        defaultValue: 'amazon.titan-embed-text-v2:0',
+        inputType: 'select',
+        options: ['amazon.titan-embed-text-v2:0', 'cohere.embed-multilingual-v3', 'cohere.embed-english-v3'],
+      },
+      {
+        key: 'bedrock.rerank.model',
+        label: 'Rerank Model',
+        description: 'Rerank model used in the two-stage semantic code search pipeline.',
+        defaultValue: 'amazon.rerank-v1:0',
+        inputType: 'select',
+        options: ['amazon.rerank-v1:0', 'cohere.rerank-v3-5:0'],
+      },
+      { key: 'embedding.max-source-chars', label: 'Max Source Chars per Embedding', description: 'Maximum characters per source document sent to the embedding model', defaultValue: '16000', inputType: 'number', min: 1000, step: 1000 },
     ],
   },
 
@@ -482,7 +504,7 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
+  { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
