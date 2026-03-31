@@ -969,11 +969,41 @@ export interface ScopeProposal {
   proposedCriteria?: string
   proposedTechnical?: string
   aiExplanation?: string
+  proposedLabel?: string
+  proposedPriority?: string
   status: 'DRAFT' | 'ACCEPTED' | 'REJECTED'
   jiraResultKey?: string
   createdAt: string
   updatedAt: string
+  /** Display name of the user who last saved the proposal. */
+  updatedBy?: string
+  /** Display name of the user who synced the proposal to Jira. */
+  syncedBy?: string
 }
 
 /** @deprecated Use ScopeProposal */
 export type RoadmapProposal = ScopeProposal
+
+export interface JiraAttachment {
+  id: string
+  filename: string
+  mimeType: string
+  size: number
+  /** Jira content URL — use the backend proxy endpoint to download */
+  contentUrl: string
+}
+
+export interface ScopeProposalInitResult {
+  proposal: ScopeProposal
+  attachments: JiraAttachment[]
+  /** ISO timestamp of when the Jira issue was last modified. */
+  jiraUpdatedAt?: string
+}
+
+export interface ProposalUpdatedEvent {
+  type: 'proposal_updated'
+  proposalId: string
+  proposal: ScopeProposal
+}
+
+export type ExtendedChatEvent = ChatEvent | ProposalUpdatedEvent

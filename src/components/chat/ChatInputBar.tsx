@@ -923,12 +923,6 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         </div>
       )}
       
-      {!simplified && (
-        <p className="text-xs text-gray-500 mt-2 text-center">
-          Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
-          syntax-highlighted code.
-        </p>
-      )}
 
 
       {/* Context Selection Dialogs */}

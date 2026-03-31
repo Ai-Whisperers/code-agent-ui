@@ -405,6 +405,7 @@ function ItemDetailPanel({
   isRefreshing: boolean
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const isOverridden = !!node.overrideStatus
   const isVirtual = !!node.isVirtual
   const [activeProposal, setActiveProposal] = useState<ScopeProposal | null>(null)
@@ -417,10 +418,12 @@ function ItemDetailPanel({
   const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
   const jiraLink = (key: string) => jiraBaseUrl && !key.startsWith('VIRTUAL-') ? `${jiraBaseUrl}/browse/${key}` : undefined
 
-  const improveMutation = useMutation<ScopeProposal, Error>({
-    mutationFn: () => api.post(`/scope/${scopeId}/items/${node.issueKey}/improve`).then((r) => r.data),
-    onSuccess: (proposal) => setActiveProposal(proposal),
-  })
+  const handleImprove = () => {
+    navigate({
+      to: '/metrics/scope/$id/improve/$issueKey',
+      params: { id: scopeId, issueKey: node.issueKey },
+    })
+  }
 
   const { data: proposals } = useQuery<ScopeProposal[]>({
     queryKey: ['scope-proposals', scopeId, node.issueKey],
@@ -660,16 +663,15 @@ function ItemDetailPanel({
                     Undo Override
                   </Button>
                 </Tooltip>
-                <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Tooltip text="Open the Improve with AI screen to refine this issue with the Product Owner AI.">
                   <Button
                     size="xs"
                     variant="ai"
-                    loading={improveMutation.isPending}
                     icon={<Wand2 size={11} />}
-                    onClick={() => improveMutation.mutate()}
-                    disabled={improveMutation.isPending}
+                    onClick={handleImprove}
+                    disabled={isVirtual}
                   >
-                    {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                    Improve with AI
                   </Button>
                 </Tooltip>
               </>
@@ -680,16 +682,15 @@ function ItemDetailPanel({
                     Review
                   </Button>
                 </Tooltip>
-                <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Tooltip text="Open the Improve with AI screen to refine this issue with the Product Owner AI.">
                   <Button
                     size="xs"
                     variant="ai"
-                    loading={improveMutation.isPending}
                     icon={<Wand2 size={11} />}
-                    onClick={() => improveMutation.mutate()}
-                    disabled={improveMutation.isPending}
+                    onClick={handleImprove}
+                    disabled={isVirtual}
                   >
-                    {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                    Improve with AI
                   </Button>
                 </Tooltip>
                 <div className="ml-auto w-px h-4 bg-[var(--color-borders-border-primary)] mx-0.5" />
@@ -721,11 +722,6 @@ function ItemDetailPanel({
               </Tooltip>
             )}
 
-            {improveMutation.isError && (
-              <span className="text-[10px] text-[var(--color-tags-font-critical)] truncate">
-                Generation failed
-              </span>
-            )}
           </div>
         </div>
       )}

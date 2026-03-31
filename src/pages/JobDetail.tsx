@@ -59,6 +59,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import { AiCallModal } from '@/components/ui/AiCallModal'
+import { TabBar, TabButton } from '@/components/ui/Tabs'
 import { CommentChatDialog, type CommentChatAction } from '@/components/CommentChatDialog'
 import api from '@/lib/api'
 import type {
@@ -509,7 +510,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
       ) : job ? (
         <div className="flex flex-col flex-1 min-h-0 space-y-3">
           {/* Tab bar — always visible */}
-          <div className="flex items-center gap-1 border-b border-[var(--color-borders-border-primary)]">
+          <TabBar>
             <TabButton
               active={activeTab === 'summary'}
               onClick={() => setActiveTab('summary')}
@@ -564,7 +565,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
             >
               Evidence
             </TabButton>
-          </div>
+          </TabBar>
 
           {/* Summary tab */}
           {activeTab === 'summary' && (
@@ -742,35 +743,6 @@ export default function JobDetail({ jobId }: JobDetailProps) {
 
 // ── Tab primitives ────────────────────────────────────────────────────────────
 
-interface TabButtonProps {
-  active: boolean
-  onClick: () => void
-  badge?: string
-  children: React.ReactNode
-}
-
-function TabButton({ active, onClick, badge, children }: TabButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={`
-        relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors
-        border-b-2 -mb-px
-        ${active
-          ? 'border-[var(--color-fonts-font-color-brand)] text-[var(--color-fonts-font-color-primary)]'
-          : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:border-[var(--color-borders-border-primary)]'
-        }
-      `}
-    >
-      {children}
-      {badge && (
-        <span className="inline-flex items-center justify-center rounded-full px-1.5 min-w-[18px] h-[18px] text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">
-          {badge}
-        </span>
-      )}
-    </button>
-  )
-}
 
 // ── Changed Files tab ─────────────────────────────────────────────────────────
 

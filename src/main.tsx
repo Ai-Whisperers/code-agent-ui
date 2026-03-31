@@ -40,6 +40,7 @@ import RoadmapsPage from '@/pages/Roadmaps'
 import RoadmapDetail from '@/pages/RoadmapDetail'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
+import ScopeImprove from '@/pages/ScopeImprove'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
@@ -289,6 +290,16 @@ const scopeDetailRoute = createRoute({
   },
 })
 
+const scopeImproveRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/scope/$id/improve/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function ScopeImproveRoute() {
+    const { id, issueKey } = scopeImproveRoute.useParams()
+    return <ScopeImprove scopeId={id} issueKey={issueKey} />
+  },
+})
+
 const soc2AuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/compliance/soc2',
@@ -342,6 +353,7 @@ const routeTree = rootRoute.addChildren([
     roadmapDetailRoute,
     scopesRoute,
     scopeDetailRoute,
+    scopeImproveRoute,
     soc2AuditRoute,
   ]),
   oauthCallbackRoute,
