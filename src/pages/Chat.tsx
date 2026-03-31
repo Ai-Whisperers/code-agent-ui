@@ -177,29 +177,33 @@ export default function Chat() {
   // Scroll handling — only scroll when the user is already at (or near) the bottom
   useEffect(() => {
     if (isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [messages])
 
-  // When streaming starts the user just hit Send — force scroll to bottom
+  // When streaming starts the user just hit Send — smoothly scroll to bottom once
   useEffect(() => {
     if (isViewingStream) {
       isAtBottomRef.current = true
-      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
   }, [isViewingStream])
 
-  // Follow streaming tokens as they arrive
+  // Follow streaming tokens as they arrive — use direct scrollTop instead of
+  // scrollIntoView({ behavior: 'smooth' }) to avoid competing scroll animations
+  // that fight each other at token-arrival frequency and cause choppy movement.
   useEffect(() => {
     if (isViewingStream && isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const el = scrollContainerRef.current
+      if (el) el.scrollTop = el.scrollHeight
     }
   }, [streamingContent, isViewingStream])
 
   // Scroll when new tool logs are added
   useEffect(() => {
     if (streamingThinkingSteps.length > 0 && isViewingStream && isAtBottomRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const el = scrollContainerRef.current
+      if (el) el.scrollTop = el.scrollHeight
     }
   }, [streamingThinkingSteps, isViewingStream])
 
