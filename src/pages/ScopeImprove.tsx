@@ -273,8 +273,10 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const [showNewFeatureDialog, setShowNewFeatureDialog] = useState(false)
   const [newFeatureTitle, setNewFeatureTitle] = useState('')
 
-  /** The EPIC key to use as parentKey when adding a new feature. */
+  /** The EPIC key — set when the root tab is an EPIC. Drives the "Propose Features" toolbar. */
   const epicKey = tabs[0]?.issueType === 'EPIC' ? tabs[0].issueKey : null
+  /** The active FEATURE key — set when the currently selected tab is a FEATURE. Drives the "Propose Stories" toolbar. */
+  const activeFeatureKey = tabs[activeTabIdx]?.issueType === 'FEATURE' ? tabs[activeTabIdx].issueKey : null
 
   const addFeatureMutation = useMutation({
     mutationFn: async ({ parentKey, title }: { parentKey: string; title: string }) =>
@@ -343,6 +345,42 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
       })
     },
     onError: () => setToast({ message: 'Feature analysis failed — try again', variant: 'error' }),
+  })
+
+  // ── Propose user stories (AI) — active FEATURE tab ────────────────────────
+  const proposeStoriesMutation = useMutation({
+    mutationFn: async (featureKey: string) =>
+      api
+        .post(`/scope/${scopeId}/items/${featureKey}/propose-stories`, {})
+        .then((r) => r.data as ScopeProposal[]),
+    onSuccess: (proposals) => {
+      if (!proposals.length) {
+        setToast({ message: 'No missing user stories found — the Feature looks complete!', variant: 'info' })
+        return
+      }
+      const newTabs: TabState[] = proposals.map((proposal) => ({
+        issueKey:         proposal.issueKey,
+        issueType:        'USERSTORY' as const,
+        proposal,
+        attachments:      [],
+        jiraUpdatedAt:    null,
+        loading:          false,
+        error:            null,
+        dirty:            false,
+        highlightedFields: new Set(),
+        isNew:            true,
+      }))
+      setTabs((prev) => {
+        const next = [...prev, ...newTabs]
+        setActiveTabIdx(next.length - 1)
+        return next
+      })
+      setToast({
+        message: `${proposals.length} user stor${proposals.length > 1 ? 'ies' : 'y'} proposal${proposals.length > 1 ? 's' : ''} added`,
+        variant: 'success',
+      })
+    },
+    onError: () => setToast({ message: 'Story analysis failed — try again', variant: 'error' }),
   })
 
   // ── Field updates ──────────────────────────────────────────────────────────
@@ -598,7 +636,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                         ? tab.proposal.proposedSummary.length > 28
                           ? tab.proposal.proposedSummary.slice(0, 28) + '…'
                           : tab.proposal.proposedSummary
-                        : 'New feature')
+                        : tab.issueType === 'USERSTORY' ? 'New story' : 'New feature')
                     : tab.issueKey}
                   {ti?.readinessLabel && (
                     <ReadinessBadge label={ti.readinessLabel} score={ti.readinessScore} showScore />
@@ -642,6 +680,29 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
               {proposeMutation.isPending && (
                 <span className="text-[11px] text-[var(--color-fonts-font-color-support)] animate-pulse">
                   Analysing epic…
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* AI toolbar — shown only for the active FEATURE tab */}
+          {activeFeatureKey && (
+            <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 bg-[var(--color-page-background)] border-b border-[var(--color-borders-border-primary)]/40">
+              <Tooltip text="Let AI analyse the Feature and propose missing user stories">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Wand2 size={12} />}
+                  loading={proposeStoriesMutation.isPending}
+                  disabled={proposeStoriesMutation.isPending}
+                  onClick={() => proposeStoriesMutation.mutate(activeFeatureKey)}
+                >
+                  Check &amp; Propose User Stories
+                </Button>
+              </Tooltip>
+              {proposeStoriesMutation.isPending && (
+                <span className="text-[11px] text-[var(--color-fonts-font-color-support)] animate-pulse">
+                  Analysing feature…
                 </span>
               )}
             </div>
