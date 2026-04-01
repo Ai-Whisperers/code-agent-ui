@@ -490,6 +490,18 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Keycloak Admin ──────────────────────────────────────────────────────────────
+  {
+    id: 'keycloak-admin',
+    label: 'Keycloak Admin Client',
+    settings: [
+      { key: 'keycloak.admin.server-url', label: 'Server URL', description: 'Keycloak base URL (e.g. https://auth.example.com). Used to build the Admin REST API endpoint.' },
+      { key: 'keycloak.admin.realm', label: 'Realm', description: 'Realm that both hosts the service account and contains the users to manage.', defaultValue: 'master' },
+      { key: 'keycloak.admin.client-id', label: 'Client ID', description: 'Service account client ID with realm-management > view-users and manage-users roles.' },
+      { key: 'keycloak.admin.client-secret', label: 'Client Secret', description: 'Client secret for the service account above. Stored encrypted.', isSecret: true },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -524,7 +536,7 @@ const TABS: TabDef[] = [
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'compliance',      label: 'Compliance',       groupIds: ['soc2'] },
-  { id: 'security',        label: 'Security',         groupIds: ['security'] },
+  { id: 'security',        label: 'Security',         groupIds: ['keycloak-admin', 'security'] },
 ]
 
 // ── Shared input styles ────────────────────────────────────────────────────────

@@ -36,6 +36,7 @@ import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
+import AdminUsersPage from '@/pages/AdminUsers'
 import RoadmapsPage from '@/pages/Roadmaps'
 import RoadmapDetail from '@/pages/RoadmapDetail'
 import ScopesPage from '@/pages/Scopes'
@@ -258,6 +259,13 @@ const auditLogRoute = createRoute({
   component: AuditLogPage,
 })
 
+const adminUsersRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/users',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: AdminUsersPage,
+})
+
 const roadmapsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/roadmap',
@@ -349,6 +357,7 @@ const routeTree = rootRoute.addChildren([
     chatConvRoute,
     webhookAuditRoute,
     auditLogRoute,
+    adminUsersRoute,
     roadmapsRoute,
     roadmapDetailRoute,
     scopesRoute,
