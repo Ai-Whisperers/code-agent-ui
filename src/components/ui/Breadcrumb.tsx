@@ -1,12 +1,13 @@
+import type React from 'react'
 import { ChevronRight } from 'lucide-react'
 import { Tooltip } from './Tooltip'
 
 export interface BreadcrumbItem {
   /** Primary text label (e.g. issue key) */
   label: string
-  /** Optional badge displayed before the label */
+  /** Optional badge displayed before the label. When className is empty the node is rendered unwrapped. */
   badge?: {
-    text: string
+    text: React.ReactNode
     className: string
   }
   /** Tooltip text shown on hover (bottom position) */
@@ -24,9 +25,13 @@ function BreadcrumbNode({ item }: { item: BreadcrumbItem }) {
   const inner = (
     <span className="flex items-center gap-1 text-[10px]">
       {item.badge && (
-        <span className={`inline-flex items-center font-medium px-1 py-0 rounded-[var(--border-radius-tag)] text-[9px] ${item.badge.className}`}>
-          {item.badge.text}
-        </span>
+        item.badge.className ? (
+          <span className={`inline-flex items-center font-medium px-1 py-0 rounded-[var(--border-radius-tag)] text-[9px] ${item.badge.className}`}>
+            {item.badge.text}
+          </span>
+        ) : (
+          <span className="inline-flex items-center">{item.badge.text}</span>
+        )
       )}
       <span className="font-mono text-[var(--color-fonts-font-color-brand)]">{item.label}</span>
     </span>

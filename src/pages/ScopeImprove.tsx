@@ -17,6 +17,7 @@ import {
   FileAudio,
   FileArchive,
   Download,
+  Trash2,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -324,6 +325,39 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
       api.post(`/scope/${scopeId}/review/${key}`, {}).then((r) => r.data),
     onSuccess: () => setToast({ message: 'Review queued', variant: 'info' }),
     onError: () => setToast({ message: 'Review failed — check console', variant: 'error' }),
+  })
+
+  // ── Delete mutation ────────────────────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
+  const deleteMutation = useMutation({
+    mutationFn: async ({ idx }: { idx: number }) => {
+      const tab = tabs[idx]
+      if (!tab?.proposal) return
+      await api.delete(`/scope/${scopeId}/proposals/${tab.proposal.id}`)
+    },
+    onSuccess: (_data, { idx }) => {
+      const deletedTab = tabs[idx]
+      setTabs((prev) => prev.filter((_, i) => i !== idx))
+      setActiveTabIdx((prev) => {
+        if (prev === idx) return Math.max(0, idx - 1)
+        if (prev > idx) return prev - 1
+        return prev
+      })
+      setShowDeleteConfirm(false)
+      queryClient.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
+      const isLinked = !deletedTab?.isNew
+      setToast({
+        message: isLinked
+          ? `Proposal deleted. Remember to remove ${deletedTab.issueKey} in Jira if no longer needed.`
+          : 'Proposal deleted.',
+        variant: isLinked ? 'info' : 'success',
+      })
+    },
+    onError: () => {
+      setShowDeleteConfirm(false)
+      setToast({ message: 'Delete failed — check console', variant: 'error' })
+    },
   })
 
   // ── New-feature dialog ────────────────────────────────────────────────────
@@ -775,8 +809,8 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
             </div>
           )}
 
-          {/* AI toolbar — shown only for the active FEATURE tab */}
-          {activeFeatureKey && (
+          {/* AI toolbar — shown only for the active FEATURE tab when the main issue is itself a Feature */}
+          {activeFeatureKey && !epicKey && (
             <div className="flex items-center gap-2 px-4 py-1.5 shrink-0 bg-[var(--color-page-background)] border-b border-[var(--color-borders-border-primary)]/40">
               <Tooltip text="Let AI analyse the Feature and propose missing user stories">
                 <Button
@@ -875,6 +909,25 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                       onClick={() => acceptMutation.mutate({ idx: activeTabIdx })}
                     >
                       Accept &amp; Sync to Jira
+                    </Button>
+                  </Tooltip>
+                </>
+              )}
+
+              {/* Delete — only for Feature / User Story tabs */}
+              {activeTab.issueType !== 'EPIC' && (
+                <>
+                  <div className="w-px h-4 bg-[var(--color-borders-border-primary)]/60 mx-1" />
+                  <Tooltip text="Delete this proposal from the database">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      icon={<Trash2 size={11} />}
+                      disabled={deleteMutation.isPending}
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="text-[var(--color-tags-font-critical)] hover:border-[var(--color-tags-font-critical)]/40"
+                    >
+                      Delete
                     </Button>
                   </Tooltip>
                 </>
@@ -1039,6 +1092,58 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
 
       {/* Toast */}
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
+      {/* Delete confirmation dialog */}
+      {showDeleteConfirm && activeTab?.proposal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-lg bg-[var(--color-cards-card-background)] shadow-xl p-6">
+            <div className="flex items-start gap-3 mb-4">
+              <div className="shrink-0 flex items-center justify-center w-9 h-9 rounded-full bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]">
+                <Trash2 size={15} />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+                  Delete proposal?
+                </h2>
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1 leading-relaxed">
+                  The proposal for <span className="font-medium text-[var(--color-fonts-font-color-primary)]">{activeTab.issueKey}</span> will be permanently removed from the database.
+                </p>
+              </div>
+            </div>
+
+            {/* Jira notice — only for linked (non-new) proposals */}
+            {!activeTab.isNew && (
+              <div className="flex items-start gap-2 mb-5 p-3 rounded-lg bg-[var(--color-tags-attention-background)] border border-[var(--color-tags-font-attention)]/20">
+                <AlertTriangle size={13} className="shrink-0 mt-0.5 text-[var(--color-tags-font-attention)]" />
+                <p className="text-[11px] text-[var(--color-tags-font-attention)] leading-relaxed">
+                  The linked Jira issue <span className="font-semibold">{activeTab.issueKey}</span> will <strong>not</strong> be deleted automatically. Please remove it in Jira yourself if it is no longer needed.
+                </p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => setShowDeleteConfirm(false)}
+                disabled={deleteMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="danger"
+                icon={<Trash2 size={12} />}
+                loading={deleteMutation.isPending}
+                disabled={deleteMutation.isPending}
+                onClick={() => deleteMutation.mutate({ idx: activeTabIdx })}
+              >
+                Delete proposal
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* New-feature dialog */}
       {showNewFeatureDialog && (

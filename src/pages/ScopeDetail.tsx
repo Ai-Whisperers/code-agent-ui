@@ -24,6 +24,8 @@ import {
   Wand2,
   Info,
   Download,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -34,11 +36,30 @@ import { TableCard } from '@/components/ui/TableCard'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
 import type { BreadcrumbItem } from '@/components/ui/Breadcrumb'
 import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
 import { SprintGanttView } from '@/components/scope/SprintGanttView'
 import { ProposalModal } from '@/components/scope/ProposalModal'
 import api from '@/lib/api'
 import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import type { Scope, ScopeTreeItem, ItemOverrideStatus, ScopeProposal, SystemSetting, ReviewTokenStats } from '@/types/api'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60_000)
+  if (diffMin < 1)  return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24)   return `${diffH}h ago`
+  const diffD = Math.floor(diffH / 24)
+  if (diffD === 1)  return 'yesterday'
+  if (diffD < 7)    return `${diffD}d ago`
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: diffD > 365 ? 'numeric' : undefined })
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -372,14 +393,200 @@ function ReviewConfirmDialog({
   )
 }
 
+// ── Review sub-components ──────────────────────────────────────────────────────
+
+const REVIEW_CONFIG: Record<string, { label: string; textColor: string; barColor: string; bgColor: string }> = {
+  poor:                          { label: 'Poor',                          textColor: 'text-red-500 dark:text-red-400',          barColor: 'bg-red-500',     bgColor: 'bg-red-50 dark:bg-red-950/20' },
+  needs_refinement:              { label: 'Needs refinement',              textColor: 'text-amber-500 dark:text-amber-400',       barColor: 'bg-amber-500',   bgColor: 'bg-amber-50 dark:bg-amber-950/20' },
+  ready_with_minor_improvements: { label: 'Ready with minor improvements', textColor: 'text-blue-500 dark:text-blue-400',         barColor: 'bg-blue-500',    bgColor: 'bg-blue-50 dark:bg-blue-950/20' },
+  fully_ready:                   { label: 'Fully ready',                   textColor: 'text-emerald-500 dark:text-emerald-400',   barColor: 'bg-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/20' },
+}
+
+function complexityColor(score: number) {
+  if (score >= 70) return { text: 'text-red-500 dark:text-red-400',    bar: 'bg-red-500' }
+  if (score >= 40) return { text: 'text-amber-500 dark:text-amber-400', bar: 'bg-amber-500' }
+  return               { text: 'text-emerald-500 dark:text-emerald-400', bar: 'bg-emerald-500' }
+}
+
+function ReviewResult({ treeItem }: { treeItem: ScopeTreeItem }) {
+  const cfg = REVIEW_CONFIG[treeItem.readinessLabel ?? ''] ?? {
+    label: treeItem.readinessLabel ?? 'Unknown',
+    textColor: 'text-[var(--color-fonts-font-color-support)]',
+    barColor: 'bg-[var(--color-borders-border-primary)]',
+    bgColor: '',
+  }
+  const score = treeItem.readinessScore ?? 0
+  const cx = treeItem.complexityScore != null ? complexityColor(treeItem.complexityScore) : null
+
+  return (
+    <div className="space-y-6 pt-1">
+      {/* Scores */}
+      <div>
+        {/* Readiness hero */}
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            <span className={`text-5xl font-bold tabular-nums leading-none ${cfg.textColor}`}>
+              {score}
+            </span>
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className={`text-sm font-semibold ${cfg.textColor}`}>{cfg.label}</span>
+        </div>
+
+        {/* Readiness bar */}
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${cfg.barColor}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+
+        {/* Complexity row */}
+        {cx && treeItem.complexityScore != null && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+            <Tooltip text="AI complexity estimate (0–100). Lower = simpler. Higher = more effort, uncertainty, or dependencies.">
+              <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                Complexity
+              </span>
+            </Tooltip>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${cx.bar}`}
+                  style={{ width: `${treeItem.complexityScore}%` }}
+                />
+              </div>
+              <span className={`text-[11px] font-semibold tabular-nums ${cx.text}`}>
+                {treeItem.complexityScore}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Aggregate row */}
+        {treeItem.aggregateScore != null && (() => {
+          const aggCfg = treeItem.aggregateScore >= 70
+            ? { bar: 'bg-emerald-500', text: 'text-emerald-500 dark:text-emerald-400' }
+            : treeItem.aggregateScore >= 40
+              ? { bar: 'bg-amber-500',   text: 'text-amber-500 dark:text-amber-400' }
+              : { bar: 'bg-red-500',     text: 'text-red-500 dark:text-red-400' }
+          return (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+              <Tooltip text="Overall health: 40% own writing quality + 60% child items average. 0 = not yet decomposed into children.">
+                <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                  Aggregate
+                </span>
+              </Tooltip>
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${aggCfg.bar}`}
+                    style={{ width: `${treeItem.aggregateScore}%` }}
+                  />
+                </div>
+                <span className={`text-[11px] font-semibold tabular-nums ${aggCfg.text}`}>
+                  {treeItem.aggregateScore}
+                </span>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Meta row */}
+        <div className="flex items-center gap-2 mt-3">
+          {treeItem.reviewedAt && (
+            <Tooltip text={new Date(treeItem.reviewedAt).toLocaleString()}>
+              <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                Reviewed {fmtDate(treeItem.reviewedAt)}
+              </span>
+            </Tooltip>
+          )}
+          {treeItem.isStale && (
+            <Tooltip text="Jira was modified after this review — re-review for an up-to-date score">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 cursor-default">
+                <AlertTriangle size={10} />
+                Stale
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      {/* Improvement suggestions */}
+      {treeItem.improvementSummary && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-fonts-font-color-support)] mb-2">
+            Suggestions
+          </p>
+          <p className="text-[13px] text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
+            {treeItem.improvementSummary}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReviewLoadingState({
+  prevScore,
+  prevLabel,
+}: {
+  prevScore?: number | null
+  prevLabel?: string | null
+}) {
+  const cfg = REVIEW_CONFIG[prevLabel ?? '']
+  return (
+    <div className="space-y-6 pt-1">
+      <div>
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            {prevScore != null && cfg ? (
+              <span className={`text-5xl font-bold tabular-nums leading-none opacity-30 ${cfg.textColor}`}>
+                {prevScore}
+              </span>
+            ) : (
+              <span className="w-16 h-10 rounded-lg bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+            )}
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] opacity-30 leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className="w-28 h-4 rounded bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+        </div>
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/30 animate-pulse" />
+        <div className="flex items-center gap-2 mt-3 text-[11px] text-[var(--color-fonts-font-color-support)]">
+          <Loader2 size={11} className="animate-spin shrink-0" />
+          <span>Running AI readiness review…</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-2.5 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-16" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-full" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-4/5" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-5/6" />
+      </div>
+    </div>
+  )
+}
+
+function ReviewEmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-[var(--color-borders-border-primary)]/10 flex items-center justify-center">
+        <Sparkles size={22} className="text-violet-400 opacity-50" />
+      </div>
+      <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">No review yet</p>
+      <p className="text-[12px] text-[var(--color-fonts-font-color-support)] max-w-[220px] leading-relaxed">
+        Click <span className="font-medium text-[var(--color-fonts-font-color-primary)]">Review</span> in the footer to run an AI readiness review.
+      </p>
+    </div>
+  )
+}
+
 // ── Item Detail Panel ─────────────────────────────────────────────────────────
 
-const TYPE_LABEL: Record<string, string> = { EPIC: 'Epic', FEATURE: 'Feature', USERSTORY: 'Story' }
-const TYPE_BG: Record<string, string> = {
-  EPIC: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  FEATURE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  USERSTORY: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
-}
 
 function ItemDetailPanel({
   node,
@@ -460,9 +667,7 @@ function ItemDetailPanel({
               </span>
             )}
             {isRefreshing && <Loader2 size={11} className="animate-spin text-[var(--color-fonts-font-color-support)] shrink-0" />}
-            <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[node.issueType] ?? ''}`}>
-              {TYPE_LABEL[node.issueType] ?? node.issueType}
-            </span>
+            <IssueTypeIcon issueType={node.issueType} size={14} />
             {isVirtual && (
               <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-dashed border-current">
                 virtual
@@ -493,19 +698,19 @@ function ItemDetailPanel({
           const crumbs: BreadcrumbItem[] = [
             {
               label:   node.issueKey,
-              badge:   { text: TYPE_LABEL[node.issueType] ?? node.issueType, className: TYPE_BG[node.issueType] ?? '' },
+              badge:   { text: <IssueTypeIcon issueType={node.issueType} size={11} />, className: '' },
               tooltip: node.summary,
               href:    jiraLink(node.issueKey) ?? undefined,
             },
             ...(node.parentKey ? [{
               label:   node.parentKey,
-              badge:   { text: TYPE_LABEL[parentType], className: TYPE_BG[parentType] },
+              badge:   { text: <IssueTypeIcon issueType={parentType} size={11} />, className: '' },
               tooltip: pNode?.summary,
               href:    jiraLink(node.parentKey) ?? undefined,
             }] : []),
             ...(node.grandparentKey ? [{
               label:   node.grandparentKey,
-              badge:   { text: TYPE_LABEL['EPIC'], className: TYPE_BG['EPIC'] },
+              badge:   { text: <IssueTypeIcon issueType="EPIC" size={11} />, className: '' },
               tooltip: gpNode?.summary,
               href:    jiraLink(node.grandparentKey) ?? undefined,
             }] : []),
@@ -563,60 +768,40 @@ function ItemDetailPanel({
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">Reviewed At</p>
-                <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
-                  {node.reviewedAt ? new Date(node.reviewedAt).toLocaleString() : '—'}
-                </span>
+                {node.reviewedAt ? (
+                  <Tooltip text={new Date(node.reviewedAt).toLocaleString()}>
+                    <span className="text-xs text-[var(--color-fonts-font-color-primary)] cursor-default">
+                      {fmtDate(node.reviewedAt)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+                )}
               </div>
               <div className="col-span-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">Last Jira Update</p>
-                <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
-                  {node.jiraModifiedAt ? new Date(node.jiraModifiedAt).toLocaleString() : '—'}
-                </span>
+                {node.jiraModifiedAt ? (
+                  <Tooltip text={new Date(node.jiraModifiedAt).toLocaleString()}>
+                    <span className="text-xs text-[var(--color-fonts-font-color-primary)] cursor-default">
+                      {fmtDate(node.jiraModifiedAt)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+                )}
               </div>
             </section>
 
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">Scores</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Readiness</p>
-                  <ScoreBar
-                    score={node.readinessScore}
-                    title={[
-                      { poor: 'Poor', needs_refinement: 'Needs Refinement', ready_with_minor_improvements: 'Minor Improvements', fully_ready: 'Fully Ready' }[node.readinessLabel as string],
-                      node.readinessScore != null && `Score: ${node.readinessScore}`,
-                      'Higher is better',
-                    ].filter(Boolean).join('\n')}
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Complexity</p>
-                  <ScoreBar
-                    score={node.complexityScore}
-                    reversed
-                    title={node.complexityScore != null ? `Complexity: ${node.complexityScore}\nHigher means more complex` : undefined}
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Aggregate</p>
-                  <ScoreBar
-                    score={node.aggregateScore}
-                    title={node.aggregateScore != null ? `Aggregate: ${node.aggregateScore}\n40% own quality + 60% child average\n0 = not decomposed into children` : undefined}
-                  />
-                </div>
-              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">Review</p>
+              {isReviewing ? (
+                <ReviewLoadingState prevScore={node.readinessScore} prevLabel={node.readinessLabel} />
+              ) : node.readinessScore != null || node.readinessLabel ? (
+                <ReviewResult treeItem={node} />
+              ) : (
+                <ReviewEmptyState />
+              )}
             </section>
-
-            {node.improvementSummary && !isOverridden && (
-              <section>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1.5">AI Suggestions</p>
-                <div className="p-3 rounded-lg bg-[var(--color-cards-card-background-hover)] border border-[var(--color-borders-border-primary)]">
-                  <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-wrap">
-                    {node.improvementSummary}
-                  </p>
-                </div>
-              </section>
-            )}
           </>
         )}
 
@@ -1325,12 +1510,6 @@ function ScopeRow({
     ? `${jiraBaseUrl}/browse/${node.issueKey}`
     : undefined
 
-  const typeBg: Record<string, string> = {
-    EPIC: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-    FEATURE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    USERSTORY: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
-  }
-
   return (
     <tr
       className={`border-b border-[var(--color-tables-table-cell-stroke)] transition-colors cursor-pointer ${
@@ -1378,9 +1557,7 @@ function ScopeRow({
       </td>
 
       <td className="px-3 py-1.5 whitespace-nowrap">
-        <span className={`inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] ${isVirtual ? 'border border-dashed ' : ''}${typeBg[node.issueType] ?? ''}`}>
-          {TYPE_LABEL[node.issueType] ?? node.issueType}
-        </span>
+        <IssueTypeIcon issueType={node.issueType} size={13} />
       </td>
 
       <td className="px-3 py-1.5 max-w-xs">
