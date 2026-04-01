@@ -747,8 +747,15 @@ export interface ChatRequest {
   attachmentIds?: string[]
 }
 
+export interface ClarificationQuestion {
+  id: string
+  question: string
+  type: 'text' | 'single_choice' | 'multiple_choice' | 'boolean'
+  options?: string[]
+}
+
 export interface ChatEvent {
-  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_start' | 'plan_created' | 'plan_updated' | 'done' | 'error'
+  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_start' | 'plan_created' | 'plan_updated' | 'clarification_request' | 'done' | 'error'
   text?: string
   tool?: string
   input?: Record<string, unknown>
@@ -759,6 +766,7 @@ export interface ChatEvent {
   planId?: string
   title?: string
   status?: string
+  questions?: ClarificationQuestion[]
 }
 
 export type ThinkingStep =
@@ -781,6 +789,10 @@ export interface ChatMessage {
   thinkingSteps?: ThinkingStep[]
   /** Sources collected from web_search tool calls in this message. */
   webSources?: WebSource[]
+  /** Clarification questions emitted by ask_clarification tool during this message's turn. */
+  clarificationQuestions?: ClarificationQuestion[]
+  /** True once the user has submitted their answers — locks the form to a read-only summary. */
+  clarificationAnswered?: boolean
 }
 
 export interface ConversationSummary {

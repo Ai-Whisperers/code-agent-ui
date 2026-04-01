@@ -12,7 +12,7 @@ import { refreshToken, getToken } from '@/lib/keycloak'
 import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
 import { chatStreamStore, chatStreamActions } from '@/store/chat-stream-store'
-import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext } from '@/types/api'
+import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext, ClarificationQuestion } from '@/types/api'
 import {
   ChatInputBar,
   MessageBubble,
@@ -61,6 +61,7 @@ export default function Chat() {
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const pendingClarificationQuestionsRef = useRef<ClarificationQuestion[]>([])
 
   // Track whether the user is scrolled to (or near) the bottom of the messages container
   useEffect(() => {
@@ -228,6 +229,7 @@ export default function Chat() {
       let accumulatedContent = ''
       const accumulatedThinkingSteps: ThinkingStep[] = []
       streamingContentRef.current = ''
+      pendingClarificationQuestionsRef.current = []
 
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -324,6 +326,12 @@ export default function Chat() {
                 chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               }
+              case 'clarification_request': {
+                if (event.questions && event.questions.length > 0) {
+                  pendingClarificationQuestionsRef.current = event.questions
+                }
+                break
+              }
               case 'plan_start': {
                 console.log('🎯 Received plan_start event:', event)
                 // Set loading state to show spinner immediately with plan title
@@ -395,12 +403,14 @@ export default function Chat() {
                 chatStreamActions.setContent(accumulatedContent)
 
                 const webSources = extractWebSources(accumulatedThinkingSteps)
+                const pendingQuestions = pendingClarificationQuestionsRef.current
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   role: 'assistant',
                   content: accumulatedContent,
                   thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
                   webSources: webSources.length > 0 ? webSources : undefined,
+                  clarificationQuestions: pendingQuestions.length > 0 ? [...pendingQuestions] : undefined,
                 }
                 setMessages((prev) => {
                   const next = [...prev, assistantMsg]
@@ -780,6 +790,19 @@ export default function Chat() {
     abortControllerRef.current?.abort()
   }, [])
 
+  const handleClarificationSubmit = useCallback((messageId: string, formattedAnswers: string) => {
+    // Lock the clarification form on the originating message
+    setMessages((prev) => {
+      const next = prev.map((m) =>
+        m.id === messageId ? { ...m, clarificationAnswered: true } : m
+      )
+      if (activeConversationId) saveMessagesToStorage(activeConversationId, next)
+      return next
+    })
+    // Send the answers as a new user message so Claude can continue
+    sendMessage(formattedAnswers)
+  }, [activeConversationId, sendMessage])
+
   const handleConversationCreate = useCallback((conversationId: string) => {
     // Navigate to the new conversation
     navigate({ to: `/chat/${conversationId}` })
@@ -932,6 +955,11 @@ export default function Chat() {
               key={msg.id}
               message={msg}
               onEdit={msg.role === 'user' && !isStreaming ? (newText) => handleEditMessage(msg.id, newText) : undefined}
+              onClarificationSubmit={
+                msg.role === 'assistant' && msg.clarificationQuestions && !msg.clarificationAnswered && !isStreaming
+                  ? (answers) => handleClarificationSubmit(msg.id, answers)
+                  : undefined
+              }
             />
           ))}
 

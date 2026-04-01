@@ -4,10 +4,13 @@ import type { ChatMessage } from '@/types/api'
 import { MarkdownMessage } from './MarkdownMessage'
 import { ThinkingPanel } from './ThinkingPanel'
 import { SourcesSidebar } from './SourcesSidebar'
+import { ClarificationBlock } from './ClarificationBlock'
 
 interface MessageBubbleProps {
   message: ChatMessage
   onEdit?: (newText: string) => void
+  /** Called with formatted answers when the user submits a clarification form. */
+  onClarificationSubmit?: (formattedAnswers: string) => void
 }
 
 function downloadMarkdown(content: string) {
@@ -20,7 +23,7 @@ function downloadMarkdown(content: string) {
   URL.revokeObjectURL(url)
 }
 
-export const MessageBubble = memo(function MessageBubble({ message, onEdit }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message, onEdit, onClarificationSubmit }: MessageBubbleProps) {
   // ── All hooks unconditionally at the top ──────────────────────────────
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(message.content)
@@ -151,6 +154,13 @@ export const MessageBubble = memo(function MessageBubble({ message, onEdit }: Me
             <ThinkingPanel steps={message.thinkingSteps} isLive={false} />
           )}
           <MarkdownMessage content={message.content} />
+          {message.clarificationQuestions && message.clarificationQuestions.length > 0 && (
+            <ClarificationBlock
+              questions={message.clarificationQuestions}
+              onSubmit={onClarificationSubmit}
+              answered={message.clarificationAnswered}
+            />
+          )}
         </div>
         {/* Action bar — visible on hover */}
         <div className="flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">

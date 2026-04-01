@@ -13,6 +13,7 @@ export { MermaidDiagram } from './MermaidDiagram'
 export { ChartBlock } from './ChartBlock'
 export { ThinkingPanel } from './ThinkingPanel'
 export { SourcesSidebar } from './SourcesSidebar'
+export { ClarificationBlock } from './ClarificationBlock'
 export { extractWebSources, parseWebSearchResult, sourceDomain, faviconUrl } from './webSourceUtils'
 export { ConversationSidebar } from './ConversationSidebar'
 
