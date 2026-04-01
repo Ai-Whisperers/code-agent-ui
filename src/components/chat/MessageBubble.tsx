@@ -1,8 +1,9 @@
 import { memo, useState, useRef, useEffect, useCallback } from 'react'
-import { User, Bot, Pencil, Copy, Check, Download } from 'lucide-react'
+import { User, Bot, Pencil, Copy, Check, Download, Globe } from 'lucide-react'
 import type { ChatMessage } from '@/types/api'
 import { MarkdownMessage } from './MarkdownMessage'
 import { ThinkingPanel } from './ThinkingPanel'
+import { SourcesSidebar } from './SourcesSidebar'
 
 interface MessageBubbleProps {
   message: ChatMessage
@@ -25,6 +26,7 @@ export const MessageBubble = memo(function MessageBubble({ message, onEdit }: Me
   const [editText, setEditText] = useState(message.content)
   const [userCopied, setUserCopied] = useState(false)
   const [assistantCopied, setAssistantCopied] = useState(false)
+  const [showSources, setShowSources] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -167,8 +169,33 @@ export const MessageBubble = memo(function MessageBubble({ message, onEdit }: Me
           >
             <Download size={13} />
           </button>
+
+          {/* Sources pill — only when web search was used */}
+          {message.webSources && message.webSources.length > 0 && (
+            <button
+              onClick={() => setShowSources(true)}
+              className={[
+                'ml-1 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors',
+                'border border-[var(--color-borders-border-primary)]',
+                'text-[var(--color-fonts-font-color-support)]',
+                'hover:text-[var(--color-fonts-font-color-primary)]',
+                'hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30',
+              ].join(' ')}
+              title="View web search sources"
+            >
+              <Globe size={11} />
+              {message.webSources.length} source{message.webSources.length !== 1 ? 's' : ''}
+            </button>
+          )}
         </div>
       </div>
+
+      {showSources && message.webSources && (
+        <SourcesSidebar
+          sources={message.webSources}
+          onClose={() => setShowSources(false)}
+        />
+      )}
     </div>
   )
 })

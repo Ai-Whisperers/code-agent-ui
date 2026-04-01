@@ -765,11 +765,22 @@ export type ThinkingStep =
   | { kind: 'thought'; text: string; timestamp?: number }
   | { kind: 'tool'; name: string; input?: Record<string, unknown>; result?: string; status: 'running' | 'completed' | 'error'; startTime: number; endTime?: number }
 
+/** A single web search result, parsed from a web_search tool response. */
+export interface WebSource {
+  title: string
+  url: string
+  snippet?: string
+  /** The search query that produced this result. */
+  query?: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinkingSteps?: ThinkingStep[]
+  /** Sources collected from web_search tool calls in this message. */
+  webSources?: WebSource[]
 }
 
 export interface ConversationSummary {
@@ -957,6 +968,24 @@ export interface ScopeLinkedProduct {
 
 /** @deprecated Use ScopeLinkedProduct */
 export type RoadmapLinkedProduct = ScopeLinkedProduct
+
+export interface JiraIssueReview {
+  id?: string
+  scopeId?: string
+  issueKey: string
+  issueType: string
+  issueSummary?: string
+  parentKey?: string
+  jiraStatus?: string
+  readinessScore?: number
+  readinessLabel?: string
+  complexityScore?: number
+  improvementSummary?: string
+  reviewJson?: string
+  jobId?: string
+  reviewedAt?: string
+  createdAt?: string
+}
 
 export interface ScopeProposal {
   id: string

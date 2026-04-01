@@ -5,6 +5,7 @@ import {
   Save,
   CheckCircle2,
   ExternalLink,
+  Loader2,
   Paperclip,
   Sparkles,
   AlertTriangle,
@@ -30,12 +31,14 @@ import {
   MessageBubble,
   StreamingMarkdownMessage,
   ThinkingPanel,
+  extractWebSources,
   type ChatInputHandle,
 } from '@/components/chat'
 import type {
   ScopeProposal,
   ScopeProposalInitResult,
   JiraAttachment,
+  JiraIssueReview,
   ConversationContext,
   ScopeTreeItem,
 } from '@/types/api'
@@ -225,6 +228,26 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length, activeTabIdx])
 
+  // ── Auto-review: tracks which key is currently being reviewed ──────────────
+  const [reviewingKey, setReviewingKey] = useState<string | null>(null)
+
+  // ── Auto-review mutation (direct/synchronous — fired after every save) ──────
+  const autoReviewMutation = useMutation({
+    mutationFn: async ({ key }: { key: string }) =>
+      api
+        .post(`/scope/${scopeId}/items/${key}/review-direct`, {})
+        .then((r) => r.data as JiraIssueReview),
+    onSuccess: (_data, { key }) => {
+      setReviewingKey(null)
+      queryClient.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
+      setToast({ message: `Review updated for ${key}`, variant: 'success' })
+    },
+    onError: (_err, { key }) => {
+      setReviewingKey(null)
+      setToast({ message: `Auto-review failed for ${key}`, variant: 'error' })
+    },
+  })
+
   // ── Save mutation ──────────────────────────────────────────────────────────
   const saveMutation = useMutation({
     mutationFn: async ({ idx }: { idx: number }) => {
@@ -247,6 +270,12 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           prev.map((t, i) => (i === idx ? { ...t, proposal: data, dirty: false } : t)),
         )
         setToast({ message: 'Proposal saved', variant: 'success' })
+        // Fire auto-review in the background — skips synthetic NEW-* keys
+        const savedKey = tabs[idx]?.issueKey
+        if (savedKey && !savedKey.startsWith('NEW-')) {
+          setReviewingKey(savedKey)
+          autoReviewMutation.mutate({ key: savedKey })
+        }
       }
     },
     onError: () => setToast({ message: 'Save failed — check console', variant: 'error' }),
@@ -284,7 +313,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     onError: () => setToast({ message: 'Jira sync failed — check console', variant: 'error' }),
   })
 
-  // ── Review mutation ────────────────────────────────────────────────────────
+  // ── Review mutation (manual queue) ────────────────────────────────────────
   const reviewMutation = useMutation({
     mutationFn: async ({ key }: { key: string }) =>
       api.post(`/scope/${scopeId}/review/${key}`, {}).then((r) => r.data),
@@ -578,11 +607,13 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
         }
 
         if (accContent) {
+          const webSources = extractWebSources(accThinking)
           const assistantMsg: ChatMessage = {
             id: crypto.randomUUID(),
             role: 'assistant',
             content: accContent,
             thinkingSteps: accThinking.length > 0 ? accThinking : undefined,
+            webSources: webSources.length > 0 ? webSources : undefined,
           }
           setChatMessages((prev) => [...prev, assistantMsg])
         }
@@ -681,14 +712,18 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                     <JiraIssueLink issueKey={tab.issueKey} jiraBaseUrl={jiraBaseUrl} />
                   )}
 
-                  {/* Readiness score — coloured number only, label in tooltip */}
-                  {ti?.readinessScore != null && ti.readinessLabel && (
+                  {/* Readiness score — spinner while reviewing, coloured number otherwise */}
+                  {reviewingKey === tab.issueKey ? (
+                    <Tooltip text="Reviewing…">
+                      <Loader2 size={10} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
+                    </Tooltip>
+                  ) : ti?.readinessScore != null && ti.readinessLabel ? (
                     <Tooltip text={ti.readinessLabel.replace(/_/g, ' ')}>
                       <span className={`text-[10px] font-bold tabular-nums ${SCORE_COLOR[ti.readinessLabel] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
                         {ti.readinessScore}
                       </span>
                     </Tooltip>
-                  )}
+                  ) : null}
 
                   {/* Unsaved-changes dot */}
                   {tab.dirty && (
@@ -774,6 +809,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                 tabIdx={activeTabIdx}
                 onFieldChange={updateField}
                 treeItem={treeItemByKey.get(activeTab.issueKey)}
+                isReviewing={reviewingKey === activeTab.issueKey}
               />
             ) : null}
           </div>
@@ -859,6 +895,25 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                     </span>
                   </Tooltip>
                 )}
+
+                {/* Last review timestamp */}
+                {(() => {
+                  const ti = treeItemByKey.get(activeTab.issueKey)
+                  if (!ti?.reviewedAt) return null
+                  return reviewingKey === activeTab.issueKey ? (
+                    <span className="flex items-center gap-1 animate-pulse">
+                      <Loader2 size={10} className="animate-spin" />
+                      Reviewing…
+                    </span>
+                  ) : (
+                    <Tooltip text={`Last reviewed: ${new Date(ti.reviewedAt).toLocaleString()}`}>
+                      <span className="cursor-default flex items-center gap-1">
+                        <Sparkles size={10} />
+                        {fmtDate(ti.reviewedAt)}
+                      </span>
+                    </Tooltip>
+                  )
+                })()}
 
                 {activeTab.proposal.status === 'ACCEPTED' && activeTab.proposal.updatedAt && (
                   <Tooltip text={new Date(activeTab.proposal.updatedAt).toLocaleString()}>
@@ -1064,15 +1119,30 @@ function ProposalForm({
   tabIdx,
   onFieldChange,
   treeItem,
+  isReviewing = false,
 }: {
   tab: TabState
   tabIdx: number
   onFieldChange: (idx: number, field: keyof ScopeProposal, value: string) => void
   treeItem?: ScopeTreeItem
+  isReviewing?: boolean
 }) {
-  const [fieldTab, setFieldTab] = useState<'content' | 'details'>('content')
+  const [fieldTab, setFieldTab] = useState<'content' | 'details' | 'review'>('content')
   const proposal = tab.proposal!
   const locked = proposal.status === 'ACCEPTED'
+
+  // Auto-switch to Review tab when a review starts or finishes
+  useEffect(() => {
+    if (isReviewing) setFieldTab('review')
+  }, [isReviewing])
+
+  // Also switch when a fresh result arrives (treeItem gains a score for the first time)
+  const prevHadReview = useRef(!!treeItem?.readinessScore)
+  useEffect(() => {
+    const hasReview = !!treeItem?.readinessScore
+    if (hasReview && !prevHadReview.current) setFieldTab('review')
+    prevHadReview.current = hasReview
+  }, [treeItem?.readinessScore])
 
   const highlightClass = (field: string) =>
     tab.highlightedFields.has(field)
@@ -1082,15 +1152,30 @@ function ProposalForm({
   const labelClass =
     'block text-[11px] font-medium text-[var(--color-fonts-font-color-support)] mb-1'
 
+  const reviewLabel = treeItem?.readinessLabel
+  const reviewScore = treeItem?.readinessScore
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Inner tab bar: Content / Details */}
+      {/* Inner tab bar: Content / Details / Review */}
       <TabBar className="shrink-0 mb-4">
         <TabButton active={fieldTab === 'content'} onClick={() => setFieldTab('content')}>
           Content
         </TabButton>
         <TabButton active={fieldTab === 'details'} onClick={() => setFieldTab('details')}>
           Details
+        </TabButton>
+        <TabButton active={fieldTab === 'review'} onClick={() => setFieldTab('review')}>
+          <span className="flex items-center gap-1.5">
+            Review
+            {isReviewing ? (
+              <Loader2 size={10} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
+            ) : reviewScore != null && reviewLabel ? (
+              <span className={`text-[10px] font-bold tabular-nums ${SCORE_COLOR[reviewLabel] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
+                {reviewScore}
+              </span>
+            ) : null}
+          </span>
         </TabButton>
       </TabBar>
 
@@ -1205,44 +1290,80 @@ function ProposalForm({
               placeholder="Implementation notes, tech stack, constraints…"
             />
           </div>
+        </div>
+      )}
 
-          {/* ── Readiness Review ──────────────────────────────────────────── */}
-          {treeItem && (treeItem.readinessScore != null || treeItem.readinessLabel) ? (
-            <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)]">
-                  AI Readiness Review
-                </span>
-                <div className="flex items-center gap-2">
-                  {treeItem.isStale && (
-                    <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded">
-                      <AlertTriangle size={10} /> Stale
-                    </span>
-                  )}
+      {/* ── Review tab ───────────────────────────────────────────────────── */}
+      {fieldTab === 'review' && (
+        <div className="flex-1 overflow-y-auto">
+          {isReviewing ? (
+            <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
+              <div className="flex items-center gap-2.5 text-sm text-[var(--color-fonts-font-color-support)]">
+                <Loader2 size={15} className="animate-spin shrink-0" />
+                <span>Running AI readiness review…</span>
+              </div>
+              {treeItem && (treeItem.readinessScore != null || treeItem.readinessLabel) && (
+                <div className="mt-4 opacity-30 pointer-events-none">
                   <ReadinessBadge
                     label={treeItem.readinessLabel}
                     score={treeItem.readinessScore}
                     showScore
                   />
                 </div>
+              )}
+            </div>
+          ) : treeItem && (treeItem.readinessScore != null || treeItem.readinessLabel) ? (
+            <div className="space-y-4">
+              {/* Score card */}
+              <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <span className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)]">
+                    AI Readiness Score
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {treeItem.isStale && (
+                      <Tooltip text="Jira was modified after the last review — consider re-running">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded cursor-default">
+                          <AlertTriangle size={10} /> Stale
+                        </span>
+                      </Tooltip>
+                    )}
+                    <ReadinessBadge
+                      label={treeItem.readinessLabel}
+                      score={treeItem.readinessScore}
+                      showScore
+                    />
+                  </div>
+                </div>
+
+                {treeItem.reviewedAt && (
+                  <p className="text-[11px] text-[var(--color-fonts-font-color-support)]">
+                    Reviewed {fmtDate(treeItem.reviewedAt)}
+                    {treeItem.isStale && ' · Jira has changed since'}
+                  </p>
+                )}
               </div>
 
+              {/* Improvement summary */}
               {treeItem.improvementSummary && (
-                <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
-                  {treeItem.improvementSummary}
-                </p>
-              )}
-
-              {treeItem.reviewedAt && (
-                <p className="text-[11px] text-[var(--color-fonts-font-color-support)]">
-                  Reviewed {fmtDate(treeItem.reviewedAt)}
-                </p>
+                <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
+                  <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-2">
+                    Improvement Suggestions
+                  </p>
+                  <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
+                    {treeItem.improvementSummary}
+                  </p>
+                </div>
               )}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-[var(--color-borders-border-primary)] p-4 text-center">
-              <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-                No review yet — click <span className="font-medium">Review</span> to run an AI readiness analysis.
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <Sparkles size={28} className="text-violet-400 opacity-40" />
+              <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+                No review yet
+              </p>
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] max-w-xs">
+                Save the proposal then click <span className="font-medium">Review</span> in the footer, or save to trigger an automatic review.
               </p>
             </div>
           )}

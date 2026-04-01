@@ -221,6 +221,15 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'web-search',
+    label: 'Web Search (Tavily)',
+    settings: [
+      { key: 'tools.web-search.enabled', label: 'Web Search Enabled', description: 'Allow the AI to search the web via Tavily. Requires an API key below.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'tools.web-search.tavily-api-key', label: 'Tavily API Key', description: 'API key from app.tavily.com. Stored encrypted. Set TAVILY_API_KEY env var or enter here.', isSecret: true },
+      { key: 'tools.web-search.max-results', label: 'Max Results per Query', description: 'Number of search results returned per query (default: 5, max: 10)', defaultValue: '5', inputType: 'number', min: 1, max: 10 },
+    ],
+  },
+  {
     id: 'mcp',
     label: 'MCP / Linked Accounts',
     settings: [
@@ -297,7 +306,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'run-fix.self-review.max-diff-chars', label: 'Self-Review Max Diff Chars', description: 'Maximum diff size sent to self-review (characters)', defaultValue: '30000', inputType: 'number', min: 1000, step: 1000 },
       { key: 'tools.fetch-url.enabled', label: 'Fetch URL Tool', description: 'Allow the agent to fetch external documentation URLs', defaultValue: 'true', inputType: 'boolean' },
       { key: 'tools.fetch-url.timeout-seconds', label: 'Fetch URL Timeout (seconds)', description: 'Timeout for external URL fetches', defaultValue: '15', inputType: 'number', min: 1 },
-      { key: 'tools.fetch-url.allowed-domains', label: 'Fetch URL Allowed Domains', description: 'Comma-separated domain allowlist for URL fetches. Blank = all public HTTPS.', defaultValue: 'quarkus.io,search.maven.org', inputType: 'textarea' },
+      { key: 'tools.fetch-url.allowed-domains', label: 'Fetch URL Allowed Domains', description: 'Optional strict allowlist. Blank (default) = allow all public HTTPS. Reserved internal TLDs (.local, .internal, .corp, etc.) and private IPs are always blocked regardless of this setting.', defaultValue: '', inputType: 'textarea' },
     ],
   },
   {
@@ -510,7 +519,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },

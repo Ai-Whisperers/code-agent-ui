@@ -12,6 +12,8 @@ export { patchStreamingContent, DIAGRAM_LOADING_PLACEHOLDER } from './streamingU
 export { MermaidDiagram } from './MermaidDiagram'
 export { ChartBlock } from './ChartBlock'
 export { ThinkingPanel } from './ThinkingPanel'
+export { SourcesSidebar } from './SourcesSidebar'
+export { extractWebSources, parseWebSearchResult, sourceDomain, faviconUrl } from './webSourceUtils'
 export { ConversationSidebar } from './ConversationSidebar'
 
 export { markdownComponents } from './markdownComponents'

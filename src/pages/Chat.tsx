@@ -19,6 +19,7 @@ import {
   ThinkingPanel,
   ConversationSidebar,
   StreamingMarkdownMessage,
+  extractWebSources,
   redactSecrets,
   loadMessagesFromStorage,
   saveMessagesToStorage,
@@ -393,11 +394,13 @@ export default function Chat() {
                 }
                 chatStreamActions.setContent(accumulatedContent)
 
+                const webSources = extractWebSources(accumulatedThinkingSteps)
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   role: 'assistant',
                   content: accumulatedContent,
                   thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                  webSources: webSources.length > 0 ? webSources : undefined,
                 }
                 setMessages((prev) => {
                   const next = [...prev, assistantMsg]
@@ -642,7 +645,8 @@ export default function Chat() {
               chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             }
-            case 'done':
+            case 'done': {
+              const planWebSources = extractWebSources(accumulatedThinkingSteps)
               setActivePlans(prev => prev.map(p =>
                 p.planId === planId ? { ...p, status: 'COMPLETED' as PlanStatus } : p
               ))
@@ -653,11 +657,13 @@ export default function Chat() {
                   role: 'assistant' as const,
                   content: accumulatedContent || `Plan **${planId}** implemented successfully.`,
                   thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                  webSources: planWebSources.length > 0 ? planWebSources : undefined,
                 },
               ])
               if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
               chatStreamActions.finish()
               return
+            }
             case 'error':
               setActivePlans(prev => prev.map(p =>
                 p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
@@ -678,6 +684,7 @@ export default function Chat() {
       }
 
       if (accumulatedContent) {
+        const fallbackSources = extractWebSources(accumulatedThinkingSteps)
         setMessages(prev => [
           ...prev,
           {
@@ -685,6 +692,7 @@ export default function Chat() {
             role: 'assistant' as const,
             content: accumulatedContent,
             thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+            webSources: fallbackSources.length > 0 ? fallbackSources : undefined,
           },
         ])
       }
