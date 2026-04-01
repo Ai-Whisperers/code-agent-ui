@@ -21,6 +21,8 @@ import { Select } from '@/components/ui/Select'
 import { Toast, type ToastConfig } from '@/components/ui/Toast'
 import { TabBar, TabButton } from '@/components/ui/Tabs'
 import { ResizableDivider } from '@/components/ui/ResizableDivider'
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
+import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
 import {
@@ -38,6 +40,7 @@ import type {
   ScopeTreeItem,
 } from '@/types/api'
 import type { ChatMessage, ThinkingStep } from '@/types/api'
+import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -49,16 +52,36 @@ const PRIORITY_OPTIONS = [
   { value: 'Low', label: 'Low' },
 ]
 
-const TYPE_LABEL: Record<string, string> = {
-  EPIC: 'Epic',
-  FEATURE: 'Feature',
-  USERSTORY: 'Story',
+/** Colour for the numeric readiness score based on the label band. */
+const SCORE_COLOR: Record<string, string> = {
+  poor:                          'text-[var(--color-tags-font-critical)]',
+  needs_refinement:              'text-[var(--color-tags-font-attention)]',
+  ready_with_minor_improvements: 'text-blue-600 dark:text-blue-400',
+  fully_ready:                   'text-[var(--color-tags-font-success)]',
 }
 
-const TYPE_BG: Record<string, string> = {
-  EPIC:      'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  FEATURE:   'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  USERSTORY: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+type SuggestedPrompt = { label: string; prompt: string }
+
+/** Per-issue-type quick-start prompts shown in the empty chat state. */
+const SUGGESTED_PROMPTS: Record<string, SuggestedPrompt[]> = {
+  EPIC: [
+    { label: 'Review the why',            prompt: 'Review the business case and suggest how to make the "why" clearer and more compelling.' },
+    { label: 'Strengthen the summary',    prompt: 'Rewrite the summary to be more outcome-focused (start with a verb, ≤ 120 characters).' },
+    { label: 'Add acceptance criteria',   prompt: 'Propose clear, measurable acceptance criteria for this Epic.' },
+    { label: 'Identify missing features', prompt: 'Are there any obvious features missing to achieve the Epic goal?' },
+  ],
+  FEATURE: [
+    { label: 'Review what to build',      prompt: 'Review the feature description and clarify what exactly needs to be built.' },
+    { label: 'Improve description',       prompt: 'Improve the description so it is clear enough for the engineering team to start work.' },
+    { label: 'Add technical notes',       prompt: 'Suggest relevant technical notes or implementation hints for this feature.' },
+    { label: 'Propose acceptance criteria', prompt: 'Propose acceptance criteria covering happy path, edge cases, and error handling.' },
+  ],
+  USERSTORY: [
+    { label: 'Review the how',            prompt: 'Review the user story and make the "how" concrete and actionable.' },
+    { label: 'Check acceptance criteria', prompt: 'Review the acceptance criteria — are they complete, testable, and unambiguous?' },
+    { label: 'Add edge cases',            prompt: 'Add edge cases and error scenarios to the acceptance criteria.' },
+    { label: 'Improve the summary',       prompt: 'Rewrite the summary in the "As a … I want … so that …" format.' },
+  ],
 }
 
 function fmtDate(iso?: string): string {
@@ -587,6 +610,14 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     queryFn: () => api.get(`/scope/${scopeId}`).then((r) => r.data),
   })
 
+  // ── Jira base URL (for issue key links) ───────────────────────────────────
+  const { data: systemConfig } = useQuery<SystemConfig>({
+    queryKey: ['mcp-system-config'],
+    queryFn: () => mcpProfilesApi.getSystemConfig(),
+    staleTime: 5 * 60 * 1000,
+  })
+  const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
+
   const activeTab = tabs[activeTabIdx]
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -606,8 +637,15 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           </Button>
         </Tooltip>
         <span className="text-[var(--color-fonts-font-color-support)] text-xs">/</span>
-        <span className="text-xs font-semibold text-[var(--color-fonts-font-color-primary)]">
-          {issueKey} — Improve with AI
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-[var(--color-fonts-font-color-primary)]">
+          <IssueTypeIcon issueType={tabs[0]?.issueType ?? 'EPIC'} size={12} />
+          <JiraIssueLink issueKey={issueKey} jiraBaseUrl={jiraBaseUrl} />
+          {treeItemByKey.get(issueKey)?.summary && (
+            <>
+              <span className="text-[var(--color-fonts-font-color-support)] font-normal">—</span>
+              <span>{treeItemByKey.get(issueKey)!.summary}</span>
+            </>
+          )}
         </span>
       </div>
 
@@ -620,27 +658,39 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           <TabBar className="px-4 shrink-0 bg-[var(--color-cards-card-background)]">
             {tabs.map((tab, idx) => {
               const ti = treeItemByKey.get(tab.issueKey)
+
               return (
                 <TabButton
                   key={tab.issueKey}
                   active={idx === activeTabIdx}
                   onClick={() => setActiveTabIdx(idx)}
                 >
-                  <span
-                    className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[tab.issueType] ?? 'bg-gray-100 text-gray-600'}`}
-                  >
-                    {TYPE_LABEL[tab.issueType] ?? tab.issueType}
-                  </span>
-                  {tab.isNew
-                    ? (tab.proposal?.proposedSummary
+                  {/* Type icon with tooltip */}
+                  <IssueTypeIcon issueType={tab.issueType} size={13} />
+
+                  {/* Issue key (Jira link) or new-tab summary */}
+                  {tab.isNew ? (
+                    <span>
+                      {tab.proposal?.proposedSummary
                         ? tab.proposal.proposedSummary.length > 28
                           ? tab.proposal.proposedSummary.slice(0, 28) + '…'
                           : tab.proposal.proposedSummary
-                        : tab.issueType === 'USERSTORY' ? 'New story' : 'New feature')
-                    : tab.issueKey}
-                  {ti?.readinessLabel && (
-                    <ReadinessBadge label={ti.readinessLabel} score={ti.readinessScore} showScore />
+                        : tab.issueType === 'USERSTORY' ? 'New story' : 'New feature'}
+                    </span>
+                  ) : (
+                    <JiraIssueLink issueKey={tab.issueKey} jiraBaseUrl={jiraBaseUrl} />
                   )}
+
+                  {/* Readiness score — coloured number only, label in tooltip */}
+                  {ti?.readinessScore != null && ti.readinessLabel && (
+                    <Tooltip text={ti.readinessLabel.replace(/_/g, ' ')}>
+                      <span className={`text-[10px] font-bold tabular-nums ${SCORE_COLOR[ti.readinessLabel] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
+                        {ti.readinessScore}
+                      </span>
+                    </Tooltip>
+                  )}
+
+                  {/* Unsaved-changes dot */}
                   {tab.dirty && (
                     <span className="text-[var(--color-buttons-button-primary)]">•</span>
                   )}
@@ -860,12 +910,31 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {chatMessages.length === 0 && !isStreaming && (
-              <div className="flex flex-col items-center justify-center h-full gap-3 text-[var(--color-fonts-font-color-support)] py-12">
-                <Sparkles size={28} className="opacity-30" />
-                <p className="text-sm">Ask the Product Owner AI to help refine this proposal.</p>
-                <p className="text-xs opacity-60">
-                  Suggested: &ldquo;Review the description and improve the acceptance criteria.&rdquo;
+              <div className="flex flex-col items-center justify-center h-full gap-4 py-12">
+                <Sparkles size={28} className="text-violet-400 opacity-50" />
+                <p className="text-sm text-[var(--color-fonts-font-color-support)]">
+                  Ask the Product Owner AI to help refine this proposal.
                 </p>
+                {/* Clickable prompt suggestions — vary by active tab type */}
+                <div className="grid grid-cols-2 gap-2 w-full max-w-sm mt-1">
+                  {(SUGGESTED_PROMPTS[activeTab?.issueType ?? 'EPIC'] ?? SUGGESTED_PROMPTS.EPIC).map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => sendMessage(p.prompt)}
+                      className={[
+                        'text-left px-3 py-2.5 rounded-xl text-xs leading-snug',
+                        'border border-[var(--color-borders-border-primary)]',
+                        'bg-[var(--color-cards-card-background)]',
+                        'text-[var(--color-fonts-font-color-primary)]',
+                        'hover:border-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30',
+                        'transition-colors cursor-pointer',
+                      ].join(' ')}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
             {chatMessages.map((msg) => (
