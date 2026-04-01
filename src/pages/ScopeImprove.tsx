@@ -155,7 +155,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   // ── Scope tree to find tabs ────────────────────────────────────────────────
   const { data: treeItems } = useQuery<ScopeTreeItem[]>({
     queryKey: ['scope-tree', scopeId],
-    queryFn: () => api.get(`/scope/${scopeId}/tree`).then((r) => r.data),
+    queryFn: () => api.get(`/scope/${scopeId}/evaluation/tree`).then((r) => r.data),
   })
 
   const treeItemByKey = useMemo<Map<string, ScopeTreeItem>>(
@@ -209,7 +209,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
       try {
         await refreshToken()
         const result: ScopeProposalInitResult = await api
-          .post(`/scope/${scopeId}/items/${tab.issueKey}/proposal/init`, {})
+          .post(`/scope/${scopeId}/improvement/items/${tab.issueKey}/proposal/init`, {})
           .then((r) => r.data)
         setTabs((prev) =>
           prev.map((t, i) =>
@@ -234,25 +234,8 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length, activeTabIdx])
 
-  // ── Auto-review: tracks which key is currently being reviewed ──────────────
+  // ── Review: tracks which key is currently being reviewed ───────────────────
   const [reviewingKey, setReviewingKey] = useState<string | null>(null)
-
-  // ── Auto-review mutation (direct/synchronous — fired after every save) ──────
-  const autoReviewMutation = useMutation({
-    mutationFn: async ({ key }: { key: string }) =>
-      api
-        .post(`/scope/${scopeId}/items/${key}/review-direct`, {})
-        .then((r) => r.data as JiraIssueReview),
-    onSuccess: (_data, { key }) => {
-      setReviewingKey(null)
-      queryClient.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
-      setToast({ message: `Review updated for ${key}`, variant: 'success' })
-    },
-    onError: (_err, { key }) => {
-      setReviewingKey(null)
-      setToast({ message: `Auto-review failed for ${key}`, variant: 'error' })
-    },
-  })
 
   // ── Save mutation ──────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -260,7 +243,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
       const tab = tabs[idx]
       if (!tab?.proposal) return null
       return api
-        .put(`/scope/${scopeId}/proposals/${tab.proposal.id}`, {
+        .put(`/scope/${scopeId}/improvement/proposals/${tab.proposal.id}`, {
           proposedSummary:     tab.proposal.proposedSummary ?? null,
           proposedDescription: tab.proposal.proposedDescription ?? null,
           proposedCriteria:    tab.proposal.proposedCriteria ?? null,
@@ -276,12 +259,6 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           prev.map((t, i) => (i === idx ? { ...t, proposal: data, dirty: false } : t)),
         )
         setToast({ message: 'Proposal saved', variant: 'success' })
-        // Fire auto-review in the background — skips synthetic NEW-* keys
-        const savedKey = tabs[idx]?.issueKey
-        if (savedKey && !savedKey.startsWith('NEW-')) {
-          setReviewingKey(savedKey)
-          autoReviewMutation.mutate({ key: savedKey })
-        }
       }
     },
     onError: () => setToast({ message: 'Save failed — check console', variant: 'error' }),
@@ -292,7 +269,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     mutationFn: async ({ idx }: { idx: number }) => {
       const tab = tabs[idx]
       if (!tab?.proposal) return null
-      await api.put(`/scope/${scopeId}/proposals/${tab.proposal.id}`, {
+      await api.put(`/scope/${scopeId}/improvement/proposals/${tab.proposal.id}`, {
         proposedSummary:     tab.proposal.proposedSummary ?? null,
         proposedDescription: tab.proposal.proposedDescription ?? null,
         proposedCriteria:    tab.proposal.proposedCriteria ?? null,
@@ -301,7 +278,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
         proposedPriority:    tab.proposal.proposedPriority ?? null,
       })
       return api
-        .post(`/scope/${scopeId}/proposals/${tab.proposal.id}/accept`, {})
+        .post(`/scope/${scopeId}/improvement/proposals/${tab.proposal.id}/accept`, {})
         .then((r) => r.data as ScopeProposal)
     },
     onSuccess: (data, { idx }) => {
@@ -319,12 +296,22 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     onError: () => setToast({ message: 'Jira sync failed — check console', variant: 'error' }),
   })
 
-  // ── Review mutation (manual queue) ────────────────────────────────────────
+  // ── Review mutation (direct/synchronous) ──────────────────────────────────
   const reviewMutation = useMutation({
     mutationFn: async ({ key }: { key: string }) =>
-      api.post(`/scope/${scopeId}/review/${key}`, {}).then((r) => r.data),
-    onSuccess: () => setToast({ message: 'Review queued', variant: 'info' }),
-    onError: () => setToast({ message: 'Review failed — check console', variant: 'error' }),
+      api
+        .post(`/scope/${scopeId}/evaluation/items/${key}/review-direct`, {})
+        .then((r) => r.data as JiraIssueReview),
+    onMutate: ({ key }) => setReviewingKey(key),
+    onSuccess: (_data, { key }) => {
+      setReviewingKey(null)
+      queryClient.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
+      setToast({ message: `Review updated for ${key}`, variant: 'success' })
+    },
+    onError: (_err, { key }) => {
+      setReviewingKey(null)
+      setToast({ message: `Review failed for ${key}`, variant: 'error' })
+    },
   })
 
   // ── Delete mutation ────────────────────────────────────────────────────────
@@ -334,7 +321,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
     mutationFn: async ({ idx }: { idx: number }) => {
       const tab = tabs[idx]
       if (!tab?.proposal) return
-      await api.delete(`/scope/${scopeId}/proposals/${tab.proposal.id}`)
+      await api.delete(`/scope/${scopeId}/improvement/proposals/${tab.proposal.id}`)
     },
     onSuccess: (_data, { idx }) => {
       const deletedTab = tabs[idx]
@@ -372,7 +359,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const addFeatureMutation = useMutation({
     mutationFn: async ({ parentKey, title }: { parentKey: string; title: string }) =>
       api
-        .post(`/scope/${scopeId}/proposals/new-feature`, {
+        .post(`/scope/${scopeId}/improvement/proposals/new-feature`, {
           parentKey,
           proposedSummary: title.trim() || undefined,
         })
@@ -406,7 +393,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const proposeMutation = useMutation({
     mutationFn: async () =>
       api
-        .post(`/scope/${scopeId}/items/${epicKey}/propose-features`, {})
+        .post(`/scope/${scopeId}/improvement/items/${epicKey}/propose-features`, {})
         .then((r) => r.data as ScopeProposal[]),
     onSuccess: (proposals) => {
       if (!proposals.length) {
@@ -442,7 +429,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const proposeStoriesMutation = useMutation({
     mutationFn: async (featureKey: string) =>
       api
-        .post(`/scope/${scopeId}/items/${featureKey}/propose-stories`, {})
+        .post(`/scope/${scopeId}/improvement/items/${featureKey}/propose-stories`, {})
         .then((r) => r.data as ScopeProposal[]),
     onSuccess: (proposals) => {
       if (!proposals.length) {
@@ -552,7 +539,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
         await refreshToken()
         const token = getToken()
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/scope/${scopeId}/items/${activeIssueKey}/improve-chat`,
+          `${import.meta.env.VITE_API_URL}/scope/${scopeId}/improvement/items/${activeIssueKey}/improve-chat`,
           {
             method: 'POST',
             signal: controller.signal,
@@ -886,13 +873,13 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                     </Button>
                   </Tooltip>
 
-                  <Tooltip text="Queue an AI readiness review for this issue">
+                  <Tooltip text="Run an AI readiness review for this issue">
                     <Button
                       variant="secondary"
                       size="sm"
                       icon={<Sparkles size={11} />}
-                      loading={reviewMutation.isPending}
-                      disabled={reviewMutation.isPending}
+                      loading={reviewMutation.isPending || reviewingKey === activeTab.issueKey}
+                      disabled={reviewMutation.isPending || reviewingKey === activeTab.issueKey}
                       onClick={() => reviewMutation.mutate({ key: activeTab.issueKey })}
                     >
                       Review

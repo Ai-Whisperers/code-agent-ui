@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
+import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2, Mic } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -8,6 +8,8 @@ import { ProductContextDialog } from './context/ProductContextDialog'
 import { AikidoIssueContextDialog } from './context/AikidoIssueContextDialog'
 import { JiraIssueContextDialog } from './context/JiraIssueContextDialog'
 import { ConfluenceDocContextDialog } from './context/ConfluenceDocContextDialog'
+import { useSpeechDictation } from './useSpeechDictation'
+import { MicWaveform } from './MicWaveform'
 
 export type ChatInputHandle = {
   clear: () => void
@@ -76,6 +78,20 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const secretDebounceRef = useRef<number | null>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const [dictationPreview, setDictationPreview] = useState('')
+
+  const { isListening, isSupported, toggleListening } = useSpeechDictation(
+    (transcript) => {
+      setInput(prev => (prev ? `${prev} ${transcript}` : transcript))
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (!el) return
+        el.style.height = 'auto'
+        el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+      })
+    },
+    { onInterim: setDictationPreview },
+  )
 
   // Initialize attachments with existing attachments when they change.
   // Skip entirely in simplified mode — no attachments are supported there, and
@@ -648,7 +664,9 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          className={`relative flex flex-col transition-colors ${isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''} ${
+          className={`relative flex flex-col transition-colors ${
+            isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''
+          } ${!isDragging && isListening ? 'ring-2 ring-red-400/80 ring-offset-2 ring-offset-[var(--color-page-background)]' : ''} ${
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
@@ -866,6 +884,42 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
             </div>
           )}
         </div>}
+
+        {isSupported && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                if (isStreaming) return
+                /** Second event of a double-click has detail=2; ignore so we don't stop right after start. */
+                if (e.detail === 2) return
+                toggleListening()
+              }}
+              disabled={isStreaming}
+              title={isListening ? 'Click to finish dictation' : 'Click to dictate — speak, then click again to finish'}
+              aria-pressed={isListening}
+              className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+                isListening
+                  ? 'bg-red-100 ring-2 ring-red-500 text-red-600 shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Mic size={16} aria-hidden />
+            </button>
+            {isListening && (
+              <div className="flex flex-col gap-0.5">
+                <MicWaveform active={isListening} />
+                <span
+                  className="text-[10px] leading-none text-red-600 font-medium max-w-[120px] truncate"
+                  aria-live="polite"
+                >
+                  {dictationPreview || 'Listening…'}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Input field */}
         <textarea

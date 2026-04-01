@@ -634,7 +634,7 @@ function ItemDetailPanel({
 
   const { data: proposals } = useQuery<ScopeProposal[]>({
     queryKey: ['scope-proposals', scopeId, node.issueKey],
-    queryFn: () => api.get(`/scope/${scopeId}/items/${node.issueKey}/proposals`).then((r) => r.data),
+    queryFn: () => api.get(`/scope/${scopeId}/improvement/items/${node.issueKey}/proposals`).then((r) => r.data),
     enabled: !isVirtual,
   })
   const draftCount = Array.isArray(proposals) ? proposals.filter((p) => p.status === 'DRAFT').length : 0
@@ -971,13 +971,13 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   const { data: activeReviewCount = 0 } = useQuery<number>({
     queryKey: ['scope-active-reviews', scopeId],
     queryFn: () =>
-      api.get(`/scope/${scopeId}/active-review-count`).then((r) => r.data?.count ?? 0).catch(() => 0),
+      api.get(`/scope/${scopeId}/evaluation/active-review-count`).then((r) => r.data?.count ?? 0).catch(() => 0),
     refetchInterval: (q) => ((q.state.data ?? 0) > 0 ? 5_000 : 30_000),
   })
 
   const { data: treeItems, isLoading } = useQuery<ScopeTreeItem[]>({
     queryKey: ['scope-tree', scopeId],
-    queryFn: () => api.get(`/scope/${scopeId}/tree`).then((r) => r.data).catch(() => []),
+    queryFn: () => api.get(`/scope/${scopeId}/evaluation/tree`).then((r) => r.data).catch(() => []),
     refetchInterval: activeReviewCount > 0 ? 5_000 : 30_000,
   })
 
@@ -1095,7 +1095,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
 
   const reviewAllMutation = useMutation<unknown, Error, boolean>({
     mutationFn: (force: boolean) =>
-      api.post(`/scope/${scopeId}/review-all${force ? '?force=true' : ''}`),
+      api.post(`/scope/${scopeId}/evaluation/review-all${force ? '?force=true' : ''}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
       qc.invalidateQueries({ queryKey: ['scope-active-reviews', scopeId] })
@@ -1103,7 +1103,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   })
 
   const reviewOneMutation = useMutation({
-    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/review/${issueKey}`),
+    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/evaluation/review/${issueKey}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
       qc.invalidateQueries({ queryKey: ['scope-active-reviews', scopeId] })
@@ -1112,17 +1112,17 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
 
   const overrideMutation = useMutation({
     mutationFn: ({ issueKey, status }: { issueKey: string; status: ItemOverrideStatus }) =>
-      api.put(`/scope/${scopeId}/items/${issueKey}/override`, { status }),
+      api.put(`/scope/${scopeId}/evaluation/items/${issueKey}/override`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 
   const clearOverrideMutation = useMutation({
-    mutationFn: (issueKey: string) => api.delete(`/scope/${scopeId}/items/${issueKey}/override`),
+    mutationFn: (issueKey: string) => api.delete(`/scope/${scopeId}/evaluation/items/${issueKey}/override`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 
   const refreshMutation = useMutation({
-    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/items/${issueKey}/refresh`),
+    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/evaluation/items/${issueKey}/refresh`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 

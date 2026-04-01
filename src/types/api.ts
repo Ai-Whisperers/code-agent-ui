@@ -1048,3 +1048,23 @@ export interface ProposalUpdatedEvent {
 }
 
 export type ExtendedChatEvent = ChatEvent | ProposalUpdatedEvent
+
+// ---- QA Readiness ----
+
+export interface QaReadinessSummary {
+  totalItems: number
+  reviewed: number
+  fullyReadyCount: number
+  minorImprovementsCount: number
+  needsRefinementCount: number
+  poorCount: number
+  inQaStatusCount: number
+  closedCount: number
+  staleCount: number
+  readyForDeliveryCount: number
+}
+
+export interface QaReadinessResponse {
+  summary: QaReadinessSummary
+  items: ScopeTreeItem[]
+}

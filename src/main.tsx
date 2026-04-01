@@ -42,6 +42,7 @@ import RoadmapDetail from '@/pages/RoadmapDetail'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
+import { QaReadinessPage } from '@/pages/QaReadiness'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
@@ -308,6 +309,13 @@ const scopeImproveRoute = createRoute({
   },
 })
 
+const qaReadinessRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa-readiness',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: QaReadinessPage,
+})
+
 const soc2AuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/compliance/soc2',
@@ -363,6 +371,7 @@ const routeTree = rootRoute.addChildren([
     scopesRoute,
     scopeDetailRoute,
     scopeImproveRoute,
+    qaReadinessRoute,
     soc2AuditRoute,
   ]),
   oauthCallbackRoute,

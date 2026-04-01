@@ -21,6 +21,7 @@ import {
   ScrollText,
   Target,
   Lock,
+  FlaskConical,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -95,6 +96,16 @@ export function ApplicationMenuItems(
       type: 'item',
       requiredPermission: 'VIEW_SCOPE',
       onClick: () => go('/metrics/scope'),
+    },
+    {
+      id: 'qa-readiness',
+      label: 'QA Readiness',
+      icon: <FlaskConical size={18} />,
+      path: '/qa-readiness',
+      isActive: currentPath === '/qa-readiness',
+      type: 'item',
+      requiredPermission: 'VIEW_SCOPE',
+      onClick: () => go('/qa-readiness'),
     },
     {
       id: 'metrics-section',

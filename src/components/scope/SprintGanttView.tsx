@@ -30,7 +30,7 @@ interface Props {
 export function SprintGanttView({ scopeId }: Props) {
   const { data, isLoading, isError } = useQuery<ScopeSprintGroup[]>({
     queryKey: ['scope-sprints', scopeId],
-    queryFn: () => api.get(`/scope/${scopeId}/sprints`).then((r) => r.data),
+    queryFn: () => api.get(`/scope/${scopeId}/evaluation/sprints`).then((r) => r.data),
   })
 
   const groups = Array.isArray(data) ? data : []
