@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import { Markdown } from 'tiptap-markdown'
 import {
@@ -134,13 +133,21 @@ export function RichTextEditor({
   // Set to true while we are calling setContent ourselves so onUpdate doesn't echo the change back
   const isExternalSyncRef = useRef(false)
 
-  const editor = useEditor({
-    extensions: [
+  // Stable extensions array — must not change between renders or useEditor recreates the editor
+  // tiptap-markdown already bundles its own `link` extension, so we must NOT add Link separately
+  const extensions = useMemo(
+    () => [
       StarterKit,
-      Link.configure({ openOnClick: false, autolink: true }),
       Placeholder.configure({ placeholder }),
       Markdown.configure({ html: false, transformPastedText: true }),
     ],
+    // placeholder rarely changes; if it does we intentionally accept the re-init
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  const editor = useEditor({
+    extensions,
     content: value,
     editable: !disabled,
     editorProps: {
@@ -151,25 +158,26 @@ export function RichTextEditor({
       if (isExternalSyncRef.current) return
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const md: string = (e.storage as any).markdown?.getMarkdown?.() ?? ''
+      // Guard: if the markdown hasn't actually changed, don't call onChange —
+      // this prevents the normalize-then-loop cycle where tiptap-markdown produces
+      // a slightly different string than the raw `value` prop on every setContent call
+      if (md === lastExternalRef.current) return
       lastExternalRef.current = md
       onChange(md)
     },
   })
 
-  // Sync external changes (e.g. AI updates or tab switching) into the editor without losing focus.
-  // We rely solely on value vs lastExternalRef to decide — the old isInternalRef guard was removed
-  // because it caused a race condition: if the user typed and then switched tabs in the same render
-  // batch the flag would still be true and the new tab's content would never load.
+  // Sync external changes (e.g. AI updates or tab switching) into the editor.
+  // We rely solely on value vs lastExternalRef to decide whether a sync is needed.
   useEffect(() => {
     if (!editor) return
-    if (value !== lastExternalRef.current) {
-      const { from, to } = editor.state.selection
-      isExternalSyncRef.current = true
-      editor.commands.setContent(value)
-      isExternalSyncRef.current = false
-      try { editor.commands.setTextSelection({ from, to }) } catch { /* selection may be out of range */ }
-      lastExternalRef.current = value
-    }
+    if (value === lastExternalRef.current) return
+    isExternalSyncRef.current = true
+    editor.commands.setContent(value)
+    // Keep flag true until after any synchronous transaction handlers fire,
+    // then clear it in a microtask so deferred onUpdate callbacks are also covered
+    queueMicrotask(() => { isExternalSyncRef.current = false })
+    lastExternalRef.current = value
   }, [value, editor])
 
   // Toggle editable when disabled prop changes

@@ -949,22 +949,25 @@ export default function Chat() {
                   )}
                   {streamingContent ? (
                     <StreamingMarkdownMessage content={streamingContent} />
-                  ) : (
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '0ms' }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '150ms' }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '300ms' }}
-                      />
+                  ) : streamingThinkingSteps.length === 0 ? (
+                    <div className="flex items-center gap-1.5 py-1 text-[var(--color-fonts-font-color-support)] opacity-60">
+                      <span className="text-sm">Thinking</span>
+                      <span className="flex items-center gap-0.5">
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '0ms' }}
+                        />
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '180ms' }}
+                        />
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '360ms' }}
+                        />
+                      </span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>

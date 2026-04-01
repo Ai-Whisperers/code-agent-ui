@@ -601,7 +601,7 @@ function ItemDetailPanel({
                   <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Aggregate</p>
                   <ScoreBar
                     score={node.aggregateScore}
-                    title={node.aggregateScore != null ? `Aggregate: ${node.aggregateScore}\nOverall readiness score` : undefined}
+                    title={node.aggregateScore != null ? `Aggregate: ${node.aggregateScore}\n40% own quality + 60% child average\n0 = not decomposed into children` : undefined}
                   />
                 </div>
               </div>
@@ -1178,7 +1178,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
                     className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
                     onClick={() => toggleSort('aggregateScore')}
                   >
-                    <Tooltip text={"Weighted rollup of child readiness scores.\nFormula: Σ(child.readiness × child.complexity) / Σ(child.complexity)\nFalls back to simple average when all complexity = 0.\n0 when item has no children."} position="bottom">
+                    <Tooltip text={"Overall health of the item and its children.\nFormula: 40% own readiness + 60% child aggregate average.\nChildren are complexity-weighted when enabled.\n0 = not decomposed (no child features/stories).\nUnknown (—) = children exist but none reviewed yet."} position="bottom">
                       <span className="flex items-center gap-1">
                         Aggregate <SortIcon field="aggregateScore" sortField={sortField} sortDir={sortDir} />
                       </span>

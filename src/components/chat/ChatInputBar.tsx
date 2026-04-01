@@ -39,6 +39,12 @@ type ChatInputBarProps = {
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 10MB
+// Stable reference used as default for existingAttachments and activePlans props.
+// Array literals as default parameter values create a new reference every render,
+// which causes the existingAttachments useEffect to fire infinitely.
+const EMPTY_ATTACHMENTS: ChatAttachment[] = []
+const EMPTY_PLANS: ExecutionPlan[] = []
+
 const DEFAULT_ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'text/plain', 'application/pdf', 'application/msword',
@@ -46,7 +52,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false, simplified = false },
+  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = EMPTY_ATTACHMENTS, existingContext, activePlans = EMPTY_PLANS, isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false, simplified = false },
   ref,
 ) {
   const [input, setInput] = useState('')
