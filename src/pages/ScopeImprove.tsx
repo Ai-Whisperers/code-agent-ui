@@ -11,6 +11,12 @@ import {
   AlertTriangle,
   Plus,
   Wand2,
+  FileText,
+  FileImage,
+  FileVideo,
+  FileAudio,
+  FileArchive,
+  Download,
 } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '@/lib/api'
@@ -25,7 +31,6 @@ import { ResizableDivider } from '@/components/ui/ResizableDivider'
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
-import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
 import {
   ChatInputBar,
   MessageBubble,
@@ -810,6 +815,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                 onFieldChange={updateField}
                 treeItem={treeItemByKey.get(activeTab.issueKey)}
                 isReviewing={reviewingKey === activeTab.issueKey}
+                scopeId={scopeId}
               />
             ) : null}
           </div>
@@ -1091,6 +1097,311 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   )
 }
 
+// ── Attachments tab ────────────────────────────────────────────────────────────
+
+function mimeIcon(mimeType: string) {
+  if (mimeType.startsWith('image/'))  return <FileImage  size={15} className="text-blue-400 shrink-0" />
+  if (mimeType.startsWith('video/'))  return <FileVideo  size={15} className="text-purple-400 shrink-0" />
+  if (mimeType.startsWith('audio/'))  return <FileAudio  size={15} className="text-pink-400 shrink-0" />
+  if (mimeType === 'application/pdf') return <FileText   size={15} className="text-red-400 shrink-0" />
+  if (mimeType.includes('zip') || mimeType.includes('compressed') || mimeType.includes('archive'))
+                                      return <FileArchive size={15} className="text-amber-400 shrink-0" />
+  return                                     <FileText   size={15} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
+}
+
+function fmtSize(bytes: number) {
+  if (bytes < 1024)           return `${bytes} B`
+  if (bytes < 1024 * 1024)    return `${(bytes / 1024).toFixed(0)} KB`
+  return                             `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
+function AttachmentsTab({ scopeId, issueKey, isNew }: { scopeId: string; issueKey: string; isNew: boolean }) {
+  const { data, isLoading, isError, refetch, isFetching } = useQuery<JiraAttachment[]>({
+    queryKey: ['attachments', scopeId, issueKey],
+    queryFn: () =>
+      api
+        .get<JiraAttachment[]>(`/scope/${scopeId}/items/${issueKey}/attachments-list`)
+        .then((r) => r.data),
+    enabled: !isNew,
+    staleTime: 60_000,
+  })
+
+  if (isNew) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Paperclip size={24} className="text-[var(--color-fonts-font-color-support)] opacity-30" />
+        <p className="text-[12px] text-[var(--color-fonts-font-color-support)]">
+          Attachments are only available for saved Jira issues.
+        </p>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2 pt-1">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="flex items-center gap-3 p-3 rounded-lg border border-[var(--color-borders-border-primary)]/40 animate-pulse">
+            <div className="w-8 h-8 rounded-lg bg-[var(--color-borders-border-primary)]/30 shrink-0" />
+            <div className="flex-1 space-y-1.5">
+              <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/30 w-2/3" />
+              <div className="h-2.5 rounded bg-[var(--color-borders-border-primary)]/20 w-1/4" />
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <AlertTriangle size={22} className="text-amber-400 opacity-60" />
+        <p className="text-[12px] text-[var(--color-fonts-font-color-support)]">
+          Could not load attachments from Jira.
+        </p>
+        <button
+          onClick={() => refetch()}
+          className="text-[11px] text-[var(--color-buttons-button-primary)] hover:underline"
+        >
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+        <Paperclip size={24} className="text-[var(--color-fonts-font-color-support)] opacity-30" />
+        <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">No attachments</p>
+        <p className="text-[12px] text-[var(--color-fonts-font-color-support)]">
+          This issue has no files attached in Jira.
+        </p>
+      </div>
+    )
+  }
+
+  const proxyUrl = (contentUrl: string) =>
+    `${import.meta.env.VITE_API_URL}/scope/${scopeId}/items/${issueKey}/attachments?url=${encodeURIComponent(contentUrl)}`
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 overflow-y-auto pt-1 space-y-1.5">
+      {/* Header row */}
+      <div className="flex items-center justify-between shrink-0 mb-1">
+        <p className="text-[11px] text-[var(--color-fonts-font-color-support)]">
+          {data.length} file{data.length !== 1 ? 's' : ''} attached in Jira
+        </p>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="text-[11px] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors flex items-center gap-1 disabled:opacity-40"
+        >
+          {isFetching ? <Loader2 size={10} className="animate-spin" /> : null}
+          Refresh
+        </button>
+      </div>
+
+      {data.map((att) => (
+        <div
+          key={att.id}
+          className="group flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[var(--color-borders-border-primary)]/50 bg-[var(--color-cards-card-background)] hover:border-[var(--color-borders-border-primary)] transition-colors"
+        >
+          {/* Icon */}
+          <div className="w-8 h-8 rounded-lg bg-[var(--color-page-background)] flex items-center justify-center border border-[var(--color-borders-border-primary)]/40 shrink-0">
+            {mimeIcon(att.mimeType)}
+          </div>
+
+          {/* Name + meta */}
+          <div className="flex-1 min-w-0">
+            <p className="text-[12px] font-medium text-[var(--color-fonts-font-color-primary)] truncate">
+              {att.filename}
+            </p>
+            <p className="text-[10px] text-[var(--color-fonts-font-color-support)]">
+              {fmtSize(att.size)} · {att.mimeType}
+            </p>
+          </div>
+
+          {/* Download */}
+          <a
+            href={proxyUrl(att.contentUrl)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md hover:bg-[var(--color-page-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]"
+            title={`Download ${att.filename}`}
+          >
+            <Download size={13} />
+          </a>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Review sub-components ──────────────────────────────────────────────────────
+
+const REVIEW_CONFIG: Record<string, { label: string; textColor: string; barColor: string; bgColor: string }> = {
+  poor:                          { label: 'Poor',                          textColor: 'text-red-500 dark:text-red-400',          barColor: 'bg-red-500',     bgColor: 'bg-red-50 dark:bg-red-950/20' },
+  needs_refinement:              { label: 'Needs refinement',              textColor: 'text-amber-500 dark:text-amber-400',       barColor: 'bg-amber-500',   bgColor: 'bg-amber-50 dark:bg-amber-950/20' },
+  ready_with_minor_improvements: { label: 'Ready with minor improvements', textColor: 'text-blue-500 dark:text-blue-400',         barColor: 'bg-blue-500',    bgColor: 'bg-blue-50 dark:bg-blue-950/20' },
+  fully_ready:                   { label: 'Fully ready',                   textColor: 'text-emerald-500 dark:text-emerald-400',   barColor: 'bg-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/20' },
+}
+
+function complexityColor(score: number) {
+  if (score >= 70) return { text: 'text-red-500 dark:text-red-400',    bar: 'bg-red-500' }
+  if (score >= 40) return { text: 'text-amber-500 dark:text-amber-400', bar: 'bg-amber-500' }
+  return               { text: 'text-emerald-500 dark:text-emerald-400', bar: 'bg-emerald-500' }
+}
+
+function ReviewResult({ treeItem }: { treeItem: ScopeTreeItem }) {
+  const cfg = REVIEW_CONFIG[treeItem.readinessLabel ?? ''] ?? {
+    label: treeItem.readinessLabel ?? 'Unknown',
+    textColor: 'text-[var(--color-fonts-font-color-support)]',
+    barColor: 'bg-[var(--color-borders-border-primary)]',
+    bgColor: '',
+  }
+  const score = treeItem.readinessScore ?? 0
+  const cx = treeItem.complexityScore != null ? complexityColor(treeItem.complexityScore) : null
+
+  return (
+    <div className="space-y-6 pt-1">
+      {/* Scores ─────────────────────────────────────────────────────── */}
+      <div>
+        {/* Readiness hero */}
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            <span className={`text-5xl font-bold tabular-nums leading-none ${cfg.textColor}`}>
+              {score}
+            </span>
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className={`text-sm font-semibold ${cfg.textColor}`}>{cfg.label}</span>
+        </div>
+
+        {/* Readiness bar */}
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${cfg.barColor}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+
+        {/* Complexity row */}
+        {cx && treeItem.complexityScore != null && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+            <Tooltip text="AI complexity estimate (0–100). Lower = simpler. Higher = more effort, uncertainty, or dependencies.">
+              <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                Complexity
+              </span>
+            </Tooltip>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${cx.bar}`}
+                  style={{ width: `${treeItem.complexityScore}%` }}
+                />
+              </div>
+              <span className={`text-[11px] font-semibold tabular-nums ${cx.text}`}>
+                {treeItem.complexityScore}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Meta row */}
+        <div className="flex items-center gap-2 mt-3">
+          {treeItem.reviewedAt && (
+            <span className="text-[11px] text-[var(--color-fonts-font-color-support)]">
+              Reviewed {fmtDate(treeItem.reviewedAt)}
+            </span>
+          )}
+          {treeItem.isStale && (
+            <Tooltip text="Jira was modified after this review — save &amp; re-review for an up-to-date score">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 cursor-default">
+                <AlertTriangle size={10} />
+                Stale
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      {/* Improvement suggestions ─────────────────────────────────────── */}
+      {treeItem.improvementSummary && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-fonts-font-color-support)] mb-2">
+            Suggestions
+          </p>
+          <p className="text-[13px] text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
+            {treeItem.improvementSummary}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReviewLoadingState({
+  prevScore,
+  prevLabel,
+}: {
+  prevScore?: number | null
+  prevLabel?: string | null
+}) {
+  const cfg = REVIEW_CONFIG[prevLabel ?? '']
+  return (
+    <div className="space-y-6 pt-1">
+      {/* Shimmer score placeholder */}
+      <div>
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            {prevScore != null && cfg ? (
+              <span className={`text-5xl font-bold tabular-nums leading-none opacity-30 ${cfg.textColor}`}>
+                {prevScore}
+              </span>
+            ) : (
+              <span className="w-16 h-10 rounded-lg bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+            )}
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] opacity-30 leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className="w-28 h-4 rounded bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+        </div>
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/30 animate-pulse" />
+        <div className="flex items-center gap-2 mt-3 text-[11px] text-[var(--color-fonts-font-color-support)]">
+          <Loader2 size={11} className="animate-spin shrink-0" />
+          <span>Running AI readiness review…</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-2.5 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-16" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-full" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-4/5" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-5/6" />
+      </div>
+    </div>
+  )
+}
+
+function ReviewEmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-[var(--color-borders-border-primary)]/10 flex items-center justify-center">
+        <Sparkles size={22} className="text-violet-400 opacity-50" />
+      </div>
+      <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">No review yet</p>
+      <p className="text-[12px] text-[var(--color-fonts-font-color-support)] max-w-[220px] leading-relaxed">
+        Save the proposal to trigger an automatic review, or click{' '}
+        <span className="font-medium text-[var(--color-fonts-font-color-primary)]">Review</span> in the
+        footer.
+      </p>
+    </div>
+  )
+}
+
 // ── Empty state ────────────────────────────────────────────────────────────────
 
 function EmptyState({ message, loading }: { message: string; loading?: boolean }) {
@@ -1120,14 +1431,16 @@ function ProposalForm({
   onFieldChange,
   treeItem,
   isReviewing = false,
+  scopeId,
 }: {
   tab: TabState
   tabIdx: number
   onFieldChange: (idx: number, field: keyof ScopeProposal, value: string) => void
   treeItem?: ScopeTreeItem
   isReviewing?: boolean
+  scopeId: string
 }) {
-  const [fieldTab, setFieldTab] = useState<'content' | 'details' | 'review'>('content')
+  const [fieldTab, setFieldTab] = useState<'content' | 'details' | 'attachments' | 'review'>('content')
   const proposal = tab.proposal!
   const locked = proposal.status === 'ACCEPTED'
 
@@ -1157,13 +1470,16 @@ function ProposalForm({
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Inner tab bar: Content / Details / Review */}
+      {/* Inner tab bar: Content / Details / Attachments / Review */}
       <TabBar className="shrink-0 mb-4">
         <TabButton active={fieldTab === 'content'} onClick={() => setFieldTab('content')}>
           Content
         </TabButton>
         <TabButton active={fieldTab === 'details'} onClick={() => setFieldTab('details')}>
           Details
+        </TabButton>
+        <TabButton active={fieldTab === 'attachments'} onClick={() => setFieldTab('attachments')}>
+          Attachments
         </TabButton>
         <TabButton active={fieldTab === 'review'} onClick={() => setFieldTab('review')}>
           <span className="flex items-center gap-1.5">
@@ -1207,36 +1523,6 @@ function ProposalForm({
             </div>
           </div>
 
-          {/* Attachments */}
-          {tab.attachments.length > 0 && (
-            <div className="shrink-0">
-              <label className={labelClass}>
-                <Paperclip size={10} className="inline mr-1" />
-                Jira Attachments ({tab.attachments.length})
-              </label>
-              <ul className="space-y-1.5 mt-1">
-                {tab.attachments.map((att) => (
-                  <li
-                    key={att.id}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[11px]"
-                  >
-                    <Paperclip size={10} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
-                    <a
-                      href={`${import.meta.env.VITE_API_URL}/scope/${proposal.scopeId}/items/${tab.issueKey}/attachments?url=${encodeURIComponent(att.contentUrl)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 truncate text-[var(--color-buttons-button-primary)] hover:underline"
-                    >
-                      {att.filename}
-                    </a>
-                    <span className="shrink-0 text-[var(--color-fonts-font-color-support)]">
-                      {(att.size / 1024).toFixed(0)} KB
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
       )}
 
@@ -1293,79 +1579,20 @@ function ProposalForm({
         </div>
       )}
 
+      {/* ── Attachments tab ──────────────────────────────────────────────── */}
+      {fieldTab === 'attachments' && (
+        <AttachmentsTab scopeId={scopeId} issueKey={tab.issueKey} isNew={!!tab.isNew} />
+      )}
+
       {/* ── Review tab ───────────────────────────────────────────────────── */}
       {fieldTab === 'review' && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-1">
           {isReviewing ? (
-            <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
-              <div className="flex items-center gap-2.5 text-sm text-[var(--color-fonts-font-color-support)]">
-                <Loader2 size={15} className="animate-spin shrink-0" />
-                <span>Running AI readiness review…</span>
-              </div>
-              {treeItem && (treeItem.readinessScore != null || treeItem.readinessLabel) && (
-                <div className="mt-4 opacity-30 pointer-events-none">
-                  <ReadinessBadge
-                    label={treeItem.readinessLabel}
-                    score={treeItem.readinessScore}
-                    showScore
-                  />
-                </div>
-              )}
-            </div>
+            <ReviewLoadingState prevScore={treeItem?.readinessScore} prevLabel={treeItem?.readinessLabel} />
           ) : treeItem && (treeItem.readinessScore != null || treeItem.readinessLabel) ? (
-            <div className="space-y-4">
-              {/* Score card */}
-              <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
-                <div className="flex items-center justify-between gap-3 mb-3">
-                  <span className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)]">
-                    AI Readiness Score
-                  </span>
-                  <div className="flex items-center gap-2">
-                    {treeItem.isStale && (
-                      <Tooltip text="Jira was modified after the last review — consider re-running">
-                        <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded cursor-default">
-                          <AlertTriangle size={10} /> Stale
-                        </span>
-                      </Tooltip>
-                    )}
-                    <ReadinessBadge
-                      label={treeItem.readinessLabel}
-                      score={treeItem.readinessScore}
-                      showScore
-                    />
-                  </div>
-                </div>
-
-                {treeItem.reviewedAt && (
-                  <p className="text-[11px] text-[var(--color-fonts-font-color-support)]">
-                    Reviewed {fmtDate(treeItem.reviewedAt)}
-                    {treeItem.isStale && ' · Jira has changed since'}
-                  </p>
-                )}
-              </div>
-
-              {/* Improvement summary */}
-              {treeItem.improvementSummary && (
-                <div className="rounded-lg border border-[var(--color-borders-border-primary)] bg-[var(--color-page-background)] p-5">
-                  <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-2">
-                    Improvement Suggestions
-                  </p>
-                  <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
-                    {treeItem.improvementSummary}
-                  </p>
-                </div>
-              )}
-            </div>
+            <ReviewResult treeItem={treeItem} />
           ) : (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <Sparkles size={28} className="text-violet-400 opacity-40" />
-              <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
-                No review yet
-              </p>
-              <p className="text-xs text-[var(--color-fonts-font-color-support)] max-w-xs">
-                Save the proposal then click <span className="font-medium">Review</span> in the footer, or save to trigger an automatic review.
-              </p>
-            </div>
+            <ReviewEmptyState />
           )}
         </div>
       )}
