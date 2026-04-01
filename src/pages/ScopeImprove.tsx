@@ -1310,6 +1310,35 @@ function ReviewResult({ treeItem }: { treeItem: ScopeTreeItem }) {
           </div>
         )}
 
+        {/* Aggregate row */}
+        {treeItem.aggregateScore != null && (() => {
+          const aggCfg = treeItem.aggregateScore >= 70
+            ? { bar: 'bg-emerald-500', text: 'text-emerald-500 dark:text-emerald-400' }
+            : treeItem.aggregateScore >= 40
+              ? { bar: 'bg-amber-500',   text: 'text-amber-500 dark:text-amber-400' }
+              : { bar: 'bg-red-500',     text: 'text-red-500 dark:text-red-400' }
+          return (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+              <Tooltip text="Overall health: 40% own writing quality + 60% child items average. 0 = not yet decomposed into children.">
+                <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                  Aggregate
+                </span>
+              </Tooltip>
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${aggCfg.bar}`}
+                    style={{ width: `${treeItem.aggregateScore}%` }}
+                  />
+                </div>
+                <span className={`text-[11px] font-semibold tabular-nums ${aggCfg.text}`}>
+                  {treeItem.aggregateScore}
+                </span>
+              </div>
+            </div>
+          )
+        })()}
+
         {/* Meta row */}
         <div className="flex items-center gap-2 mt-3">
           {treeItem.reviewedAt && (
