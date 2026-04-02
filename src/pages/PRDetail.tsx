@@ -6,7 +6,7 @@ import {
   ArrowRight, RefreshCw, GitPullRequest, ShieldCheck,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { JobStatusBadge } from './Dashboard'
+import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'

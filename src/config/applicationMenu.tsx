@@ -25,6 +25,12 @@ import {
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
+export interface NavigationMenuBadge {
+  label: string
+  bgColor: string
+  textColor: string
+}
+
 export interface NavigationMenuItem {
   id: string
   label: string
@@ -37,6 +43,13 @@ export interface NavigationMenuItem {
   sectionLabel?: string
   /** When set, item is hidden unless the user has this permission */
   requiredPermission?: Permission
+  /** Optional count badges rendered next to the label when the sidebar is expanded */
+  badges?: NavigationMenuBadge[]
+}
+
+export interface SecurityCounts {
+  criticals: number
+  highs: number
 }
 
 export function ApplicationMenuItems(
@@ -44,6 +57,7 @@ export function ApplicationMenuItems(
   currentPath: string,
   permissions: Set<Permission>,
   onNavigate?: () => void,
+  securityCounts?: SecurityCounts,
 ): NavigationMenuItem[] {
   const go = (to: string) => {
     navigate({ to })
@@ -118,6 +132,43 @@ export function ApplicationMenuItems(
       onClick: () => go('/qa-readiness'),
     },
     {
+      id: 'soc2-section',
+      label: 'SOC II',
+      type: 'parent',
+      icon: <ShieldCheck size={18} />,
+      isActive: currentPath.startsWith('/security') || currentPath.startsWith('/compliance'),
+      requiredPermission: 'VIEW_SECURITY',
+      badges: [
+        ...(securityCounts && securityCounts.criticals > 0
+          ? [{ label: `${securityCounts.criticals}C`, bgColor: '#dc2626', textColor: '#ffffff' }]
+          : []),
+        ...(securityCounts && securityCounts.highs > 0
+          ? [{ label: `${securityCounts.highs}H`, bgColor: '#f97316', textColor: '#ffffff' }]
+          : []),
+      ],
+      children: [
+        {
+          id: 'security-issues',
+          label: 'Security Issues',
+          icon: <Lock size={16} />,
+          path: '/security/issues',
+          isActive: currentPath === '/security/issues',
+          type: 'item',
+          requiredPermission: 'VIEW_SECURITY',
+          onClick: () => go('/security/issues'),
+        },
+        {
+          id: 'soc2-audit',
+          label: 'SOC II Audit',
+          icon: <ClipboardList size={16} />,
+          path: '/compliance/soc2',
+          isActive: currentPath === '/compliance/soc2',
+          type: 'item',
+          onClick: () => go('/compliance/soc2'),
+        },
+      ],
+    },
+    {
       id: 'metrics-section',
       label: 'Metrics',
       type: 'parent',
@@ -159,15 +210,6 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/stats',
           type: 'item',
           onClick: () => go('/stats'),
-        },
-        {
-          id: 'soc2-audit',
-          label: 'SOC II Audit',
-          icon: <Lock size={16} />,
-          path: '/compliance/soc2',
-          isActive: currentPath === '/compliance/soc2',
-          type: 'item',
-          onClick: () => go('/compliance/soc2'),
         },
       ],
     },

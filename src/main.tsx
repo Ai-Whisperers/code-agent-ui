@@ -44,6 +44,7 @@ import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
 import { QaReadinessPage } from '@/pages/QaReadiness'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
+import SecurityIssuesPage from '@/pages/SecurityIssuesPage'
 import PullRequestsPage from '@/pages/PullRequests'
 import PRDetail from '@/pages/PRDetail'
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
@@ -341,6 +342,13 @@ const soc2AuditRoute = createRoute({
   component: Soc2AuditPage,
 })
 
+const securityIssuesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/security/issues',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: SecurityIssuesPage,
+})
+
 const oauthCallbackRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/callback',
@@ -394,6 +402,7 @@ const routeTree = rootRoute.addChildren([
     scopeImproveRoute,
     qaReadinessRoute,
     soc2AuditRoute,
+    securityIssuesRoute,
   ]),
   oauthCallbackRoute,
   accessDeniedRoute,

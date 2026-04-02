@@ -11,6 +11,7 @@ function MenuItem({ item, isExpanded }: { item: NavigationMenuItem; isExpanded: 
   const [open, setOpen] = useState(item.isActive ?? false)
 
   if (item.type === 'parent' && item.children) {
+    const hasCriticals = item.badges?.some((b) => b.label.endsWith('C') && b.label !== '0C')
     return (
       <div>
         <button
@@ -21,10 +22,29 @@ function MenuItem({ item, isExpanded }: { item: NavigationMenuItem; isExpanded: 
           }`}
           onClick={() => setOpen((o) => !o)}
         >
-          <span className="shrink-0 text-[var(--color-icons-icon)]">{item.icon}</span>
+          <span className="relative shrink-0 text-[var(--color-icons-icon)]">
+            {item.icon}
+            {/* Red dot indicator when collapsed and there are criticals */}
+            {!isExpanded && hasCriticals && (
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-[var(--color-tags-font-danger)]" />
+            )}
+          </span>
           {isExpanded && (
             <>
               <span className="flex-1 text-sm font-medium truncate">{item.label}</span>
+              {item.badges && item.badges.length > 0 && (
+                <span className="flex items-center gap-1 shrink-0">
+                  {item.badges.map((b) => (
+                    <span
+                      key={b.label}
+                      className="text-[9px] font-bold px-1 py-0.5 rounded"
+                      style={{ backgroundColor: b.bgColor, color: b.textColor }}
+                    >
+                      {b.label}
+                    </span>
+                  ))}
+                </span>
+              )}
               <ChevronDown
                 size={14}
                 className={`shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}

@@ -4,45 +4,61 @@ import { useNavigate } from '@tanstack/react-router'
 import {
   RefreshCw,
   ExternalLink,
-  CheckCircle2,
-  XCircle,
   Clock,
-  AlertTriangle,
   ShieldCheck,
   Shield,
   Upload,
   GitBranch,
   Eye,
   EyeOff,
+  AlertTriangle,
+  XCircle,
+  HelpCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
+import { SlaBadge } from '@/components/ui/SlaBadge'
 import api from '@/lib/api'
-import type { Soc2AuditResponse, Soc2JobSummary, SlaStatus } from '@/types/api'
+import type { Soc2AuditResponse, Soc2JobSummary } from '@/types/api'
 
-// ── SLA badge ─────────────────────────────────────────────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────────
 
-function SlaBadge({ status, deadline }: { status: SlaStatus; deadline?: string }) {
-  const map: Record<SlaStatus, { icon: React.ReactNode; label: string; cls: string }> = {
-    ON_TRACK:       { icon: <CheckCircle2 size={12} />, label: 'On Track',       cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
-    AT_RISK:        { icon: <AlertTriangle size={12} />, label: 'At Risk',        cls: 'bg-[var(--color-tags-warning-background)] text-[var(--color-tags-font-warning)]' },
-    OVERDUE:        { icon: <XCircle size={12} />,      label: 'Overdue',        cls: 'bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]' },
-    MET:            { icon: <CheckCircle2 size={12} />, label: 'SLA Met',        cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
-    MISSED:         { icon: <XCircle size={12} />,      label: 'SLA Missed',     cls: 'bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]' },
-    NOT_APPLICABLE: { icon: <Clock size={12} />,        label: 'N/A',            cls: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]' },
-  }
-  const entry = map[status] ?? map.NOT_APPLICABLE
-  const deadlineStr = deadline ? new Date(deadline).toLocaleDateString() : null
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+  accentColor,
+  tooltip,
+}: {
+  label: string
+  value: string | number
+  icon: React.ReactNode
+  accent?: string
+  accentColor?: string
+  tooltip: string
+}) {
   return (
-    <Tooltip text={deadlineStr ? `Deadline: ${deadlineStr}` : 'No SLA configured'}>
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${entry.cls}`}>
-        {entry.icon}
-        {entry.label}
-      </span>
-    </Tooltip>
+    <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <div className="h-1 w-full" style={{ backgroundColor: accentColor ?? 'var(--color-cards-card-stroke)' }} />
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+              {label}
+            </span>
+            <Tooltip text={tooltip}>
+              <HelpCircle size={11} className="text-[var(--color-fonts-font-color-support)] opacity-50 cursor-default" />
+            </Tooltip>
+          </div>
+          <span className={accent ?? 'text-[var(--color-icons-icon)]'}>{icon}</span>
+        </div>
+        <p className="text-xl font-bold text-[var(--color-fonts-font-color-headings)]">{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -51,20 +67,20 @@ function SlaBadge({ status, deadline }: { status: SlaStatus; deadline?: string }
 function ReviewBadge({ status }: { status: 'NONE' | 'IN_PROGRESS' | 'COMPLETE' }) {
   if (status === 'COMPLETE') {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
         <Eye size={11} /> Reviewed
       </span>
     )
   }
   if (status === 'IN_PROGRESS') {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-brand-background)] text-[var(--color-tags-font-brand)]">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-brand-background)] text-[var(--color-tags-font-brand)]">
         <Clock size={11} /> In Progress
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
       <EyeOff size={11} /> No Review
     </span>
   )
@@ -82,7 +98,7 @@ function StatusBadge({ status }: { status: string }) {
     PENDING:           'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
   }
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${clsMap[status] ?? clsMap.PENDING}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold ${clsMap[status] ?? clsMap.PENDING}`}>
       {status}
     </span>
   )
@@ -126,7 +142,7 @@ function Soc2Row({ job, isEven }: { job: Soc2JobSummary; isEven: boolean }) {
       <td className="px-3 py-2 text-center">
         {job.aikidoIssueId ? (
           <Tooltip text={`Aikido: ${job.aikidoIssueId}`}>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]">
               <ShieldCheck size={11} /> Linked
             </span>
           </Tooltip>
@@ -154,12 +170,12 @@ function Soc2Row({ job, isEven }: { job: Soc2JobSummary; isEven: boolean }) {
       <td className="px-3 py-2 text-center">
         {job.scytaleUploaded ? (
           <Tooltip text="Evidence uploaded to Scytale">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
               <Upload size={11} /> Uploaded
             </span>
           </Tooltip>
         ) : (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
             <Upload size={11} /> Pending
           </span>
         )}
@@ -266,24 +282,38 @@ export default function Soc2AuditPage() {
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Overdue SLA',      value: overdue,   cls: overdue   > 0 ? 'text-[var(--color-tags-font-danger)]'  : '' },
-          { label: 'At-risk SLA',      value: atRisk,    cls: atRisk    > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-          { label: 'Awaiting Review',  value: noReview,  cls: noReview  > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-          { label: 'Scytale Pending',  value: noScytale, cls: noScytale > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-        ].map((kpi) => (
-          <div
-            key={kpi.label}
-            className="rounded-lg border border-[var(--color-card-card-stroke)] bg-[var(--color-card-card-background)] p-4 flex flex-col gap-1"
-          >
-            <span className="text-[11px] text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-              {kpi.label}
-            </span>
-            <span className={`text-2xl font-bold ${kpi.cls || 'text-[var(--color-fonts-font-color-primary)]'}`}>
-              {kpi.value}
-            </span>
-          </div>
-        ))}
+        <StatCard
+          label="Overdue SLA"
+          value={overdue}
+          icon={<XCircle size={15} />}
+          accent={overdue > 0 ? 'text-red-500' : undefined}
+          accentColor={overdue > 0 ? '#ef4444' : undefined}
+          tooltip="Jobs that have exceeded their SLA deadline and require immediate attention."
+        />
+        <StatCard
+          label="At-risk SLA"
+          value={atRisk}
+          icon={<AlertTriangle size={15} />}
+          accent={atRisk > 0 ? 'text-orange-500' : undefined}
+          accentColor={atRisk > 0 ? '#f97316' : undefined}
+          tooltip="Jobs in the last 20% of their SLA window — act soon to avoid a breach."
+        />
+        <StatCard
+          label="Awaiting Review"
+          value={noReview}
+          icon={<EyeOff size={15} />}
+          accent={noReview > 0 ? 'text-orange-500' : undefined}
+          accentColor={noReview > 0 ? '#f97316' : undefined}
+          tooltip="Completed jobs that have not yet been reviewed by a human auditor."
+        />
+        <StatCard
+          label="Scytale Pending"
+          value={noScytale}
+          icon={<Upload size={15} />}
+          accent={noScytale > 0 ? 'text-orange-500' : undefined}
+          accentColor={noScytale > 0 ? '#f97316' : undefined}
+          tooltip="Successful jobs whose evidence has not yet been uploaded to Scytale."
+        />
       </div>
 
       {/* Filters */}

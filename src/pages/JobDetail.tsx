@@ -52,7 +52,7 @@ import {
   FileCode, Flag, GitCompare,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { JobStatusBadge } from './Dashboard'
+import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -380,7 +380,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
         <>
           <Separator />
           <a
-            href={`https://app.aikido.dev/issues/${job.aikidoIssueId}`}
+            href={`https://app.aikido.dev/queue?sidebarIssue=${job.aikidoIssueId}`}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] hover:opacity-80"
@@ -2759,7 +2759,7 @@ function EvidenceTab({ job, evidenceData, uploadScytalePending, onUploadScytale 
             <ShieldCheck size={14} className="text-[var(--color-tags-font-critical)] shrink-0" />
             <span>Aikido issue:</span>
             <a
-              href={`https://app.aikido.dev/issues/${job.aikidoIssueId}`}
+              href={`https://app.aikido.dev/queue?sidebarIssue=${job.aikidoIssueId}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-[var(--color-fonts-font-color-brand)] hover:underline inline-flex items-center gap-1"

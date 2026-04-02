@@ -267,6 +267,9 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'teams.webhook.url', label: 'MS Teams Webhook URL', description: 'Incoming webhook URL for Microsoft Teams notifications' },
       { key: 'n8n.webhook.url', label: 'n8n Webhook URL', description: 'n8n automation webhook URL for custom notification workflows' },
       { key: 'agent.base.url', label: 'Agent Base URL', description: 'Externally reachable URL of the agent; used for automatic webhook registration' },
+      { key: 'review.email.recipient', label: 'Review Email: Recipient', description: 'Email address that receives the PR review digest after each completed review. Leave blank to disable email notifications.' },
+      { key: 'review.email.from', label: 'Review Email: From Address', description: 'SES-verified sender address for review digest emails (e.g. code-agent@example.com). Must be verified in AWS SES.' },
+      { key: 'review.email.aws.region', label: 'Review Email: AWS Region', description: 'AWS region for SES email sending. Must be a region where SES is available (e.g. eu-west-1, us-east-1).', defaultValue: 'eu-west-1' },
     ],
   },
 

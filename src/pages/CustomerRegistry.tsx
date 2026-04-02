@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Plus,
   Pencil,
@@ -10,7 +10,12 @@ import {
   Building2,
   Package,
   Link2,
+  Search,
+  ChevronLeft,
+  Check,
+  FileText,
 } from 'lucide-react'
+import { Input } from '@/components/ui/Input'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
@@ -370,9 +375,10 @@ interface ProductFormState {
   gitWorkspace: string
   gitBaseUrl: string
   jiraBaseUrl: string
-  jiraProjects: Array<{ role: string; key: string }>
+  jiraProjectKey: string
   confluenceSpaceKey: string
   confluenceRootPageId: string
+  confluenceRootPageTitle: string
   teams: Record<string, TeamMember[]>
 }
 
@@ -385,15 +391,18 @@ function blankProduct(): ProductFormState {
     gitWorkspace: '',
     gitBaseUrl: '',
     jiraBaseUrl: '',
-    jiraProjects: [],
+    jiraProjectKey: '',
     confluenceSpaceKey: '',
     confluenceRootPageId: '',
+    confluenceRootPageTitle: '',
     teams: {},
   }
 }
 
 function productToForm(p: ProductConfig): ProductFormState {
   const savedRepos = Array.isArray(p.metadata?.repos) ? (p.metadata.repos as string[]) : []
+  const projectEntries = Object.entries(p.jira?.projects ?? {})
+  const jiraProjectKey = projectEntries.length > 0 ? projectEntries[0][1] : ''
   return {
     productId: p.productId,
     displayName: p.displayName,
@@ -402,18 +411,19 @@ function productToForm(p: ProductConfig): ProductFormState {
     gitWorkspace: p.git?.workspace ?? '',
     gitBaseUrl: p.git?.baseUrl ?? '',
     jiraBaseUrl: p.jira?.baseUrl ?? '',
-    jiraProjects: Object.entries(p.jira?.projects ?? {}).map(([role, key]) => ({ role, key })),
+    jiraProjectKey,
     confluenceSpaceKey: p.confluence?.spaceKey ?? '',
     confluenceRootPageId: p.confluence?.rootPageId ?? '',
+    confluenceRootPageTitle: '',
     teams: p.teams ?? {},
   }
 }
 
 function formToRequest(f: ProductFormState): UpsertProductRequest {
   const projects: Record<string, string> = {}
-  f.jiraProjects.forEach(({ role, key }) => {
-    if (role.trim() && key.trim()) projects[role.trim()] = key.trim()
-  })
+  if (f.jiraProjectKey.trim()) {
+    projects['default'] = f.jiraProjectKey.trim()
+  }
 
   const metadata: Record<string, unknown> =
     f.selectedRepos.length > 0 ? { repos: f.selectedRepos } : {}
@@ -539,6 +549,315 @@ function GeneralTab({
   )
 }
 
+interface JiraProjectMeta { id: string; key: string; name: string }
+interface ConfluenceSpaceMeta { key: string; name: string }
+interface ConfluencePageMeta { pageId: string; title: string }
+
+function JiraProjectSelector({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (key: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  const { data: projects = [], isLoading } = useQuery<JiraProjectMeta[]>({
+    queryKey: ['jira-meta-projects'],
+    queryFn: () => api.get('/jira/meta/projects').then((r) => r.data).catch(() => []),
+  })
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  const filtered = search.trim()
+    ? projects.filter(
+        (p) =>
+          p.key.toLowerCase().includes(search.toLowerCase()) ||
+          p.name.toLowerCase().includes(search.toLowerCase()),
+      )
+    : projects
+
+  const selected = projects.find((p) => p.key === value)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 w-full px-3 py-2 text-sm rounded border transition-all ${
+          open
+            ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)]'
+            : 'bg-[var(--color-cards-card-background)] border-[var(--color-cards-card-stroke)] hover:border-[var(--color-buttons-button-primary)]'
+        }`}
+      >
+        <span className={`flex-1 text-left truncate ${selected ? 'text-[var(--color-fonts-font-color-user-input)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
+          {selected
+            ? <><span className="font-mono text-xs text-[var(--color-fonts-font-color-brand)] mr-1.5">{selected.key}</span>{selected.name}</>
+            : 'Select a project…'}
+        </span>
+        {value ? (
+          <X
+            size={13}
+            className="shrink-0 text-[var(--color-icons-icon)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+            onClick={(e) => { e.stopPropagation(); onChange(''); setOpen(false) }}
+          />
+        ) : (
+          <ChevronDown size={13} className={`shrink-0 text-[var(--color-icons-icon)] transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 w-full rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-[var(--color-cards-card-stroke)]">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-icons-icon)]" />
+              <Input
+                autoFocus
+                placeholder="Search projects…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full pl-6"
+              />
+            </div>
+          </div>
+          <div className="overflow-y-auto py-0.5" style={{ maxHeight: '220px' }}>
+            {isLoading ? (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">Loading…</p>
+            ) : filtered.length === 0 ? (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">No projects found</p>
+            ) : (
+              filtered.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => { onChange(p.key); setOpen(false); setSearch('') }}
+                  className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--color-tables-table-hover)] ${
+                    p.key === value ? 'text-[var(--color-fonts-font-color-primary)] font-medium' : 'text-[var(--color-fonts-font-color-support)]'
+                  }`}
+                >
+                  <Check size={11} className={`shrink-0 ${p.key === value ? 'opacity-100' : 'opacity-0'}`} />
+                  <span className="font-mono text-xs text-[var(--color-fonts-font-color-brand)] w-14 shrink-0">{p.key}</span>
+                  <span className="text-left truncate">{p.name}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConfluencePageSelector({
+  spaceKey,
+  pageId,
+  pageTitle,
+  onSpaceChange,
+  onPageChange,
+}: {
+  spaceKey: string
+  pageId: string
+  pageTitle: string
+  onSpaceChange: (key: string) => void
+  onPageChange: (id: string, title: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [step, setStep] = useState<'space' | 'page'>('space')
+  const [spaceSearch, setSpaceSearch] = useState('')
+  const [pageSearch, setPageSearch] = useState('')
+  const [pendingSpace, setPendingSpace] = useState(spaceKey)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const { data: spaces = [], isLoading: loadingSpaces } = useQuery<ConfluenceSpaceMeta[]>({
+    queryKey: ['confluence-meta-spaces'],
+    queryFn: () => api.get('/confluence/meta/spaces').then((r) => r.data).catch(() => []),
+  })
+
+  const { data: pages = [], isLoading: loadingPages } = useQuery<ConfluencePageMeta[]>({
+    queryKey: ['confluence-meta-pages', pendingSpace, pageSearch],
+    queryFn: () =>
+      api.get(`/confluence/meta/spaces/${encodeURIComponent(pendingSpace)}/pages${pageSearch ? `?q=${encodeURIComponent(pageSearch)}` : ''}`)
+        .then((r) => r.data)
+        .catch(() => []),
+    enabled: step === 'page' && !!pendingSpace,
+  })
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
+  const filteredSpaces = spaceSearch.trim()
+    ? spaces.filter(
+        (s) =>
+          s.key.toLowerCase().includes(spaceSearch.toLowerCase()) ||
+          s.name.toLowerCase().includes(spaceSearch.toLowerCase()),
+      )
+    : spaces
+
+  function handleOpen() {
+    setPendingSpace(spaceKey)
+    setStep(spaceKey ? 'page' : 'space')
+    setSpaceSearch('')
+    setPageSearch('')
+    setOpen((v) => !v)
+  }
+
+  function clearSelection() {
+    onSpaceChange('')
+    onPageChange('', '')
+    setOpen(false)
+  }
+
+  const hasSelection = !!(pageId || spaceKey)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={handleOpen}
+        className={`flex items-center gap-1.5 w-full px-3 py-2 text-sm rounded border transition-all ${
+          open
+            ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)]'
+            : 'bg-[var(--color-cards-card-background)] border-[var(--color-cards-card-stroke)] hover:border-[var(--color-buttons-button-primary)]'
+        }`}
+      >
+        <span className={`flex-1 text-left truncate flex items-center gap-1.5 ${hasSelection ? 'text-[var(--color-fonts-font-color-user-input)]' : 'text-[var(--color-fonts-font-color-support)]'}`}>
+          {pageId ? (
+            <>
+              <FileText size={12} className="text-[var(--color-icons-icon)] shrink-0" />
+              <span className="truncate">{pageTitle || pageId}</span>
+              {spaceKey && <span className="font-mono text-[10px] text-[var(--color-fonts-font-color-support)] shrink-0">{spaceKey}</span>}
+            </>
+          ) : (
+            'Select a page…'
+          )}
+        </span>
+        {hasSelection ? (
+          <X
+            size={13}
+            className="shrink-0 text-[var(--color-icons-icon)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+            onClick={(e) => { e.stopPropagation(); clearSelection() }}
+          />
+        ) : (
+          <ChevronDown size={13} className={`shrink-0 text-[var(--color-icons-icon)] transition-transform duration-150 ${open ? 'rotate-180' : ''}`} />
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 mt-1 z-50 w-full rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-hidden">
+          {/* Step header */}
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-[var(--color-cards-card-stroke)]">
+            {step === 'page' && (
+              <button
+                type="button"
+                onClick={() => { setStep('space'); setPageSearch('') }}
+                className="p-0.5 rounded hover:bg-[var(--color-tables-table-hover)] text-[var(--color-icons-icon)] transition-colors shrink-0"
+              >
+                <ChevronLeft size={13} />
+              </button>
+            )}
+            <span className="text-xs font-medium text-[var(--color-fonts-font-color-support)]">
+              {step === 'space' ? 'Space' : pendingSpace}
+            </span>
+          </div>
+
+          {/* Search */}
+          <div className="p-2 border-b border-[var(--color-cards-card-stroke)]">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-icons-icon)]" />
+              <Input
+                autoFocus
+                placeholder={step === 'space' ? 'Search spaces…' : 'Search pages…'}
+                value={step === 'space' ? spaceSearch : pageSearch}
+                onChange={(e) =>
+                  step === 'space' ? setSpaceSearch(e.target.value) : setPageSearch(e.target.value)
+                }
+                className="w-full pl-6"
+              />
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="overflow-y-auto py-0.5" style={{ maxHeight: '220px' }}>
+            {step === 'space' ? (
+              loadingSpaces ? (
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">Loading…</p>
+              ) : filteredSpaces.length === 0 ? (
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">No spaces found</p>
+              ) : (
+                filteredSpaces.map((s) => (
+                  <button
+                    key={s.key}
+                    type="button"
+                    onClick={() => {
+                      setPendingSpace(s.key)
+                      onSpaceChange(s.key)
+                      setStep('page')
+                      setSpaceSearch('')
+                    }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--color-tables-table-hover)] ${
+                      s.key === pendingSpace ? 'text-[var(--color-fonts-font-color-primary)] font-medium' : 'text-[var(--color-fonts-font-color-support)]'
+                    }`}
+                  >
+                    <Check size={11} className={`shrink-0 ${s.key === pendingSpace ? 'opacity-100' : 'opacity-0'}`} />
+                    <span className="font-mono text-xs text-[var(--color-fonts-font-color-brand)] w-14 shrink-0">{s.key}</span>
+                    <span className="text-left truncate">{s.name}</span>
+                  </button>
+                ))
+              )
+            ) : (
+              loadingPages ? (
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">Loading…</p>
+              ) : pages.length === 0 ? (
+                <p className="text-xs text-[var(--color-fonts-font-color-support)] py-3 text-center">No pages found</p>
+              ) : (
+                pages.map((p) => (
+                  <button
+                    key={p.pageId}
+                    type="button"
+                    onClick={() => { onPageChange(p.pageId, p.title); setOpen(false) }}
+                    className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--color-tables-table-hover)] ${
+                      p.pageId === pageId ? 'text-[var(--color-fonts-font-color-primary)] font-medium' : 'text-[var(--color-fonts-font-color-support)]'
+                    }`}
+                  >
+                    <Check size={11} className={`shrink-0 ${p.pageId === pageId ? 'opacity-100' : 'opacity-0'}`} />
+                    <FileText size={12} className="text-[var(--color-icons-icon)] shrink-0" />
+                    <span className="text-left truncate">{p.title}</span>
+                  </button>
+                ))
+              )
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function IntegrationsTab({
   form,
   set,
@@ -546,24 +865,6 @@ function IntegrationsTab({
   form: ProductFormState
   set: <K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) => void
 }) {
-  function addJiraProject() {
-    set('jiraProjects', [...form.jiraProjects, { role: '', key: '' }])
-  }
-
-  function updateJiraProject(idx: number, field: 'role' | 'key', value: string) {
-    set(
-      'jiraProjects',
-      form.jiraProjects.map((p, i) => (i === idx ? { ...p, [field]: value } : p)),
-    )
-  }
-
-  function removeJiraProject(idx: number) {
-    set(
-      'jiraProjects',
-      form.jiraProjects.filter((_, i) => i !== idx),
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div>
@@ -580,44 +881,11 @@ function IntegrationsTab({
           />
         </div>
         <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <label className={labelCls + ' mb-0'}>Project Keys by Role</label>
-            <button
-              type="button"
-              onClick={addJiraProject}
-              className="flex items-center gap-1 text-xs text-[var(--color-buttons-button-primary)] hover:opacity-80"
-            >
-              <Plus size={12} /> Add
-            </button>
-          </div>
-          {form.jiraProjects.length === 0 && (
-            <p className="text-xs text-[var(--color-fonts-font-color-support)] italic">
-              No project keys configured.
-            </p>
-          )}
-          {form.jiraProjects.map((p, idx) => (
-            <div key={idx} className="flex items-center gap-2 mb-2">
-              <input
-                className={inputCls}
-                placeholder="Role (e.g. engineering)"
-                value={p.role}
-                onChange={(e) => updateJiraProject(idx, 'role', e.target.value)}
-              />
-              <input
-                className={inputCls}
-                placeholder="Project key (e.g. ENG)"
-                value={p.key}
-                onChange={(e) => updateJiraProject(idx, 'key', e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => removeJiraProject(idx)}
-                className="p-1.5 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors shrink-0"
-              >
-                <Trash2 size={13} />
-              </button>
-            </div>
-          ))}
+          <label className={labelCls}>Project</label>
+          <JiraProjectSelector
+            value={form.jiraProjectKey}
+            onChange={(key) => set('jiraProjectKey', key)}
+          />
         </div>
       </div>
 
@@ -625,25 +893,18 @@ function IntegrationsTab({
         <p className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] mb-3 uppercase tracking-wide">
           Confluence
         </p>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className={labelCls}>Space Key</label>
-            <input
-              className={inputCls}
-              value={form.confluenceSpaceKey}
-              onChange={(e) => set('confluenceSpaceKey', e.target.value)}
-              placeholder="e.g. MYPRODUCT"
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Root Page ID</label>
-            <input
-              className={inputCls}
-              value={form.confluenceRootPageId}
-              onChange={(e) => set('confluenceRootPageId', e.target.value)}
-              placeholder="e.g. 123456"
-            />
-          </div>
+        <div>
+          <label className={labelCls}>Root Page</label>
+          <ConfluencePageSelector
+            spaceKey={form.confluenceSpaceKey}
+            pageId={form.confluenceRootPageId}
+            pageTitle={form.confluenceRootPageTitle}
+            onSpaceChange={(key) => set('confluenceSpaceKey', key)}
+            onPageChange={(id, title) => {
+              set('confluenceRootPageId', id)
+              set('confluenceRootPageTitle', title)
+            }}
+          />
         </div>
       </div>
     </div>

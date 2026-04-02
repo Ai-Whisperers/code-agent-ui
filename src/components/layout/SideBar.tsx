@@ -7,6 +7,8 @@ import { ApplicationMenuItems } from '@/config/applicationMenu'
 import { ProfileDialog } from '@/components/layout/ProfileDialog'
 import { logout } from '@/store/auth-store'
 import type { AuthUser } from '@/store/auth-store'
+import { useSecurityCounts } from '@/hooks/useSecurityCounts'
+import { hasPermission } from '@/lib/permissions'
 
 interface SideBarProps {
   user: AuthUser
@@ -32,7 +34,15 @@ export function SideBar({ user, isMobileExpanded = false, onNavigate }: SideBarP
   const isExpanded = isMobileExpanded || isHovered
 
   const permissions = new Set(user.permissions)
-  const menuItems = ApplicationMenuItems(navigate, currentPath, permissions, onNavigate)
+  const canViewSecurity = hasPermission(permissions, 'VIEW_SECURITY')
+  const { data: securityCounts } = useSecurityCounts()
+  const menuItems = ApplicationMenuItems(
+    navigate,
+    currentPath,
+    permissions,
+    onNavigate,
+    canViewSecurity ? securityCounts : undefined,
+  )
 
   return (
     <>

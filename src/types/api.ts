@@ -186,6 +186,54 @@ export interface Soc2AuditResponse {
   limit: number
 }
 
+// ---- Security Issues ----
+
+export type SecuritySlaStatus = 'ON_TRACK' | 'AT_RISK' | 'OVERDUE'
+
+export interface SecurityIssueRow {
+  issueGroupId: number
+  issueType: string
+  title?: string
+  severity: string
+  packageName?: string
+  currentVersion?: string
+  fixedVersion?: string
+  cveId?: string
+  cvssScore?: number
+  repoName?: string
+  repoUrl?: string
+  containerImage?: string
+  createdAt: string
+  slaDeadline: string
+  slaStatus: SecuritySlaStatus
+  linkedJobId?: string
+  linkedJobStatus?: string
+}
+
+export interface RepoSecuritySummary {
+  repoSlug: string
+  containers: string[]
+  criticalCount: number
+  highCount: number
+  issues: SecurityIssueRow[]
+}
+
+export interface ProductSecuritySummary {
+  productId: string
+  displayName: string
+  repos: RepoSecuritySummary[]
+}
+
+export interface SecurityIssuesResponse {
+  items: ProductSecuritySummary[]
+  cachedAt: string
+}
+
+export interface SecurityCountsResponse {
+  criticals: number
+  highs: number
+}
+
 export interface RunFixRequest {
   repoUrl: string
   branchName?: string
