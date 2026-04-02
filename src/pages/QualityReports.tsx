@@ -288,15 +288,15 @@ export default function QualityReportsPage() {
                           <BranchSubRow
                             key={`${key}/main`}
                             branch="main"
-                            report={row.mainReport}
-                            compareReport={row.developReport}
+                            report={row.mainReport ?? undefined}
+                            compareReport={row.developReport ?? undefined}
                             isReference
                           />,
                           <BranchSubRow
                             key={`${key}/develop`}
                             branch="develop"
-                            report={row.developReport}
-                            compareReport={row.mainReport}
+                            report={row.developReport ?? undefined}
+                            compareReport={row.mainReport ?? undefined}
                           />,
                         ]
                       : []),
@@ -833,8 +833,8 @@ function ReportDialog({
 
           {/* Two-column branch comparison */}
           <div className="grid grid-cols-2 gap-4">
-            <BranchPanel branch="main" report={mainReport} branchColor="blue" />
-            <BranchPanel branch="develop" report={developReport} branchColor="purple" />
+            <BranchPanel branch="main" report={mainReport ?? undefined} branchColor="blue" />
+            <BranchPanel branch="develop" report={developReport ?? undefined} branchColor="purple" />
           </div>
 
           {/* Trend chart */}

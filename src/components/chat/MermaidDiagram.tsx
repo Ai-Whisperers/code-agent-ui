@@ -8,7 +8,7 @@ mermaid.initialize({
   theme: 'neutral',
   securityLevel: 'loose',
   suppressErrorRendering: true,
-})
+} as Parameters<typeof mermaid.initialize>[0])
 
 export function MermaidDiagram({ code }: { code: string }) {
   const [svg, setSvg] = useState('')
