@@ -770,7 +770,7 @@ interface ChangedFilesTabProps {
   falsePositivePendingId?: number
 }
 
-function ChangedFilesTab({
+export function ChangedFilesTab({
   job, diffData, isLoading, isError, reviewComments = [],
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
@@ -1180,7 +1180,7 @@ interface FileDiffSectionProps {
   falsePositivePendingId?: number
 }
 
-const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
+export const FileDiffSection = forwardRef<FileDiffSectionHandle, FileDiffSectionProps>(
   function FileDiffSection({
     file, viewed, onToggleViewed, fileComments = [],
     onFixComment, fixCommentJobIds = {}, fixedCommentInfo = {}, fixCommentPendingId, onOpenCommit,
@@ -2537,7 +2537,7 @@ interface ReviewTabProps {
   falsePositivePendingId?: number
 }
 
-function ReviewTab({
+export function ReviewTab({
   reviewData, isLoading, requestReviewPending, onRequestReview,
   fixPrPending, fixPrJobId, onFixPr,
   fixCommentJobIds = {}, fixedCommentInfo = {}, onFixComment, fixCommentPendingId, onOpenCommit,
@@ -2917,7 +2917,7 @@ interface CommitsTabProps {
   onCommitClick: (sha: string) => void
 }
 
-function CommitsTab({ commits, isLoading, onCommitClick }: CommitsTabProps) {
+export function CommitsTab({ commits, isLoading, onCommitClick }: CommitsTabProps) {
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 py-8 text-sm text-[var(--color-fonts-font-color-support)]">
@@ -2977,7 +2977,7 @@ function CommitsTab({ commits, isLoading, onCommitClick }: CommitsTabProps) {
   )
 }
 
-function RelativeTime({ dateStr }: { dateStr: string }) {
+export function RelativeTime({ dateStr }: { dateStr: string }) {
   const date = new Date(dateStr)
   if (isNaN(date.getTime())) return <>{dateStr}</>
   const diff = Date.now() - date.getTime()
@@ -3000,7 +3000,7 @@ interface CommitDiffDialogProps {
   onClose: () => void
 }
 
-function CommitDiffDialog({ commit, diffData, isLoading, onClose }: CommitDiffDialogProps) {
+export function CommitDiffDialog({ commit, diffData, isLoading, onClose }: CommitDiffDialogProps) {
   if (!commit) return null
 
   const firstLine = commit.message.split('\n')[0]

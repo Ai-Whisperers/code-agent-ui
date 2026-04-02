@@ -57,6 +57,7 @@ export type Permission =
   | 'MANAGE_SETTINGS'
   | 'MANAGE_USERS'
   | 'VIEW_SCOPE'
+  | 'VIEW_PULL_REQUESTS'
 
 export interface PermissionMeta {
   label: string
@@ -100,6 +101,11 @@ export const PERMISSION_META: Record<Permission, PermissionMeta> = {
     description: 'Access the product scope and Jira readiness reviews.',
     category: 'Analysis',
   },
+  VIEW_PULL_REQUESTS: {
+    label: 'View pull requests',
+    description: 'Access the pull requests screen showing open PRs across all repositories.',
+    category: 'Analysis',
+  },
 }
 
 export const PERMISSION_CATEGORY_ORDER = ['Chat', 'Analysis', 'Jobs', 'Administration']
@@ -109,8 +115,8 @@ export const PERMISSION_CATEGORY_ORDER = ['Chat', 'Analysis', 'Jobs', 'Administr
 const ROLE_PERMISSIONS: Record<AppRole, Permission[]> = {
   USER:          ['USE_CHAT', 'EXECUTE_ANALYSIS'],
   STAFF:         ['USE_CHAT', 'EXECUTE_ANALYSIS', 'VIEW_SCOPE'],
-  DEVELOPER:     ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'VIEW_SCOPE'],
-  ADMINISTRATOR: ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'VIEW_SCOPE'],
+  DEVELOPER:     ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'VIEW_SCOPE', 'VIEW_PULL_REQUESTS'],
+  ADMINISTRATOR: ['USE_CHAT', 'EXECUTE_ANALYSIS', 'EXECUTE_FIX_JOBS', 'EXECUTE_PLAN_JOBS', 'MANAGE_SETTINGS', 'MANAGE_USERS', 'VIEW_SCOPE', 'VIEW_PULL_REQUESTS'],
 }
 
 // ── Mapping functions ─────────────────────────────────────────────────────────

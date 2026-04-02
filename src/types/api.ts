@@ -245,6 +245,42 @@ export interface RepoSettings {
   tags?: string[]
 }
 
+// ---- Pull Requests ----
+
+export interface OpenPrEntry {
+  workspace: string
+  repoSlug: string
+  prId: string
+  prUrl: string
+  title: string
+  sourceBranch: string
+  targetBranch: string
+  author: string
+  createdOn: string
+  updatedOn: string
+  jobId?: string
+  status: string
+  soc2?: boolean
+}
+
+export interface PrListResponse {
+  items: OpenPrEntry[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface PrInfoResponse {
+  title: string
+  sourceBranch: string
+  targetBranch: string
+  author?: string
+  prUrl?: string
+  createdOn?: string
+  updatedOn?: string
+  jobId?: string
+}
+
 // ---- Jira Meta ----
 
 export interface JiraProjectMeta {

@@ -44,6 +44,8 @@ import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
 import { QaReadinessPage } from '@/pages/QaReadiness'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
+import PullRequestsPage from '@/pages/PullRequests'
+import PRDetail from '@/pages/PRDetail'
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
@@ -128,6 +130,23 @@ const jobDetailRoute = createRoute({
   component: function JobDetailRoute() {
     const { id } = jobDetailRoute.useParams()
     return <JobDetail jobId={id} />
+  },
+})
+
+const pullRequestsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/pull-requests',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_developer', 'app_admin'] }),
+  component: PullRequestsPage,
+})
+
+const prDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/pull-requests/$workspace/$repoSlug/$prId',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_developer', 'app_admin'] }),
+  component: function PRDetailRoute() {
+    const { workspace, repoSlug, prId } = prDetailRoute.useParams()
+    return <PRDetail workspace={workspace} repoSlug={repoSlug} prId={prId} />
   },
 })
 
@@ -346,6 +365,8 @@ const routeTree = rootRoute.addChildren([
     jobsRoute,
     newJobRoute,
     jobDetailRoute,
+    pullRequestsRoute,
+    prDetailRoute,
     reposRoute,
     hooksRoute,
     promptsRoute,

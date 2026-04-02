@@ -79,6 +79,16 @@ export function ApplicationMenuItems(
       onClick: () => go('/jobs'),
     },
     {
+      id: 'pull-requests',
+      label: 'Pull Requests',
+      icon: <GitPullRequest size={18} />,
+      path: '/pull-requests',
+      isActive: currentPath.startsWith('/pull-requests'),
+      type: 'item',
+      requiredPermission: 'VIEW_PULL_REQUESTS',
+      onClick: () => go('/pull-requests'),
+    },
+    {
       id: 'plans',
       label: 'Plans',
       icon: <GitBranch size={18} />,
