@@ -1,196 +1,555 @@
-import { useState, useMemo } from 'react'
+import { Fragment, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip as ChartTooltip,
-  Legend,
-} from 'chart.js'
-import { Bar } from 'react-chartjs-2'
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  LabelList,
+  Cell,
+} from 'recharts'
 import {
-  FlaskConical,
+  CheckCircle2,
+  AlertTriangle,
+  Layers,
+  ShieldCheck,
   ChevronDown,
   ChevronRight,
-  AlertTriangle,
+  ArrowUpDown,
   Loader2,
 } from 'lucide-react'
-import { PageHeader } from '@/components/layout/PageHeader'
-import { TableCard } from '@/components/ui/TableCard'
 import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
+import { TableCard } from '@/components/ui/TableCard'
+import { Select } from '@/components/ui/Select'
 import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import api from '@/lib/api'
-import type { Scope, QaReadinessResponse, ScopeTreeItem } from '@/types/api'
+import type { Scope, QaReadinessResponse, ScopeTreeItem, ReadinessLabel } from '@/types/api'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, ChartTooltip, Legend)
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type SortKey = 'readinessScore' | 'aggregateScore' | 'readyForDelivery' | 'jiraStatus'
+type SortDir = 'asc' | 'desc'
+
+interface FeatureRow {
+  feature: ScopeTreeItem
+  stories: ScopeTreeItem[]
+  storyStats: { total: number; ready: number; reviewed: number }
+}
 
 // ── KPI card ─────────────────────────────────────────────────────────────────
 
+type KpiVariant = 'default' | 'success' | 'warning' | 'danger'
+
+const VARIANT_BORDER: Record<KpiVariant, string> = {
+  default:  'border-[var(--color-cards-card-stroke)]',
+  success:  'border-[var(--color-tags-success-background)]',
+  warning:  'border-[var(--color-tags-attention-background)]',
+  danger:   'border-[var(--color-tags-critical-background)]',
+}
+const VARIANT_BG: Record<KpiVariant, string> = {
+  default:  'var(--color-cards-card-background)',
+  success:  'var(--color-tags-success-background)',
+  warning:  'var(--color-tags-attention-background)',
+  danger:   'var(--color-tags-critical-background)',
+}
+const VARIANT_VALUE: Record<KpiVariant, string> = {
+  default: 'text-[var(--color-fonts-font-color-headings)]',
+  success: 'text-[var(--color-tags-font-success)]',
+  warning: 'text-[var(--color-tags-font-attention)]',
+  danger:  'text-[var(--color-tags-font-critical)]',
+}
+const VARIANT_ICON: Record<KpiVariant, string> = {
+  default: 'text-[var(--color-fonts-font-color-brand)]',
+  success: 'text-[var(--color-tags-font-success)]',
+  warning: 'text-[var(--color-tags-font-attention)]',
+  danger:  'text-[var(--color-tags-font-critical)]',
+}
+
 function KpiCard({
+  icon,
   label,
   value,
-  total,
-  colorClass = 'text-[var(--color-fonts-font-color-primary)]',
+  sub,
+  variant = 'default',
 }: {
+  icon: React.ReactNode
   label: string
-  value: number
-  total?: number
-  colorClass?: string
+  value: string | number
+  sub?: string
+  variant?: KpiVariant
 }) {
-  const pct = total && total > 0 ? Math.round((value / total) * 100) : null
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] px-4 py-3 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
-      <span className="text-xs text-[var(--color-fonts-font-color-support)] truncate">{label}</span>
-      <div className="flex items-baseline gap-1.5">
-        <span className={`text-2xl font-bold tabular-nums ${colorClass}`}>{value}</span>
-        {pct !== null && (
-          <span className="text-xs text-[var(--color-fonts-font-color-support)]">{pct}%</span>
-        )}
+    <div
+      className={`flex flex-col gap-3 rounded-lg border p-5 shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] transition-shadow hover:shadow-md ${VARIANT_BORDER[variant]}`}
+      style={{ background: VARIANT_BG[variant] }}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">
+          {label}
+        </span>
+        <span className={`h-5 w-5 ${VARIANT_ICON[variant]}`}>{icon}</span>
+      </div>
+      <div>
+        <p className={`text-3xl font-bold tabular-nums ${VARIANT_VALUE[variant]}`}>{value}</p>
+        {sub && <p className="mt-1 text-xs text-[var(--color-fonts-font-color-support)]">{sub}</p>}
       </div>
     </div>
   )
 }
 
-// ── Jira status badge ─────────────────────────────────────────────────────────
-
-const STATUS_CLS: Record<string, string> = {
-  Closed:      'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
-  QA:          'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  'In Progress':'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]',
-  New:         'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
+function gateVariant(pct: number): KpiVariant {
+  if (pct >= 80) return 'success'
+  if (pct >= 50) return 'warning'
+  return 'danger'
 }
 
-function StatusBadge({ status }: { status?: string }) {
-  if (!status) return <span className="text-[var(--color-fonts-font-color-support)] text-xs">—</span>
-  const cls = STATUS_CLS[status] ?? 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]'
+// ── Readiness gate badge (pass / fail / na) ───────────────────────────────────
+
+function GateBadge({ pass, na }: { pass: boolean | undefined; na?: boolean }) {
+  if (na || pass == null)
+    return <span className="text-[var(--color-fonts-font-color-support)] text-xs">—</span>
   return (
-    <span className={`inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-[var(--border-radius-tag)] ${cls}`}>
+    <span
+      className={`inline-flex items-center justify-center rounded-full font-semibold h-6 w-6 text-sm ${
+        pass
+          ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
+          : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]'
+      }`}
+      title={pass ? 'Gate passed' : 'Gate not passed'}
+    >
+      {pass ? '✓' : '✗'}
+    </span>
+  )
+}
+
+// ── Story count fraction ──────────────────────────────────────────────────────
+
+function StoryCount({ value, total }: { value: number; total: number }) {
+  if (total === 0) return <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+  const ratio = value / total
+  const cls =
+    ratio === 1
+      ? 'text-[var(--color-tags-font-success)]'
+      : ratio > 0.5
+        ? 'text-[var(--color-tags-font-attention)]'
+        : 'text-[var(--color-tags-font-critical)]'
+  return <span className={`text-xs font-semibold tabular-nums ${cls}`}>{value}/{total}</span>
+}
+
+// ── Status badge ──────────────────────────────────────────────────────────────
+
+function StatusBadge({ status }: { status?: string | null }) {
+  if (!status) return <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+
+  const cls: Record<string, string> = {
+    'New':         'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
+    'In Progress': 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    'QA':          'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    'Closed':      'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]',
+  }
+
+  return (
+    <span className={`inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] text-xs ${cls[status] ?? 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]'}`}>
       {status}
     </span>
   )
 }
 
-// ── Expandable tree table ─────────────────────────────────────────────────────
+// ── Sort button ───────────────────────────────────────────────────────────────
 
-type TreeNode = ScopeTreeItem & { children: TreeNode[] }
-
-function buildTree(items: ScopeTreeItem[]): TreeNode[] {
-  const byKey = new Map<string, TreeNode>()
-  for (const item of items) {
-    byKey.set(item.issueKey, { ...item, children: [] })
-  }
-  const roots: TreeNode[] = []
-  for (const node of byKey.values()) {
-    const parentKey = node.parentKey
-    if (parentKey && byKey.has(parentKey)) {
-      byKey.get(parentKey)!.children.push(node)
-    } else {
-      roots.push(node)
-    }
-  }
-  return roots
+function SortButton({
+  label,
+  field,
+  current,
+  onSort,
+}: {
+  label: string
+  field: SortKey
+  current: SortKey
+  dir: SortDir
+  onSort: (k: SortKey) => void
+}) {
+  const active = current === field
+  return (
+    <button
+      onClick={() => onSort(field)}
+      className={`inline-flex items-center gap-1 text-xs font-medium uppercase tracking-wide transition-colors ${
+        active
+          ? 'text-[var(--color-fonts-font-color-brand)]'
+          : 'text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
+      }`}
+    >
+      {label}
+      <ArrowUpDown className={`h-3 w-3 ${active ? 'opacity-100' : 'opacity-40'}`} />
+    </button>
+  )
 }
 
-function ItemRow({
-  node,
-  depth,
-  expanded,
-  onToggle,
-  jiraBaseUrl,
-}: {
-  node: TreeNode
-  depth: number
-  expanded: Set<string>
-  onToggle: (key: string) => void
-  jiraBaseUrl: string
-}) {
-  const isExpanded = expanded.has(node.issueKey)
-  const hasChildren = node.children.length > 0
-  const indent = depth * 20
+// ── Story sub-table (inline drawer) ──────────────────────────────────────────
+
+function StoryDrawer({ stories, jiraBaseUrl }: { stories: ScopeTreeItem[]; jiraBaseUrl: string }) {
+  if (stories.length === 0) {
+    return (
+      <div className="px-6 py-3 text-xs italic text-[var(--color-fonts-font-color-support)]">
+        No stories linked to this feature.
+      </div>
+    )
+  }
 
   return (
-    <>
-      <tr
-        className="border-b border-[var(--color-tables-table-row-stroke)] hover:bg-[var(--color-tables-table-row-hover)] transition-colors"
-        onClick={() => hasChildren && onToggle(node.issueKey)}
-        style={{ cursor: hasChildren ? 'pointer' : 'default' }}
-      >
-        {/* Expand / type */}
-        <td className="py-2 pl-3 pr-1 whitespace-nowrap" style={{ paddingLeft: `${12 + indent}px` }}>
-          <div className="flex items-center gap-1.5">
-            {hasChildren ? (
-              isExpanded
-                ? <ChevronDown size={13} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
-                : <ChevronRight size={13} className="text-[var(--color-fonts-font-color-support)] shrink-0" />
-            ) : (
-              <span className="w-[13px] shrink-0" />
-            )}
-            <IssueTypeIcon issueType={node.issueType} size={14} />
-          </div>
-        </td>
+    <div
+      className="overflow-x-auto border-t"
+      style={{
+        background: 'var(--color-tables-table-header-background)',
+        borderColor: 'var(--color-tables-table-header-stroke)',
+      }}
+    >
+      <table className="w-full text-xs">
+        <thead>
+          <tr
+            className="border-b"
+            style={{
+              borderColor: 'var(--color-tables-table-header-stroke)',
+              color: 'var(--color-fonts-font-color-support)',
+            }}
+          >
+            <th className="px-6 py-2 text-left font-medium">Key</th>
+            <th className="px-3 py-2 text-left font-medium">Summary</th>
+            <th className="px-3 py-2 text-left font-medium">Status</th>
+            <th className="px-3 py-2 text-center font-medium">Readiness</th>
+            <th className="px-3 py-2 text-center font-medium">Ready</th>
+            <th className="px-3 py-2 text-center font-medium">Stale</th>
+            <th className="px-3 py-2 text-left font-medium">Assignee</th>
+          </tr>
+        </thead>
+        <tbody>
+          {stories.map((story) => (
+            <tr
+              key={story.issueKey}
+              className="border-b last:border-0 hover:bg-[var(--color-cards-card-background)] transition-colors"
+              style={{ borderColor: 'var(--color-tables-table-row-stroke)' }}
+            >
+              <td className="px-6 py-2.5">
+                <JiraIssueLink
+                  issueKey={story.issueKey}
+                  jiraBaseUrl={jiraBaseUrl}
+                  className="font-mono text-[var(--color-fonts-font-color-brand)] hover:underline"
+                />
+              </td>
+              <td className="max-w-xs px-3 py-2.5">
+                <span className="line-clamp-2 text-[var(--color-fonts-font-color-primary)]">{story.summary}</span>
+              </td>
+              <td className="px-3 py-2.5">
+                <StatusBadge status={story.jiraStatus} />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <ReadinessBadge label={story.readinessLabel} score={story.readinessScore} showScore />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                <GateBadge pass={story.readyForDelivery} na={story.readinessScore == null} />
+              </td>
+              <td className="px-3 py-2.5 text-center">
+                {story.isStale && (
+                  <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+                    stale
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2.5 text-[var(--color-fonts-font-color-primary)]">
+                {story.assignee ?? (
+                  <span className="italic text-[var(--color-fonts-font-color-support)]">Unassigned</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
-        {/* Key */}
-        <td className="py-2 px-2 whitespace-nowrap">
-          <JiraIssueLink
-            issueKey={node.issueKey}
-            jiraBaseUrl={jiraBaseUrl}
-            className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)]"
-          />
-        </td>
+// ── Feature table ─────────────────────────────────────────────────────────────
 
-        {/* Summary */}
-        <td className="py-2 px-2 max-w-xs">
-          <span className="text-xs text-[var(--color-fonts-font-color-primary)] line-clamp-2">
-            {node.summary}
-          </span>
-        </td>
+function FeaturePipeline({
+  rows,
+  jiraBaseUrl,
+}: {
+  rows: FeatureRow[]
+  jiraBaseUrl: string
+}) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [sortKey, setSortKey] = useState<SortKey>('aggregateScore')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-        {/* Jira Status */}
-        <td className="py-2 px-2 whitespace-nowrap">
-          <StatusBadge status={node.jiraStatus} />
-        </td>
+  function toggleExpand(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
-        {/* Readiness */}
-        <td className="py-2 px-2 whitespace-nowrap">
-          <ReadinessBadge label={node.readinessLabel} score={node.readinessScore} showScore />
-        </td>
+  function handleSort(key: SortKey) {
+    if (key === sortKey) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('desc') }
+  }
 
-        {/* Ready for delivery */}
-        <td className="py-2 px-2 text-center whitespace-nowrap">
-          {node.readyForDelivery == null ? (
-            <span className="text-[var(--color-fonts-font-color-support)] text-xs">—</span>
-          ) : node.readyForDelivery ? (
-            <span className="text-[var(--color-tags-font-success)] text-xs font-medium">✓</span>
-          ) : (
-            <span className="text-[var(--color-tags-font-critical)] text-xs font-medium">✗</span>
-          )}
-        </td>
+  const sorted = useMemo(() => {
+    return [...rows].sort((a, b) => {
+      let diff = 0
+      switch (sortKey) {
+        case 'aggregateScore':
+          diff = (a.feature.aggregateScore ?? -1) - (b.feature.aggregateScore ?? -1)
+          break
+        case 'readinessScore':
+          diff = (a.feature.readinessScore ?? -1) - (b.feature.readinessScore ?? -1)
+          break
+        case 'readyForDelivery':
+          diff = (a.feature.readyForDelivery ? 1 : 0) - (b.feature.readyForDelivery ? 1 : 0)
+          break
+        case 'jiraStatus': {
+          const STATUS_ORDER: Record<string, number> = { New: 0, 'In Progress': 1, QA: 2, Closed: 3 }
+          diff = (STATUS_ORDER[a.feature.jiraStatus ?? ''] ?? 0) - (STATUS_ORDER[b.feature.jiraStatus ?? ''] ?? 0)
+          break
+        }
+      }
+      return sortDir === 'asc' ? diff : -diff
+    })
+  }, [rows, sortKey, sortDir])
 
-        {/* Stale */}
-        <td className="py-2 px-2 text-center whitespace-nowrap">
-          {node.isStale && (
-            <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
-              stale
-            </span>
-          )}
-        </td>
-      </tr>
+  const subtitle = `${rows.length} feature${rows.length !== 1 ? 's' : ''} · click row to expand stories`
 
-      {isExpanded && node.children.map((child) => (
-        <ItemRow
-          key={child.issueKey}
-          node={child}
-          depth={depth + 1}
-          expanded={expanded}
-          onToggle={onToggle}
-          jiraBaseUrl={jiraBaseUrl}
-        />
-      ))}
-    </>
+  return (
+    <TableCard title="Feature Pipeline" subtitle={subtitle} maxHeight="auto">
+      {rows.length === 0 ? (
+        <div className="p-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+          No features found. Sync the scope from Jira first.
+        </div>
+      ) : (
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead
+            style={{
+              borderBottom: '1px solid var(--color-tables-table-header-stroke)',
+              background: 'var(--color-tables-table-header-background)',
+            }}
+          >
+            <tr>
+              <th className="w-8 px-3 py-3" />
+              <th className="px-4 py-3 text-left">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Key</span>
+              </th>
+              <th className="px-3 py-3 text-left">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Feature</span>
+              </th>
+              <th className="px-3 py-3 text-left">
+                <SortButton label="Status" field="jiraStatus" current={sortKey} dir={sortDir} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-3 text-center">
+                <SortButton label="Readiness" field="readinessScore" current={sortKey} dir={sortDir} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-3 text-center">
+                <SortButton label="Aggregate" field="aggregateScore" current={sortKey} dir={sortDir} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-3 text-center">
+                <SortButton label="Ready" field="readyForDelivery" current={sortKey} dir={sortDir} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-3 text-center">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Stories Ready</span>
+              </th>
+              <th className="px-3 py-3 text-center">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Stories Done</span>
+              </th>
+              <th className="px-3 py-3 text-left">
+                <span className="text-xs font-medium uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Assignee</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map(({ feature, stories, storyStats }) => {
+              const isOpen = expanded.has(feature.issueKey)
+              return (
+                <Fragment key={feature.issueKey}>
+                  <tr
+                    onClick={() => toggleExpand(feature.issueKey)}
+                    className={`cursor-pointer transition-colors ${
+                      isOpen
+                        ? 'bg-[var(--color-tables-table-row-hover)]'
+                        : 'hover:bg-[var(--color-tables-table-row-hover)]'
+                    }`}
+                    style={{ borderBottom: '1px solid var(--color-tables-table-row-stroke)' }}
+                  >
+                    {/* Expand toggle */}
+                    <td className="px-3 py-3 text-[var(--color-fonts-font-color-support)]">
+                      {isOpen
+                        ? <ChevronDown className="h-4 w-4" />
+                        : <ChevronRight className="h-4 w-4" />}
+                    </td>
+
+                    {/* Key */}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <IssueTypeIcon issueType="FEATURE" size={13} />
+                        <JiraIssueLink
+                          issueKey={feature.issueKey}
+                          jiraBaseUrl={jiraBaseUrl}
+                          className="font-mono text-xs font-medium text-[var(--color-fonts-font-color-brand)] hover:underline"
+                        />
+                      </div>
+                    </td>
+
+                    {/* Summary */}
+                    <td className="max-w-xs px-3 py-3">
+                      <span className="line-clamp-2 text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+                        {feature.summary}
+                      </span>
+                    </td>
+
+                    {/* Status */}
+                    <td className="px-3 py-3">
+                      <StatusBadge status={feature.jiraStatus} />
+                    </td>
+
+                    {/* Readiness (own score) */}
+                    <td className="px-3 py-3 text-center">
+                      <ReadinessBadge label={feature.readinessLabel as ReadinessLabel | undefined} score={feature.readinessScore} showScore />
+                    </td>
+
+                    {/* Aggregate score */}
+                    <td className="px-3 py-3 text-center">
+                      {feature.aggregateScore != null ? (
+                        <span className="text-sm font-semibold tabular-nums text-[var(--color-fonts-font-color-primary)]">
+                          {feature.aggregateScore}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+                      )}
+                    </td>
+
+                    {/* Ready for delivery gate */}
+                    <td className="px-3 py-3 text-center">
+                      <GateBadge pass={feature.readyForDelivery} na={feature.aggregateScore == null} />
+                    </td>
+
+                    {/* Stories ready */}
+                    <td className="px-3 py-3 text-center">
+                      <StoryCount value={storyStats.ready} total={storyStats.total} />
+                    </td>
+
+                    {/* Stories done */}
+                    <td className="px-3 py-3 text-center">
+                      <StoryCount
+                        value={stories.filter((s) => s.jiraStatus === 'Closed').length}
+                        total={storyStats.total}
+                      />
+                    </td>
+
+                    {/* Assignee */}
+                    <td className="px-3 py-3">
+                      {feature.assignee ? (
+                        <span className="truncate text-xs text-[var(--color-fonts-font-color-primary)]">
+                          {feature.assignee}
+                        </span>
+                      ) : (
+                        <span className="text-xs italic text-[var(--color-fonts-font-color-support)]">Unassigned</span>
+                      )}
+                    </td>
+                  </tr>
+
+                  {/* Story sub-table */}
+                  {isOpen && (
+                    <tr>
+                      <td colSpan={10} className="p-0">
+                        <StoryDrawer stories={stories} jiraBaseUrl={jiraBaseUrl} />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      )}
+    </TableCard>
+  )
+}
+
+// ── Funnel chart ──────────────────────────────────────────────────────────────
+
+const FUNNEL_COLORS = ['#004766', '#008FCC', '#00B4FF', '#16DB93']
+
+function ReadinessFunnel({ summary }: { summary: QaReadinessResponse['summary'] }) {
+  const total = summary.totalItems
+
+  const data = [
+    { name: 'Reviewed',         count: summary.reviewed },
+    { name: 'Minor Improvements', count: summary.minorImprovementsCount + summary.fullyReadyCount },
+    { name: 'Fully Ready',       count: summary.fullyReadyCount },
+    { name: 'Ready for Delivery',count: summary.readyForDeliveryCount },
+  ]
+
+  return (
+    <TableCard
+      title="Readiness Funnel"
+      subtitle={`${total} total items`}
+      maxHeight="auto"
+    >
+      <div className="px-6 py-4">
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart
+            data={data}
+            layout="vertical"
+            margin={{ top: 0, right: 60, bottom: 0, left: 10 }}
+          >
+            <XAxis
+              type="number"
+              domain={[0, Math.max(total, 1)]}
+              tick={{ fontSize: 11, fill: 'var(--color-fonts-font-color-support)' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              dataKey="name"
+              type="category"
+              width={155}
+              tick={{ fontSize: 12, fill: 'var(--color-fonts-font-color-primary)' }}
+              axisLine={false}
+              tickLine={false}
+            />
+            <RechartsTooltip
+              cursor={{ fill: 'rgba(0,82,204,0.05)' }}
+              formatter={(value) => {
+                const n = typeof value === 'number' ? value : 0
+                return [`${n} item${n !== 1 ? 's' : ''} (${total > 0 ? Math.round((n / total) * 100) : 0}%)`, 'Count']
+              }}
+              contentStyle={{
+                borderRadius: '8px',
+                border: '1px solid var(--color-cards-card-stroke)',
+                fontSize: '12px',
+                background: 'var(--color-cards-card-background)',
+                color: 'var(--color-fonts-font-color-primary)',
+              }}
+            />
+            <Bar dataKey="count" radius={[0, 4, 4, 0]} maxBarSize={32}>
+              {data.map((_, index) => (
+                <Cell key={index} fill={FUNNEL_COLORS[index % FUNNEL_COLORS.length]} />
+              ))}
+              <LabelList
+                dataKey="count"
+                position="right"
+                style={{ fontSize: '13px', fontWeight: 600, fill: 'var(--color-fonts-font-color-primary)' }}
+              />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    </TableCard>
   )
 }
 
@@ -198,7 +557,6 @@ function ItemRow({
 
 export function QaReadinessPage() {
   const [selectedScopeId, setSelectedScopeId] = useState<string>('')
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const { data: scopes = [] } = useQuery<Scope[]>({
     queryKey: ['scopes'],
@@ -214,120 +572,75 @@ export function QaReadinessPage() {
 
   const effectiveScopeId = selectedScopeId || scopes[0]?.id || ''
 
-  const {
-    data: qaData,
-    isLoading,
-    isError,
-  } = useQuery<QaReadinessResponse>({
+  const { data: qaData, isLoading, isError } = useQuery<QaReadinessResponse>({
     queryKey: ['qa-readiness', effectiveScopeId],
     queryFn: () => api.get(`/scope/${effectiveScopeId}/qa-readiness`).then((r) => r.data),
     enabled: !!effectiveScopeId,
   })
 
   const summary = qaData?.summary
-  const items   = qaData?.items ?? []
 
-  const tree = useMemo(() => buildTree(items), [items])
-
-  const toggleExpand = (key: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
+  // Build feature rows: each FEATURE with its child USERSTORYs
+  const featureRows = useMemo<FeatureRow[]>(() => {
+    const allItems = qaData?.items ?? []
+    const features = allItems.filter((i) => i.issueType === 'FEATURE')
+    const storiesByFeature = new Map<string, ScopeTreeItem[]>()
+    for (const item of allItems) {
+      if (item.issueType === 'USERSTORY' && item.parentKey) {
+        const arr = storiesByFeature.get(item.parentKey) ?? []
+        arr.push(item)
+        storiesByFeature.set(item.parentKey, arr)
+      }
+    }
+    return features.map((feature) => {
+      const stories = storiesByFeature.get(feature.issueKey) ?? []
+      const reviewed = stories.filter((s) => s.readinessScore != null).length
+      const ready    = stories.filter((s) => s.readyForDelivery).length
+      return { feature, stories, storyStats: { total: stories.length, ready, reviewed } }
     })
-  }
+  }, [qaData?.items])
 
-  const expandAll = () => {
-    const keys = new Set(items.map((i) => i.issueKey))
-    setExpanded(keys)
-  }
+  // Summary bar breakdown string
+  const statusBreakdown = useMemo(() => {
+    if (!summary) return undefined
+    const parts: string[] = []
+    if (summary.inQaStatusCount)  parts.push(`QA: ${summary.inQaStatusCount}`)
+    if (summary.closedCount)       parts.push(`Closed: ${summary.closedCount}`)
+    if (summary.staleCount)        parts.push(`Stale: ${summary.staleCount}`)
+    return parts.join(' · ') || undefined
+  }, [summary])
 
-  const collapseAll = () => setExpanded(new Set())
-
-  // ── Chart data ──────────────────────────────────────────────────────────────
-
-  const chartData = useMemo(() => ({
-    labels: ['Fully Ready', 'Minor Improvements', 'Needs Refinement', 'Poor', 'Not Reviewed'],
-    datasets: [
-      {
-        label: 'Items',
-        data: summary
-          ? [
-              summary.fullyReadyCount,
-              summary.minorImprovementsCount,
-              summary.needsRefinementCount,
-              summary.poorCount,
-              summary.totalItems - summary.reviewed,
-            ]
-          : [],
-        backgroundColor: [
-          'var(--color-tags-success-background)',
-          '#bfdbfe',
-          'var(--color-tags-attention-background)',
-          'var(--color-tags-critical-background)',
-          'var(--color-tags-neutral-background)',
-        ],
-        borderColor: [
-          'var(--color-tags-font-success)',
-          '#3b82f6',
-          'var(--color-tags-font-attention)',
-          'var(--color-tags-font-critical)',
-          'var(--color-tags-font-neutral)',
-        ],
-        borderWidth: 1,
-        borderRadius: 4,
-      },
-    ],
-  }), [summary])
-
-  const chartOptions = useMemo(() => ({
-    indexAxis: 'y' as const,
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: { callbacks: { label: (ctx: { parsed: { x: number } }) => ` ${ctx.parsed.x} items` } },
-    },
-    scales: {
-      x: {
-        beginAtZero: true,
-        ticks: { stepSize: 1, precision: 0, color: 'var(--color-fonts-font-color-support)', font: { size: 11 } },
-        grid: { color: 'var(--color-borders-border-primary)' },
-      },
-      y: {
-        ticks: { color: 'var(--color-fonts-font-color-primary)', font: { size: 12 } },
-        grid: { display: false },
-      },
-    },
-  }), [])
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const pctReviewed     = summary && summary.totalItems > 0 ? Math.round((summary.reviewed / summary.totalItems) * 100) : 0
+  const pctFullyReady   = summary && summary.totalItems > 0 ? Math.round((summary.fullyReadyCount / summary.totalItems) * 100) : 0
+  const pctReadyForDel  = summary && summary.totalItems > 0 ? Math.round((summary.readyForDeliveryCount / summary.totalItems) * 100) : 0
 
   const scopeSelector = (
     <div className="flex items-center gap-2">
-      <label className="text-xs text-[var(--color-fonts-font-color-support)] shrink-0">Scope</label>
-      <select
+      <span className="text-xs text-[var(--color-fonts-font-color-support)] shrink-0">Scope</span>
+      <Select
         value={selectedScopeId || effectiveScopeId}
-        onChange={(e) => setSelectedScopeId(e.target.value)}
-        className="text-sm rounded border border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] px-2 py-1 focus:outline-none focus:ring-2 focus:ring-[var(--color-buttons-button-primary)]"
-      >
-        {scopes.map((s) => (
-          <option key={s.id} value={s.id}>{s.name}</option>
-        ))}
-      </select>
+        onChange={setSelectedScopeId}
+        options={scopes.map((s) => ({ value: s.id, label: s.name }))}
+        placeholder="Select scope…"
+        className="w-52"
+      />
     </div>
   )
 
   return (
-    <main className="flex flex-col gap-5 p-5 min-h-0">
-      <PageHeader
-        title="QA Readiness"
-        subtitle="Scope readiness overview for QA sign-off"
-        actions={scopeSelector}
-      />
+    <main className="flex flex-col gap-6 px-6 py-6 lg:px-8 lg:py-8">
+      {/* Page header */}
+      <div className="flex items-end justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--color-fonts-font-color-headings)]">QA Readiness</h1>
+          <p className="mt-1 text-sm text-[var(--color-fonts-font-color-support)]">
+            Scope readiness overview · live Jira data
+          </p>
+        </div>
+        {scopeSelector}
+      </div>
 
-      {/* Loading / error states */}
+      {/* Loading / error */}
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-[var(--color-fonts-font-color-support)]">
           <Loader2 size={15} className="animate-spin" />
@@ -336,9 +649,15 @@ export function QaReadinessPage() {
       )}
 
       {isError && (
-        <div className="flex items-center gap-2 text-sm text-[var(--color-tags-font-critical)]">
-          <AlertTriangle size={15} />
-          Failed to load QA readiness data.
+        <div
+          className="rounded-lg border p-5 text-sm"
+          style={{
+            background: 'var(--color-tags-critical-background)',
+            borderColor: 'var(--color-tags-critical-background)',
+            color: 'var(--color-tags-font-critical)',
+          }}
+        >
+          <strong className="font-semibold">Unable to load data.</strong> Check that the scope exists and has been synced.
         </div>
       )}
 
@@ -350,113 +669,50 @@ export function QaReadinessPage() {
 
       {summary && (
         <>
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* KPI summary bar — 5 cards like argus SummaryBar */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
             <KpiCard
+              icon={<Layers className="h-5 w-5" />}
+              label="Total Items"
+              value={summary.totalItems}
+              sub={statusBreakdown}
+              variant="default"
+            />
+            <KpiCard
+              icon={<ShieldCheck className="h-5 w-5" />}
               label="Reviewed"
-              value={summary.reviewed}
-              total={summary.totalItems}
+              value={`${pctReviewed}%`}
+              sub={`${summary.reviewed} of ${summary.totalItems} items`}
+              variant={gateVariant(pctReviewed)}
             />
             <KpiCard
+              icon={<CheckCircle2 className="h-5 w-5" />}
               label="Fully Ready"
-              value={summary.fullyReadyCount}
-              total={summary.totalItems}
-              colorClass="text-[var(--color-tags-font-success)]"
+              value={`${pctFullyReady}%`}
+              sub={`${summary.fullyReadyCount} items fully ready`}
+              variant={gateVariant(pctFullyReady)}
             />
             <KpiCard
-              label="In QA Status"
-              value={summary.inQaStatusCount}
-              total={summary.totalItems}
-              colorClass="text-blue-600 dark:text-blue-400"
+              icon={<CheckCircle2 className="h-5 w-5" />}
+              label="Ready for Delivery"
+              value={`${pctReadyForDel}%`}
+              sub={`${summary.readyForDeliveryCount} items pass threshold`}
+              variant={gateVariant(pctReadyForDel)}
             />
             <KpiCard
+              icon={<AlertTriangle className="h-5 w-5" />}
               label="Stale Reviews"
               value={summary.staleCount}
-              total={summary.totalItems}
-              colorClass={summary.staleCount > 0 ? 'text-[var(--color-tags-font-attention)]' : undefined}
+              sub="Jira modified after last review"
+              variant={summary.staleCount === 0 ? 'success' : summary.staleCount <= 5 ? 'warning' : 'danger'}
             />
           </div>
 
-          {/* Secondary KPI row */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <KpiCard label="Ready for Delivery" value={summary.readyForDeliveryCount} total={summary.totalItems} />
-            <KpiCard label="Needs Refinement"   value={summary.needsRefinementCount}  total={summary.totalItems} />
-            <KpiCard label="Poor"               value={summary.poorCount}             total={summary.totalItems} />
-            <KpiCard label="Closed"             value={summary.closedCount}           total={summary.totalItems} />
-          </div>
+          {/* Readiness funnel */}
+          <ReadinessFunnel summary={summary} />
 
-          {/* Readiness distribution chart */}
-          <div className="rounded-lg border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)] p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <FlaskConical size={14} className="text-[var(--color-fonts-font-color-support)]" />
-              <span className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
-                Readiness Distribution
-              </span>
-              <span className="text-xs text-[var(--color-fonts-font-color-support)]">
-                {summary.totalItems} total items
-              </span>
-            </div>
-            <div style={{ height: 180 }}>
-              <Bar data={chartData} options={chartOptions} />
-            </div>
-          </div>
-
-          {/* Item table */}
-          <TableCard
-            title="Item Readiness"
-            subtitle={`${items.length} items`}
-            toolbar={
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={expandAll}
-                  className="text-xs text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] px-2 py-1 rounded hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
-                >
-                  Expand all
-                </button>
-                <button
-                  onClick={collapseAll}
-                  className="text-xs text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] px-2 py-1 rounded hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
-                >
-                  Collapse all
-                </button>
-              </div>
-            }
-            maxHeight="600px"
-          >
-            <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 bg-[var(--color-tables-table-header-background)]">
-                <tr>
-                  <th className="py-2 pl-3 pr-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap w-10" />
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">Key</th>
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">Summary</th>
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">Jira Status</th>
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap">Readiness</th>
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap text-center">Ready</th>
-                  <th className="py-2 px-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] whitespace-nowrap text-center">Stale</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tree.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
-                      No items found. Sync the scope from Jira first.
-                    </td>
-                  </tr>
-                ) : (
-                  tree.map((node) => (
-                    <ItemRow
-                      key={node.issueKey}
-                      node={node}
-                      depth={0}
-                      expanded={expanded}
-                      onToggle={toggleExpand}
-                      jiraBaseUrl={jiraBaseUrl}
-                    />
-                  ))
-                )}
-              </tbody>
-            </table>
-          </TableCard>
+          {/* Feature pipeline table */}
+          <FeaturePipeline rows={featureRows} jiraBaseUrl={jiraBaseUrl} />
         </>
       )}
     </main>

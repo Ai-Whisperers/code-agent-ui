@@ -78,9 +78,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const secretDebounceRef = useRef<number | null>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
-  const [dictationPreview, setDictationPreview] = useState('')
-
-  const { isListening, isSupported, toggleListening } = useSpeechDictation(
+  const { isListening, isTranscribing, isSupported, toggleListening } = useSpeechDictation(
     (transcript) => {
       setInput(prev => (prev ? `${prev} ${transcript}` : transcript))
       requestAnimationFrame(() => {
@@ -90,7 +88,6 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         el.style.height = `${Math.min(el.scrollHeight, 160)}px`
       })
     },
-    { onInterim: setDictationPreview },
   )
 
   // Initialize attachments with existing attachments when they change.
@@ -897,7 +894,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
                 toggleListening()
               }}
               disabled={isStreaming}
-              title={isListening ? 'Click to finish dictation' : 'Click to dictate — speak, then click again to finish'}
+              title={isListening ? 'Click to stop dictation' : 'Click to dictate — speak naturally, pauses send each chunk'}
               aria-pressed={isListening}
               className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
                 isListening
@@ -907,14 +904,16 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
             >
               <Mic size={16} aria-hidden />
             </button>
-            {isListening && (
+            {(isListening || isTranscribing) && (
               <div className="flex flex-col gap-0.5">
                 <MicWaveform active={isListening} />
                 <span
-                  className="text-[10px] leading-none text-red-600 font-medium max-w-[120px] truncate"
+                  className={`text-[10px] leading-none font-medium max-w-[120px] truncate ${
+                    isTranscribing ? 'text-blue-500' : 'text-red-600'
+                  }`}
                   aria-live="polite"
                 >
-                  {dictationPreview || 'Listening…'}
+                  {isTranscribing ? 'Transcribing…' : 'Listening…'}
                 </span>
               </div>
             )}

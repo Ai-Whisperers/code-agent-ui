@@ -490,6 +490,30 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Speech / Amazon Transcribe ────────────────────────────────────────────────────
+  {
+    id: 'transcribe',
+    label: 'Speech Dictation (Amazon Transcribe)',
+    settings: [
+      {
+        key: 'transcribe.region',
+        label: 'AWS Region',
+        description: 'AWS region for Amazon Transcribe Streaming. Must be a region where the service is available (e.g. eu-west-1, us-east-1). Uses the ECS task role — no extra credentials needed.',
+        defaultValue: 'eu-west-1',
+      },
+      {
+        key: 'transcribe.sample-rate',
+        label: 'PCM Sample Rate (Hz)',
+        description: 'Sample rate in Hz for raw PCM audio. OGG/Opus chunks from the browser are passed through as-is; this value is still required by the Transcribe API.',
+        defaultValue: '16000',
+        inputType: 'number' as const,
+        min: 8000,
+        max: 48000,
+        step: 8000,
+      },
+    ],
+  },
+
   // ── Keycloak Admin ──────────────────────────────────────────────────────────────
   {
     id: 'keycloak-admin',
@@ -531,7 +555,7 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido', 'transcribe'] },
   { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
