@@ -95,17 +95,17 @@ export default function MemoriesPage() {
 
   const { data: memories, isLoading } = useQuery<MemoryEntry[]>({
     queryKey: ['memories'],
-    queryFn: () => api.get('/settings/memories').then((r) => r.data).catch(() => []),
+    queryFn: () => api.get('/memories').then((r) => r.data).catch(() => []),
   })
 
   const toggleMutation = useMutation({
     mutationFn: (entry: MemoryEntry) =>
-      api.patch(`/settings/memories/${entry.id}`, { active: !entry.active }),
+      api.patch(`/memories/${entry.id}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/settings/memories/${id}`),
+    mutationFn: (id: string) => api.delete(`/memories/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories'] })
       setPendingDelete(null)

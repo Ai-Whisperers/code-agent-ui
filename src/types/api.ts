@@ -526,8 +526,13 @@ export interface MemoryEntry {
   workspace: string
   repoSlug: string
   content: string
-  createdAt: string
+  category: string | null
+  source: string
+  sourceCommentId: number | null
+  sourcePrId: string | null
   active: boolean
+  createdAt: string
+  createdBy: string | null
 }
 
 // ---- Customer Registry ----

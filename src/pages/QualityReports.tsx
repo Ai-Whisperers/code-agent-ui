@@ -66,8 +66,8 @@ const NONE   = 'text-[var(--color-fonts-font-color-support)]'
 
 type RowData = {
   repo: RepoSettings
-  mainReport: QualityReport | undefined
-  developReport: QualityReport | undefined
+  mainReport: QualityReport | null | undefined
+  developReport: QualityReport | null | undefined
   isLoading: boolean
 }
 
@@ -98,7 +98,7 @@ export default function QualityReportsPage() {
           api
             .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`)
             .then((r) => r.data as QualityReport)
-            .catch(() => undefined),
+            .catch(() => null),
         enabled: qualityRepos.length > 0,
       },
       {
@@ -107,7 +107,7 @@ export default function QualityReportsPage() {
           api
             .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/develop`)
             .then((r) => r.data as QualityReport)
-            .catch(() => undefined),
+            .catch(() => null),
         enabled: qualityRepos.length > 0,
       },
     ]),
