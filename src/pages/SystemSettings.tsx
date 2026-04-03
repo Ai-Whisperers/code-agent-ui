@@ -314,6 +314,20 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    id: 'self-analysis',
+    label: 'Self-Analysis',
+    settings: [
+      { key: 'self-analysis.enabled', label: 'Enabled', description: 'Automatically trigger a self-analysis job when a monitored job fails', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'self-analysis.trigger-job-types', label: 'Trigger Job Types', description: 'Comma-separated JobType values that trigger self-analysis on failure (e.g. FIX,GENERATE_TESTS)', defaultValue: 'FIX', inputType: 'textarea' },
+      { key: 'self-analysis.product-id', label: 'Product ID', description: 'ProductConfig ID for the code-agent product (used to resolve repo URL and Jira project key)', defaultValue: '' },
+      { key: 'self-analysis.environment-name', label: 'Environment Name', description: 'CloudWatch environment name to fetch logs from — must match an EnvironmentConfig.name on the customer record (e.g. "production")', defaultValue: '' },
+      { key: 'self-analysis.log-group-name', label: 'Log Group Name', description: 'CloudWatch log group to query for code-agent logs (e.g. /ecs/code-agent)', defaultValue: '' },
+      { key: 'self-analysis.job-timeout-minutes', label: 'Job Timeout (minutes)', description: 'Wall-clock timeout for a self-analysis job', defaultValue: '45', inputType: 'number', min: 5 },
+      { key: 'self-analysis.max-loop-iterations', label: 'Max Loop Iterations', description: 'Maximum agent loop cycles for a self-analysis job', defaultValue: '150', inputType: 'number', min: 1 },
+      { key: 'self-analysis.cooldown-hours', label: 'Cooldown (hours)', description: 'Do not re-trigger self-analysis for the same failed job if a successful analysis was produced within this many hours', defaultValue: '24', inputType: 'number', min: 0 },
+    ],
+  },
+  {
     id: 'schedulers',
     label: 'Schedulers',
     settings: [
@@ -560,7 +574,7 @@ const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido', 'transcribe'] },
-  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'self-analysis', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'compliance',      label: 'Compliance',       groupIds: ['soc2'] },
