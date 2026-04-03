@@ -19,6 +19,9 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Flame,
+  Loader2,
+  Play,
   ShieldCheck,
   Wrench,
   X,
@@ -34,7 +37,14 @@ import type { ToastConfig } from '@/components/ui/Toast'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
 import api from '@/lib/api'
-import type { QualityReport, RepoSettings, LatestVersionsResponse, ExecutionPlan } from '@/types/api'
+import type {
+  QualityReport,
+  RepoSettings,
+  LatestVersionsResponse,
+  ExecutionPlan,
+  TechDebtSnapshot,
+  TechDebtFileRow,
+} from '@/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
 
@@ -76,6 +86,15 @@ export default function QualityReportsPage() {
   const [selected, setSelected] = useState<RowData | null>(null)
   const [fixTarget, setFixTarget] = useState<RowData | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'reports' | 'tech-debt'>('reports')
+
+  // ── Tech Debt state ──────────────────────────────────────────────────────
+  const [tdRepoFilter, setTdRepoFilter] = useState<string>('')
+  const [tdThreshold, setTdThreshold] = useState<number>(0.3)
+  const [tdSelectedSnapshot, setTdSelectedSnapshot] = useState<number | null>(null)
+  const [tdJobId, setTdJobId] = useState<string | null>(null)
+  const [tdToast, setTdToast] = useState<ToastConfig | null>(null)
+  const queryClient = useQueryClient()
 
   const { data: repos, isLoading: reposLoading } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -122,6 +141,85 @@ export default function QualityReportsPage() {
 
   const isLoading = reposLoading || reportQueries.some((q) => q.isLoading)
 
+  // ── Tech Debt queries ────────────────────────────────────────────────────
+  const { data: tdSnapshots, isLoading: tdSnapshotsLoading } = useQuery<TechDebtSnapshot[]>({
+    queryKey: ['tech-debt-snapshots'],
+    queryFn: () => api.get('/tech-debt/snapshots').then((r) => r.data).catch(() => []),
+    enabled: activeTab === 'tech-debt',
+  })
+
+  const resolvedSnapshotId = tdSelectedSnapshot ?? (tdSnapshots?.[0]?.id ?? null)
+
+  const { data: tdFiles, isLoading: tdFilesLoading } = useQuery<TechDebtFileRow[]>({
+    queryKey: ['tech-debt-heatmap', resolvedSnapshotId, tdRepoFilter],
+    queryFn: () =>
+      api
+        .get('/tech-debt/heatmap', {
+          params: {
+            ...(resolvedSnapshotId != null ? { snapshotId: resolvedSnapshotId } : {}),
+            ...(tdRepoFilter ? { repo: tdRepoFilter } : {}),
+          },
+        })
+        .then((r) => r.data)
+        .catch(() => []),
+    enabled: activeTab === 'tech-debt',
+  })
+
+  // Poll job status while a tech-debt generation job is running.
+  const { data: tdJobStatusData } = useQuery<{ status: string }>({
+    queryKey: ['job-status', tdJobId],
+    queryFn: () =>
+      api.get(`/jobs/status/${tdJobId}`).then((r) => r.data as { status: string }),
+    enabled: tdJobId != null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'SUCCESS' || status === 'FAILED') return false
+      return 3000
+    },
+    gcTime: 0,
+  })
+
+  const tdJobStatus = tdJobStatusData?.status
+
+  // Trigger effect when job status reaches a terminal state.
+  const [prevTdJobStatus, setPrevTdJobStatus] = useState<string | undefined>(undefined)
+  if (tdJobStatus !== prevTdJobStatus) {
+    setPrevTdJobStatus(tdJobStatus)
+    if (tdJobStatus === 'SUCCESS') {
+      setTdToast({ message: 'Tech debt analysis complete.', variant: 'success' })
+      queryClient.invalidateQueries({ queryKey: ['tech-debt-snapshots'] })
+      queryClient.invalidateQueries({ queryKey: ['tech-debt-heatmap'] })
+      setTdJobId(null)
+    } else if (tdJobStatus === 'FAILED') {
+      setTdToast({ message: 'Tech debt analysis failed.', variant: 'error' })
+      setTdJobId(null)
+    }
+  }
+
+  const tdGenerateMutation = useMutation({
+    mutationFn: () =>
+      api.post('/tech-debt/generate').then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      setTdJobId(data.jobId)
+      setTdToast({ message: 'Tech debt analysis queued.', variant: 'success' })
+    },
+    onError: () => {
+      setTdToast({ message: 'Failed to queue tech debt analysis.', variant: 'error' })
+    },
+  })
+
+  const tdIsRunning = tdJobId != null && tdJobStatus !== 'SUCCESS' && tdJobStatus !== 'FAILED'
+
+  const tdFilteredFiles = (tdFiles ?? []).filter((f) => f.debtScore >= tdThreshold)
+
+  const repoOptions = [
+    { value: '', label: 'All repos' },
+    ...Array.from(new Set((repos ?? []).map((r) => r.repoSlug))).map((s) => ({
+      value: s,
+      label: s,
+    })),
+  ]
+
   function toggleExpand(key: string) {
     setExpandedRows((prev) => {
       const next = new Set(prev)
@@ -138,6 +236,52 @@ export default function QualityReportsPage() {
         subtitle="Code quality metrics per repository — main and develop branches."
       />
 
+      {/* ── Tab bar ── */}
+      <div className="flex gap-1 px-4 pt-3 pb-0 border-b border-[var(--color-tables-table-header-stroke)]">
+        {(['reports', 'tech-debt'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={[
+              'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t transition-colors',
+              activeTab === tab
+                ? 'bg-[var(--color-cards-card-background)] border border-b-0 border-[var(--color-tables-table-header-stroke)] text-[var(--color-fonts-font-color-primary)]'
+                : 'text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]',
+            ].join(' ')}
+          >
+            {tab === 'reports' ? <ShieldCheck size={13} /> : <Flame size={13} />}
+            {tab === 'reports' ? 'Reports' : 'Tech Debt'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tech Debt tab ── */}
+      {activeTab === 'tech-debt' && (
+        <TechDebtTab
+          snapshots={tdSnapshots ?? []}
+          snapshotsLoading={tdSnapshotsLoading}
+          files={tdFilteredFiles}
+          allFiles={tdFiles ?? []}
+          filesLoading={tdFilesLoading}
+          selectedSnapshotId={resolvedSnapshotId}
+          onSelectSnapshot={(id) => setTdSelectedSnapshot(id)}
+          repoFilter={tdRepoFilter}
+          onRepoFilter={setTdRepoFilter}
+          repoOptions={repoOptions}
+          threshold={tdThreshold}
+          onThreshold={setTdThreshold}
+          isRunning={tdIsRunning}
+          onGenerate={() => tdGenerateMutation.mutate()}
+        />
+      )}
+
+      {tdToast && (
+        <Toast {...tdToast} onClose={() => setTdToast(null)} />
+      )}
+
+      {/* ── Reports tab ── */}
+      {activeTab === 'reports' && (
+      <>
       <TableCard
         className="flex-1 min-h-0"
         title="Repositories"
@@ -320,7 +464,206 @@ export default function QualityReportsPage() {
           onClose={() => setFixTarget(null)}
         />
       )}
+      </>
+      )}
     </main>
+  )
+}
+
+// ── Tech Debt Tab ─────────────────────────────────────────────────────────────
+
+function debtColor(score: number): string {
+  if (score >= 0.7) return 'bg-red-500'
+  if (score >= 0.5) return 'bg-orange-400'
+  if (score >= 0.3) return 'bg-yellow-400'
+  return 'bg-green-400'
+}
+
+function debtTextColor(score: number): string {
+  if (score >= 0.7) return 'text-white'
+  if (score >= 0.5) return 'text-white'
+  return 'text-gray-800'
+}
+
+interface TechDebtTabProps {
+  snapshots: TechDebtSnapshot[]
+  snapshotsLoading: boolean
+  files: TechDebtFileRow[]
+  allFiles: TechDebtFileRow[]
+  filesLoading: boolean
+  selectedSnapshotId: number | null
+  onSelectSnapshot: (id: number) => void
+  repoFilter: string
+  onRepoFilter: (v: string) => void
+  repoOptions: { value: string; label: string }[]
+  threshold: number
+  onThreshold: (v: number) => void
+  isRunning: boolean
+  onGenerate: () => void
+}
+
+function TechDebtTab({
+  snapshots,
+  snapshotsLoading,
+  files,
+  allFiles,
+  filesLoading,
+  selectedSnapshotId,
+  onSelectSnapshot,
+  repoFilter,
+  onRepoFilter,
+  repoOptions,
+  threshold,
+  onThreshold,
+  isRunning,
+  onGenerate,
+}: TechDebtTabProps) {
+  const snapshotOptions = snapshots.map((s) => ({
+    value: String(s.id),
+    label: `${new Date(s.computedAt).toLocaleString()} — ${s.totalFiles} files`,
+  }))
+
+  const highDebt = allFiles.filter((f) => f.debtScore >= 0.6).length
+  const worstRepo = allFiles.length > 0
+    ? allFiles.reduce((a, b) => (a.debtScore > b.debtScore ? a : b)).repoSlug
+    : null
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 p-4 gap-4 overflow-auto">
+      {/* Controls */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1 min-w-[220px]">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Snapshot
+          </label>
+          {snapshotsLoading ? (
+            <div className="h-7 w-48 skeleton-shimmer rounded" />
+          ) : snapshotOptions.length > 0 ? (
+            <Select
+              value={selectedSnapshotId != null ? String(selectedSnapshotId) : ''}
+              onChange={(v) => onSelectSnapshot(Number(v))}
+              options={snapshotOptions}
+            />
+          ) : (
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">No snapshots yet</span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 min-w-[160px]">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Repository
+          </label>
+          <Select
+            value={repoFilter}
+            onChange={onRepoFilter}
+            options={repoOptions}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Min debt score: {threshold.toFixed(2)}
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={threshold}
+            onChange={(e) => onThreshold(Number(e.target.value))}
+            className="w-40 accent-[var(--color-buttons-button-primary)]"
+          />
+        </div>
+
+        <Button
+          variant="primary"
+          size="sm"
+          icon={isRunning ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+          onClick={onGenerate}
+          disabled={isRunning}
+        >
+          {isRunning ? 'Running…' : 'Run Analysis'}
+        </Button>
+      </div>
+
+      {/* Summary bar */}
+      {allFiles.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-[var(--color-fonts-font-color-support)]">
+          <span>
+            <strong className="text-[var(--color-fonts-font-color-primary)]">{allFiles.length}</strong> files analysed
+          </span>
+          <span>
+            <strong className="text-red-500">{highDebt}</strong> with debt &gt; 0.6
+          </span>
+          {worstRepo && (
+            <span>
+              Worst repo: <strong className="text-[var(--color-fonts-font-color-primary)]">{worstRepo}</strong>
+            </span>
+          )}
+          <span>
+            Showing <strong className="text-[var(--color-fonts-font-color-primary)]">{files.length}</strong> files above threshold
+          </span>
+        </div>
+      )}
+
+      {/* Heatmap grid */}
+      {filesLoading ? (
+        <div className="flex items-center justify-center py-16 text-[var(--color-fonts-font-color-support)] text-xs gap-2">
+          <Loader2 size={16} className="animate-spin" />
+          Loading heatmap…
+        </div>
+      ) : files.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-2 text-[var(--color-fonts-font-color-support)] text-xs">
+          <Flame size={28} className="opacity-30" />
+          {allFiles.length === 0
+            ? 'No data yet — run an analysis to generate the heatmap.'
+            : 'No files above the current threshold.'}
+        </div>
+      ) : (
+        <div
+          className="grid gap-1"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}
+        >
+          {files.map((f) => (
+            <Tooltip
+              key={`${f.repoSlug}/${f.filePath}`}
+              position="top"
+              text={[
+                f.filePath,
+                `Repo: ${f.repoSlug}`,
+                `Debt: ${f.debtScore.toFixed(3)}`,
+                `Complexity: ${f.complexityScore.toFixed(3)}`,
+                `Coverage gap: ${f.coverageGap.toFixed(3)}`,
+                `Churn: ${f.churnScore.toFixed(3)}`,
+                `Staleness: ${f.stalenessScore.toFixed(3)}`,
+                f.lastCommitAt ? `Last commit: ${f.lastCommitAt}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n')}
+            >
+              <div
+                className={[
+                  'rounded p-2 cursor-default overflow-hidden',
+                  debtColor(f.debtScore),
+                  debtTextColor(f.debtScore),
+                ].join(' ')}
+              >
+                <div className="text-[10px] font-bold leading-none mb-1">
+                  {f.debtScore.toFixed(2)}
+                </div>
+                <div
+                  className="text-[9px] leading-tight opacity-90 truncate"
+                  title={f.filePath}
+                >
+                  {f.filePath.split('/').slice(-2).join('/')}
+                </div>
+                <div className="text-[9px] opacity-70 truncate">{f.repoSlug}</div>
+              </div>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

@@ -346,6 +346,10 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'code-graph.cross-repo.critical-threshold', label: 'Cross-Repo Critical Threshold', description: 'Number of repos using a symbol before it is labelled CRITICAL in impact analysis', defaultValue: '3', inputType: 'number', min: 1 },
       { key: 'hook.scheduler.enabled', label: 'Hook Scheduler', description: 'Enable cron-based automation hook evaluation', defaultValue: 'true', inputType: 'boolean' },
       { key: 'hook.scheduler.timezone', label: 'Hook Scheduler Timezone', description: 'Timezone for evaluating cron hook expressions (e.g. UTC, Europe/Berlin)', defaultValue: 'UTC' },
+      { key: 'knowledge-graph.scheduler.enabled', label: 'Knowledge Graph Scheduler', description: 'Enable weekly knowledge graph computation across all repos', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'knowledge-graph.lookback-days', label: 'Knowledge Graph Lookback (days)', description: 'How far back in git history to analyse (default 365)', defaultValue: '365', inputType: 'number', min: 30 },
+      { key: 'knowledge-graph.default-branch', label: 'Knowledge Graph Default Branch', description: 'Branch to clone for knowledge graph analysis', defaultValue: 'main' },
+      { key: 'knowledge-graph.author-aliases', label: 'Author Identity Aliases', description: 'JSON map of email → canonical email for merging the same person\'s multiple git identities. Example: {"old@company.com":"canonical@company.com"}', defaultValue: '{}', inputType: 'textarea' },
     ],
   },
   {

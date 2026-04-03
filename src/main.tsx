@@ -28,6 +28,7 @@ import QualityReportsPage from '@/pages/QualityReports'
 import CoverageDetail from '@/pages/CoverageDetail'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import DeveloperScorecardPage from '@/pages/DeveloperScorecard'
+import KnowledgeGraphPage from '@/pages/KnowledgeGraph'
 import AiStatsPage from '@/pages/AiStats'
 import MemoriesPage from '@/pages/Memories'
 import SystemSettingsPage from '@/pages/SystemSettings'
@@ -222,6 +223,12 @@ const developerScorecardRoute = createRoute({
   component: DeveloperScorecardPage,
 })
 
+const knowledgeGraphRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/knowledge-graph',
+  component: KnowledgeGraphPage,
+})
+
 const aiStatsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/stats',
@@ -401,6 +408,7 @@ const routeTree = rootRoute.addChildren([
     coverageDetailRoute,
     reviewMetricsRoute,
     developerScorecardRoute,
+    knowledgeGraphRoute,
     aiStatsRoute,
     memoriesRoute,
     systemSettingsRoute,

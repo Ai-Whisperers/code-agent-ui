@@ -1188,3 +1188,30 @@ export interface QaReadinessResponse {
   summary: QaReadinessSummary
   items: ScopeTreeItem[]
 }
+
+// ---- Technical Debt Heatmap ----
+
+export interface TechDebtSnapshot {
+  id: number
+  productId: string | null
+  computedAt: string
+  lookbackDays: number
+  totalFiles: number
+}
+
+export interface TechDebtFileRow {
+  snapshotId: number
+  repoSlug: string
+  filePath: string
+  /** Complexity signal [0–1]: fraction of methods above cyclomatic-complexity threshold */
+  complexityScore: number
+  /** Coverage gap signal [0–1]: 1 − line coverage rate */
+  coverageGap: number
+  /** Churn signal [0–1]: normalised lines added + deleted relative to 95th-percentile */
+  churnScore: number
+  /** Staleness signal [0–1]: days since last commit / 365 */
+  stalenessScore: number
+  /** Composite debt score [0–1]: higher = more debt */
+  debtScore: number
+  lastCommitAt: string | null
+}

@@ -24,6 +24,7 @@ import {
   FlaskConical,
   Filter,
   Network,
+  GitCommit,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -213,6 +214,15 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/metrics/developers',
           type: 'item',
           onClick: () => go('/metrics/developers'),
+        },
+        {
+          id: 'knowledge-graph',
+          label: 'Knowledge Graph',
+          icon: <GitCommit size={16} />,
+          path: '/metrics/knowledge-graph',
+          isActive: currentPath === '/metrics/knowledge-graph',
+          type: 'item',
+          onClick: () => go('/metrics/knowledge-graph'),
         },
         {
           id: 'ai-stats',
