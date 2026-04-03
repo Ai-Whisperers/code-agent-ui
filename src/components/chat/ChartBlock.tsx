@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import JSON5 from 'json5'
 import { AlertTriangle } from 'lucide-react'
 import {
   Chart as ChartJS,
@@ -42,15 +43,10 @@ type ChartConfig = {
 }
 
 function parseChartConfig(code: string): ChartConfig | null {
-  // Try strict JSON first, then fall back to JS object literal evaluation
   try {
-    return JSON.parse(code) as ChartConfig
+    return JSON5.parse(code) as ChartConfig
   } catch {
-    try {
-      return new Function('return ' + code)() as ChartConfig
-    } catch {
-      return null
-    }
+    return null
   }
 }
 
