@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Check } from 'lucide-react'
 
 export interface SelectOption {
@@ -25,13 +26,22 @@ export function Select({
   className,
 }: SelectProps) {
   const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
   const selected = options.find((o) => o.value === value)
 
+  // Close on outside click (trigger or dropdown)
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (
+        !triggerRef.current?.contains(target) &&
+        !dropdownRef.current?.contains(target)
+      ) {
+        setOpen(false)
+      }
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
@@ -43,8 +53,35 @@ export function Select({
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
+  // Compute fixed position whenever the dropdown opens or the viewport changes
+  useEffect(() => {
+    if (!open || !triggerRef.current) return
+    const update = () => {
+      const rect = triggerRef.current!.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      const spaceAbove = rect.top
+      const openAbove = spaceBelow < 160 && spaceAbove > spaceBelow
+      setDropdownStyle({
+        position: 'fixed',
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+        ...(openAbove
+          ? { bottom: window.innerHeight - rect.top + 4 }
+          : { top: rect.bottom + 4 }),
+      })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open])
+
   return (
-    <div ref={ref} className={`relative ${className ?? ''}`}>
+    <div ref={triggerRef} className={`relative ${className ?? ''}`}>
       {/* Trigger */}
       <button
         type="button"
@@ -71,14 +108,18 @@ export function Select({
         />
       </button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div className="absolute top-full left-0 mt-1 z-50 w-full rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-hidden py-0.5">
+      {/* Dropdown rendered via portal so it escapes overflow-hidden ancestors */}
+      {open && createPortal(
+        <div
+          ref={dropdownRef}
+          style={dropdownStyle}
+          className="rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-lg overflow-auto py-0.5 max-h-56"
+        >
           {options.map((opt) => (
             <button
               key={opt.value}
               type="button"
-              onClick={() => { onChange(opt.value); setOpen(false) }}
+              onMouseDown={(e) => { e.preventDefault(); onChange(opt.value); setOpen(false) }}
               className={`w-full flex items-center gap-2 px-3 py-1.5 text-sm transition-colors hover:bg-[var(--color-tables-table-hover)] ${
                 value === opt.value
                   ? 'text-[var(--color-fonts-font-color-primary)] font-medium'
@@ -89,7 +130,8 @@ export function Select({
               <span className="text-left whitespace-nowrap">{opt.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

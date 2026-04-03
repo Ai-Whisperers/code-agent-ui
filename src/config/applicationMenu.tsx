@@ -23,6 +23,7 @@ import {
   Lock,
   FlaskConical,
   Filter,
+  Network,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -131,6 +132,16 @@ export function ApplicationMenuItems(
       type: 'item',
       requiredPermission: 'VIEW_SCOPE',
       onClick: () => go('/qa-readiness'),
+    },
+    {
+      id: 'architecture',
+      label: 'Architecture',
+      icon: <Network size={18} />,
+      path: '/architecture',
+      isActive: currentPath === '/architecture',
+      type: 'item',
+      requiredPermission: 'MANAGE_SETTINGS',
+      onClick: () => go('/architecture'),
     },
     {
       id: 'soc2-section',

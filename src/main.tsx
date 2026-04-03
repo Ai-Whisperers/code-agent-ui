@@ -51,6 +51,7 @@ import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
 import IntegrationSettingsPage from '@/pages/IntegrationSettings'
+import ArchitecturePage from '@/pages/Architecture'
 
 import './styles/index.css'
 
@@ -274,6 +275,13 @@ const integrationFiltersRoute = createRoute({
   component: IntegrationSettingsPage,
 })
 
+const architectureRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/architecture',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: ArchitecturePage,
+})
+
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
@@ -412,6 +420,7 @@ const routeTree = rootRoute.addChildren([
     qaReadinessRoute,
     soc2AuditRoute,
     securityIssuesRoute,
+    architectureRoute,
   ]),
   oauthCallbackRoute,
   accessDeniedRoute,

@@ -26,6 +26,8 @@ export type JobType =
   | 'REVIEW_EPIC'
   | 'REVIEW_FEATURE'
   | 'REVIEW_USERSTORY'
+  | 'GENERATE_ARCHITECTURE'
+  | 'GENERATE_CLOUD_ARCHITECTURE'
 
 export interface JobCoverageData {
   before?: CoverageSection
