@@ -50,6 +50,7 @@ import PRDetail from '@/pages/PRDetail'
 import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
+import IntegrationSettingsPage from '@/pages/IntegrationSettings'
 
 import './styles/index.css'
 
@@ -266,6 +267,13 @@ const chatConvRoute = createRoute({
   component: ChatPage,
 })
 
+const integrationFiltersRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/integrations',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: IntegrationSettingsPage,
+})
+
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
@@ -389,6 +397,7 @@ const routeTree = rootRoute.addChildren([
     memoriesRoute,
     systemSettingsRoute,
     knowledgeIndexRoute,
+    integrationFiltersRoute,
     customersRoute,
     chatRoute,
     chatConvRoute,

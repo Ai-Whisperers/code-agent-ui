@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { ExternalLink, GitPullRequest, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react'
+import { ExternalLink, GitPullRequest, RefreshCw, RotateCcw, ShieldCheck, GitMerge } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Button } from '@/components/ui/Button'
@@ -15,9 +15,9 @@ import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import api from '@/lib/api'
 import { getUserInfo } from '@/lib/keycloak'
-import type { OpenPrEntry, PrListResponse, JobStatusResponse } from '@/types/api'
+import type { OpenPrEntry, PrListResponse, JobStatusResponse, PromoteJobResponse, MergedPrListResponse } from '@/types/api'
 
-type PrTab = 'needs-approval' | 'all'
+type PrTab = 'needs-approval' | 'all' | 'ready-to-promote'
 
 const PAGE_SIZE = 50
 
@@ -82,6 +82,8 @@ export default function PullRequests() {
   const [page, setPage] = useState(0)
   const [toast, setToast] = useState<ToastConfig | null>(null)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Track in-flight promote mutations per PR (prId → jobId | 'pending')
+  const [promotingPrIds, setPromotingPrIds] = useState<Record<string, string | 'pending'>>({})
 
   const isAdmin = getUserInfo()?.roles.includes('app_admin') ?? false
 
@@ -112,6 +114,22 @@ export default function PullRequests() {
     placeholderData: (prev) => prev,
   })
 
+  // Fetch MERGED PRs from SCM directly (last 30 days) for the "Ready to Promote" tab.
+  // Only fetched when the tab is active or on first load — SCM call is heavier than cache.
+  const { data: mergedData, isFetching: mergedFetching, refetch: refetchMerged } = useQuery<MergedPrListResponse>({
+    queryKey: ['pull-requests-merged-scm'],
+    queryFn: () => api.get('/pull-requests/merged', { params: { days: 30 } }).then(r => r.data),
+    staleTime: 5 * 60_000,   // 5 min — SCM calls are expensive
+    refetchOnWindowFocus: false,
+  })
+
+  // Fetch jobs that already have a promotion underway (jobType=PROMOTE) to exclude already-promoted PRs
+  const { data: promoteJobs = [] } = useQuery<JobStatusResponse[]>({
+    queryKey: ['jobs-promote'],
+    queryFn: () => api.get('/jobs', { params: { jobType: 'PROMOTE', limit: 200 } }).then(r => r.data),
+    refetchInterval: 30_000,
+  })
+
   const prs = data?.items ?? []
   const total = data?.total ?? 0
 
@@ -123,12 +141,28 @@ export default function PullRequests() {
 
   const awaitingJobIds = new Set(approvalJobs.map(j => j.jobId))
   const needsApproval = prs.filter(pr => pr.jobId && awaitingJobIds.has(pr.jobId))
-  const displayed = activeTab === 'needs-approval' ? needsApproval : prs
+
+  // PRs merged to develop that don't yet have a promotion job
+  // A PR is "already promoted" if any PROMOTE job references it as originalPrId (stored as prId on the job)
+  // or if the linked job has a promotionJobId set
+  const promotedPrIds = new Set([
+    ...promoteJobs.map(j => j.prId).filter(Boolean),
+    ...Object.keys(promotingPrIds),
+  ])
+  const readyToPromote = (mergedData?.items ?? []).filter(
+    pr => !promotedPrIds.has(pr.prId)
+  )
+
+  const displayed =
+    activeTab === 'needs-approval' ? needsApproval
+    : activeTab === 'ready-to-promote' ? readyToPromote
+    : prs
 
   const syncMutation = useMutation({
     mutationFn: () => api.post('/pull-requests/sync'),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['pull-requests'] })
+      qc.invalidateQueries({ queryKey: ['pull-requests-merged-scm'] })
       setToast({ variant: 'success', message: `Sync complete — ${res.data.synced ?? 0} PRs cached.` })
     },
     onError: () => setToast({ variant: 'error', message: 'Sync failed.' }),
@@ -138,6 +172,25 @@ export default function PullRequests() {
     navigate({
       to: '/pull-requests/$workspace/$repoSlug/$prId',
       params: { workspace: pr.workspace, repoSlug: pr.repoSlug, prId: pr.prId },
+    })
+  }
+
+  const handlePromote = (pr: OpenPrEntry) => {
+    setPromotingPrIds(prev => ({ ...prev, [pr.prId]: 'pending' }))
+    api.post<PromoteJobResponse>(
+      `/pull-requests/${pr.workspace}/${pr.repoSlug}/${pr.prId}/promote`
+    ).then(res => {
+      setPromotingPrIds(prev => ({ ...prev, [pr.prId]: res.data.jobId }))
+      qc.invalidateQueries({ queryKey: ['jobs-promote'] })
+      setToast({ variant: 'success', message: `Promotion started for PR #${pr.prId}.` })
+    }).catch((err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setPromotingPrIds(prev => { const n = { ...prev }; delete n[pr.prId]; return n })
+      // If already promoted (409), still remove from the list
+      if ((err as { response?: { status?: number } })?.response?.status === 409) {
+        qc.invalidateQueries({ queryKey: ['jobs-promote'] })
+      }
+      setToast({ variant: 'error', message: msg ?? `Failed to promote PR #${pr.prId}.` })
     })
   }
 
@@ -161,12 +214,12 @@ export default function PullRequests() {
               placeholder="Status"
               className="w-32"
             />
-            <Tooltip text="Refresh pull requests">
+            <Tooltip text={activeTab === 'ready-to-promote' ? 'Refresh from SCM (last 30 days)' : 'Refresh pull requests'}>
               <Button
                 variant="ghost"
                 size="md"
-                icon={<RefreshCw size={16} className={isFetching ? 'animate-spin' : ''} />}
-                onClick={() => refetch()}
+                icon={<RefreshCw size={16} className={(activeTab === 'ready-to-promote' ? mergedFetching : isFetching) ? 'animate-spin' : ''} />}
+                onClick={() => activeTab === 'ready-to-promote' ? refetchMerged() : refetch()}
               />
             </Tooltip>
             {isAdmin && (
@@ -203,6 +256,13 @@ export default function PullRequests() {
             >
               Needs Approval
             </TabButton>
+            <TabButton
+              active={activeTab === 'ready-to-promote'}
+              onClick={() => setActiveTab('ready-to-promote')}
+              badge={readyToPromote.length > 0 ? String(readyToPromote.length) : undefined}
+            >
+              Ready to Promote
+            </TabButton>
           </TabBar>
 
           {total > PAGE_SIZE && (
@@ -218,7 +278,7 @@ export default function PullRequests() {
         </div>
 
         <TableCard className="flex-1 min-h-0" title="">
-          <div className={isFetching ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
+          <div className={(activeTab === 'ready-to-promote' ? mergedFetching : isFetching) ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10">
                 <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
@@ -231,7 +291,7 @@ export default function PullRequests() {
                     { label: 'Status',     tip: 'PR status' },
                     { label: 'Updated',    tip: 'Last updated time' },
                     { label: 'Job',        tip: 'Linked agent job status' },
-                    { label: '',           tip: 'SOC II compliance badge' },
+                    { label: '',           tip: activeTab === 'ready-to-promote' ? 'Promote to main' : 'SOC II compliance badge' },
                   ] as const).map(({ label, tip }) => (
                     <th
                       key={label}
@@ -243,7 +303,7 @@ export default function PullRequests() {
                 </tr>
               </thead>
               <tbody>
-                {isFetching && displayed.length === 0
+                {(activeTab === 'ready-to-promote' ? mergedFetching : isFetching) && displayed.length === 0
                   ? Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
                         <td colSpan={9} className="px-3 py-1.5">
@@ -257,6 +317,8 @@ export default function PullRequests() {
                       <td colSpan={9} className="px-3 py-8 text-center text-[var(--color-fonts-font-color-support)]">
                         {activeTab === 'needs-approval'
                           ? 'No pull requests awaiting approval.'
+                          : activeTab === 'ready-to-promote'
+                          ? 'No merged PRs waiting to be promoted to main.'
                           : 'No pull requests found.'}
                       </td>
                     </tr>
@@ -269,6 +331,9 @@ export default function PullRequests() {
                       linkedJobStatus={pr.jobId
                         ? approvalJobs.find(j => j.jobId === pr.jobId)?.status
                         : undefined}
+                      showPromoteButton={activeTab === 'ready-to-promote'}
+                      isPromoting={promotingPrIds[pr.prId] === 'pending'}
+                      onPromote={e => { e.stopPropagation(); handlePromote(pr) }}
                       onClick={() => handleRowClick(pr)}
                     />
                   ))}
@@ -300,6 +365,9 @@ interface PrRowProps {
   pr: OpenPrEntry
   isEven: boolean
   linkedJobStatus?: string
+  showPromoteButton?: boolean
+  isPromoting?: boolean
+  onPromote?: (e: React.MouseEvent) => void
   onClick: () => void
 }
 
@@ -329,7 +397,7 @@ function PrStatusBadge({ status }: { status: string }) {
   )
 }
 
-function PrRow({ pr, isEven, linkedJobStatus, onClick }: PrRowProps) {
+function PrRow({ pr, isEven, linkedJobStatus, showPromoteButton, isPromoting, onPromote, onClick }: PrRowProps) {
   return (
     <tr
       className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${
@@ -394,9 +462,23 @@ function PrRow({ pr, isEven, linkedJobStatus, onClick }: PrRowProps) {
           : <span className="text-[var(--color-fonts-font-color-support)]">—</span>}
       </td>
 
-      {/* SOC II badge */}
-      <td className="px-3 py-1.5 whitespace-nowrap">
-        {pr.soc2 && <Soc2Badge />}
+      {/* SOC II badge or Promote button */}
+      <td className="px-3 py-1.5 whitespace-nowrap" onClick={showPromoteButton ? e => e.stopPropagation() : undefined}>
+        {showPromoteButton ? (
+          <Tooltip text="Cherry-pick to main and open a review PR">
+            <Button
+              variant="primary"
+              size="md"
+              icon={<GitMerge size={12} />}
+              loading={isPromoting}
+              onClick={onPromote}
+            >
+              Promote
+            </Button>
+          </Tooltip>
+        ) : (
+          pr.soc2 && <Soc2Badge />
+        )}
       </td>
     </tr>
   )

@@ -63,6 +63,7 @@ export interface JobStatusResponse {
   soc2Protected?: boolean
   scytaleEvidenceRef?: string
   scytaleEnabled?: boolean
+  promotionJobId?: string
 }
 
 // ---- PR Diff ----
@@ -329,6 +330,15 @@ export interface PrInfoResponse {
   jobId?: string
 }
 
+export interface PromoteJobResponse {
+  jobId: string
+}
+
+export interface MergedPrListResponse {
+  items: OpenPrEntry[]
+  days: number
+}
+
 // ---- Jira Meta ----
 
 export interface JiraProjectMeta {
@@ -340,6 +350,25 @@ export interface JiraProjectMeta {
 export interface JiraComponentMeta {
   id: string
   name: string
+}
+
+// ---- Integration Filters ----
+
+export interface IntegrationFilter {
+  id: number
+  integrationType: string
+  key: string
+  name: string
+  enabled: boolean
+  webhookEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpsertIntegrationFilterRequest {
+  name: string
+  enabled: boolean
+  webhookEnabled: boolean
 }
 
 // ---- Automation Hooks ----

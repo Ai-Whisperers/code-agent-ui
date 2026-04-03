@@ -28,6 +28,7 @@ import type {
   EnvironmentConfig,
   TeamMember,
   CloudAccount,
+  IntegrationFilter,
 } from '@/types/api'
 
 // ── Shared styles ─────────────────────────────────────────────────────────────
@@ -564,10 +565,15 @@ function JiraProjectSelector({
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
-  const { data: projects = [], isLoading } = useQuery<JiraProjectMeta[]>({
-    queryKey: ['jira-meta-projects'],
-    queryFn: () => api.get('/jira/meta/projects').then((r) => r.data).catch(() => []),
+  const { data: jiraFilters = [], isLoading } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters', 'jira'],
+    queryFn: () => api.get('/integration-filters?type=jira').then((r) => r.data).catch(() => []),
+    staleTime: 60_000,
   })
+  // Opt-in: only rows with enabled=true exist and are relevant
+  const projects: JiraProjectMeta[] = jiraFilters
+    .filter((f) => f.enabled)
+    .map((f) => ({ id: f.key, key: f.key, name: f.name }))
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -682,10 +688,15 @@ function ConfluencePageSelector({
   const [pendingSpace, setPendingSpace] = useState(spaceKey)
   const ref = useRef<HTMLDivElement>(null)
 
-  const { data: spaces = [], isLoading: loadingSpaces } = useQuery<ConfluenceSpaceMeta[]>({
-    queryKey: ['confluence-meta-spaces'],
-    queryFn: () => api.get('/confluence/meta/spaces').then((r) => r.data).catch(() => []),
+  const { data: confluenceFilters = [], isLoading: loadingSpaces } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters', 'confluence'],
+    queryFn: () => api.get('/integration-filters?type=confluence').then((r) => r.data).catch(() => []),
+    staleTime: 60_000,
   })
+  // Opt-in: only rows with enabled=true exist and are relevant
+  const spaces: ConfluenceSpaceMeta[] = confluenceFilters
+    .filter((f) => f.enabled)
+    .map((f) => ({ key: f.key, name: f.name }))
 
   const { data: pages = [], isLoading: loadingPages } = useQuery<ConfluencePageMeta[]>({
     queryKey: ['confluence-meta-pages', pendingSpace, pageSearch],

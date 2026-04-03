@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X, ChevronLeft, Search, Check } from 'lucide-react'
 import api from '@/lib/api'
-import type { JiraProjectMeta, JiraComponentMeta } from '@/types/api'
+import type { JiraProjectMeta, JiraComponentMeta, IntegrationFilter } from '@/types/api'
 
 interface Props {
   value: string[]
@@ -18,10 +18,14 @@ export function JiraComponentPicker({ value, onChange, workspace, repoSlug, onCl
   const [componentSearch, setComponentSearch] = useState('')
   const [pending, setPending] = useState<Set<string>>(new Set(value))
 
-  const { data: allProjects = [], isLoading: loadingProjects } = useQuery<JiraProjectMeta[]>({
-    queryKey: ['jira-meta-projects'],
-    queryFn: () => api.get('/jira/meta/projects').then((r) => r.data).catch(() => []),
+  const { data: enabledFilters = [], isLoading: loadingProjects } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters', 'jira'],
+    queryFn: () => api.get('/integration-filters?type=jira').then((r) => r.data).catch(() => []),
   })
+
+  const allProjects: JiraProjectMeta[] = enabledFilters
+    .filter((f) => f.enabled)
+    .map((f) => ({ id: f.key, key: f.key, name: f.name }))
 
   const { data: productJira } = useQuery<{ projects: Record<string, string> }>({
     queryKey: ['jira-meta-repo-product', workspace, repoSlug],

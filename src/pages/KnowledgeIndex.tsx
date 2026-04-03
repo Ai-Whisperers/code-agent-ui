@@ -34,6 +34,7 @@ import type {
   WebDocSource,
   WebDocSourceCreateRequest,
   StaticFileSource,
+  IntegrationFilter,
 } from '@/types/api'
 
 // ── Accordion wrapper (used for non-table sections) ───────────────────────────
@@ -196,10 +197,25 @@ function IndexManagementSection({
   const [jiraProject, setJiraProject] = useState('')
   const [confluenceSpace, setConfluenceSpace] = useState('')
 
+  const { data: jiraFilters = [] } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters', 'jira'],
+    queryFn: () => api.get('/integration-filters?type=jira').then((r) => r.data).catch(() => []),
+    staleTime: 60_000,
+  })
+
+  const { data: confluenceFilters = [] } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters', 'confluence'],
+    queryFn: () => api.get('/integration-filters?type=confluence').then((r) => r.data).catch(() => []),
+    staleTime: 60_000,
+  })
+
+  const enabledJiraProjects = jiraFilters.filter((f) => f.enabled)
+  const enabledConfluenceSpaces = confluenceFilters.filter((f) => f.enabled)
+
   function handleJira() {
     const key = jiraProject.trim()
     if (!key) {
-      addToast('Enter a Jira project key first.', 'error')
+      addToast('Select a Jira project first.', 'error')
       return
     }
     onTrigger('jira', { projectKey: key })
@@ -208,7 +224,7 @@ function IndexManagementSection({
   function handleConfluence() {
     const key = confluenceSpace.trim()
     if (!key) {
-      addToast('Enter a Confluence space key first.', 'error')
+      addToast('Select a Confluence space first.', 'error')
       return
     }
     onTrigger('confluence', { spaceKey: key })
@@ -226,18 +242,24 @@ function IndexManagementSection({
             </span>
           </div>
           <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-            Trigger indexing for a specific Jira project by its project key (e.g.{' '}
-            <code className="font-mono">PROJ</code>).
+            Trigger indexing for a specific enabled Jira project.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Input
-            type="text"
+          <Select
             value={jiraProject}
-            onChange={(e) => setJiraProject(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && handleJira()}
-            placeholder="PROJECT-KEY"
-            className="w-40 font-mono"
+            onChange={setJiraProject}
+            options={[
+              {
+                value: '',
+                label: enabledJiraProjects.length === 0 ? 'No enabled projects' : 'Select project…',
+              },
+              ...enabledJiraProjects.map((f) => ({
+                value: f.key,
+                label: `${f.key} — ${f.name}`,
+              })),
+            ]}
+            className="w-52"
           />
           <Button
             variant="primary"
@@ -261,18 +283,24 @@ function IndexManagementSection({
             </span>
           </div>
           <p className="text-xs text-[var(--color-fonts-font-color-support)]">
-            Trigger indexing for a specific Confluence space by its space key (e.g.{' '}
-            <code className="font-mono">ENG</code>).
+            Trigger indexing for a specific enabled Confluence space.
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Input
-            type="text"
+          <Select
             value={confluenceSpace}
-            onChange={(e) => setConfluenceSpace(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && handleConfluence()}
-            placeholder="SPACE-KEY"
-            className="w-40 font-mono"
+            onChange={setConfluenceSpace}
+            options={[
+              {
+                value: '',
+                label: enabledConfluenceSpaces.length === 0 ? 'No enabled spaces' : 'Select space…',
+              },
+              ...enabledConfluenceSpaces.map((f) => ({
+                value: f.key,
+                label: `${f.key} — ${f.name}`,
+              })),
+            ]}
+            className="w-52"
           />
           <Button
             variant="primary"

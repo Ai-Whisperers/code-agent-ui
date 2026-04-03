@@ -22,6 +22,7 @@ import {
   Target,
   Lock,
   FlaskConical,
+  Filter,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -280,6 +281,16 @@ export function ApplicationMenuItems(
           type: 'item',
           requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/knowledge'),
+        },
+        {
+          id: 'integration-filters',
+          label: 'Integrations',
+          icon: <Filter size={16} />,
+          path: '/settings/integrations',
+          isActive: currentPath === '/settings/integrations',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/integrations'),
         },
         {
           id: 'webhook-audit',

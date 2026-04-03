@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft, ExternalLink, CheckCircle, XCircle, GitBranch,
-  ArrowRight, RefreshCw, GitPullRequest, ShieldCheck,
+  ArrowRight, RefreshCw, GitPullRequest, ShieldCheck, GitMerge, AlertCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
@@ -28,6 +28,7 @@ import type {
   JobCommitsResponse,
   JobReviewResponse,
   PrCommitEntry,
+  PromoteJobResponse,
 } from '@/types/api'
 
 interface PRDetailProps {
@@ -45,6 +46,8 @@ export default function PRDetail({ workspace, repoSlug, prId }: PRDetailProps) {
   const dismissToast = useCallback(() => setToast(null), [])
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [selectedCommitSha, setSelectedCommitSha] = useState<string | null>(null)
+  // Tracks a promotion job triggered manually for PRs with no linked agent job
+  const [manualPromotionJobId, setManualPromotionJobId] = useState<string | null>(null)
 
   const prKey = `${workspace}/${repoSlug}/${prId}`
 
@@ -158,6 +161,33 @@ export default function PRDetail({ workspace, repoSlug, prId }: PRDetailProps) {
       setToast({ variant: 'info', message: 'PR rejected.' })
     },
     onError: () => setToast({ variant: 'error', message: 'Failed to reject PR.' }),
+  })
+
+  // Promotion job ID: prefer the one stored on the linked agent job, fall back to manually triggered
+  const promotionJobId = linkedJob?.promotionJobId ?? manualPromotionJobId ?? undefined
+  const { data: promotionJob, refetch: refetchPromotion } = useQuery<JobStatusResponse>({
+    queryKey: ['job', promotionJobId],
+    queryFn: () => api.get(`/status/${promotionJobId}`).then((r) => r.data),
+    enabled: !!promotionJobId,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status
+      return s === 'RUNNING' || s === 'PENDING' || s === 'QUEUED' ? 5_000 : false
+    },
+  })
+
+  const promoteMutation = useMutation<PromoteJobResponse>({
+    mutationFn: () =>
+      api.post(`/pull-requests/${workspace}/${repoSlug}/${prId}/promote`).then((r) => r.data),
+    onSuccess: (data) => {
+      setManualPromotionJobId(data.jobId)
+      qc.invalidateQueries({ queryKey: ['job', jobId] })
+      qc.invalidateQueries({ queryKey: ['job', data.jobId] })
+      setToast({ variant: 'success', message: 'Promotion job started — cherry-picking to main.' })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setToast({ variant: 'error', message: msg ?? 'Failed to start promotion.' })
+    },
   })
 
   const totalFiles = diffData?.files.length ?? 0
@@ -320,7 +350,24 @@ export default function PRDetail({ workspace, repoSlug, prId }: PRDetailProps) {
 
           {/* Overview tab */}
           {activeTab === 'overview' && (
-            <OverviewTab prEntry={prEntry} linkedJob={linkedJob} />
+            <>
+              <OverviewTab prEntry={prEntry} linkedJob={linkedJob} />
+              {prEntry && (
+                <Soc2PromotionPanel
+                  prEntry={prEntry}
+                  promotionJob={promotionJob}
+                  promotionJobId={promotionJobId}
+                  isPromoting={promoteMutation.isPending}
+                  onPromote={() => promoteMutation.mutate()}
+                  onRetry={() => {
+                    setManualPromotionJobId(null)
+                    qc.invalidateQueries({ queryKey: ['job', jobId] })
+                    refetchPromotion()
+                    promoteMutation.mutate()
+                  }}
+                />
+              )}
+            </>
           )}
 
           {/* Changed Files tab */}
@@ -468,6 +515,167 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
         {label}
       </span>
       <span className="flex-1 min-w-0">{children}</span>
+    </div>
+  )
+}
+
+// ── SOC2 Promotion Panel ──────────────────────────────────────────────────────
+
+interface Soc2PromotionPanelProps {
+  prEntry: OpenPrEntry
+  promotionJob: JobStatusResponse | undefined
+  promotionJobId: string | undefined
+  isPromoting: boolean
+  onPromote: () => void
+  onRetry: () => void
+}
+
+function Soc2PromotionPanel({
+  prEntry,
+  promotionJob,
+  promotionJobId,
+  isPromoting,
+  onPromote,
+  onRetry,
+}: Soc2PromotionPanelProps) {
+  const isMerged = prEntry.status?.toUpperCase() === 'MERGED'
+
+  let content: React.ReactNode
+
+  if (!promotionJobId) {
+    // No promotion started yet
+    content = isMerged ? (
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+            Ready to promote
+          </p>
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+            Cherry-pick this fix to the production branch and open a review PR.
+          </p>
+        </div>
+        <Button
+          variant="primary"
+          size="md"
+          icon={<GitMerge size={14} />}
+          loading={isPromoting}
+          onClick={onPromote}
+        >
+          Promote to main
+        </Button>
+      </div>
+    ) : (
+      <div className="flex items-center gap-2 text-sm text-[var(--color-fonts-font-color-support)]">
+        <GitMerge size={14} className="shrink-0" />
+        <span>Merge this PR into develop first, then promote to main.</span>
+      </div>
+    )
+  } else if (!promotionJob || promotionJob.status === 'PENDING' || promotionJob.status === 'QUEUED' || promotionJob.status === 'RUNNING') {
+    // Promotion in progress
+    content = (
+      <div className="flex items-center gap-2 text-sm text-[var(--color-fonts-font-color-support)]">
+        <RefreshCw size={14} className="animate-spin shrink-0" />
+        <span>Promotion in progress — cherry-picking commits to main…</span>
+      </div>
+    )
+  } else if (promotionJob.status === 'AWAITING_APPROVAL') {
+    content = (
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <CheckCircle size={14} className="text-[var(--color-status-border-success)] shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+              Promotion PR created — awaiting review
+            </p>
+            {promotionJob.prUrl && (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+                Branch: <span className="font-mono">{promotionJob.sourceBranch}</span>
+                {' → '}
+                <span className="font-mono">{promotionJob.targetBranch}</span>
+              </p>
+            )}
+          </div>
+        </div>
+        {promotionJob.prUrl && (
+          <a
+            href={promotionJob.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-tables-table-hover)] transition-colors whitespace-nowrap"
+          >
+            <ExternalLink size={12} />
+            Review PR
+          </a>
+        )}
+      </div>
+    )
+  } else if (promotionJob.status === 'SUCCESS') {
+    content = (
+      <div className="flex items-center gap-2 text-sm">
+        <CheckCircle size={14} className="text-[var(--color-status-border-success)] shrink-0" />
+        <span className="font-medium text-[var(--color-fonts-font-color-primary)]">
+          Promoted — merged to main
+        </span>
+        {promotionJob.prUrl && (
+          <a
+            href={promotionJob.prUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 text-[var(--color-fonts-font-color-brand)] hover:underline text-xs ml-1"
+          >
+            <ExternalLink size={11} />
+            View PR
+          </a>
+        )}
+      </div>
+    )
+  } else if (promotionJob.status === 'FAILED') {
+    content = (
+      <div className="flex items-center justify-between">
+        <div className="flex items-start gap-2">
+          <AlertCircle size={14} className="text-[var(--color-status-border-critical)] shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
+              Promotion failed
+            </p>
+            {promotionJob.errorMessage && (
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5 max-w-md">
+                {promotionJob.errorMessage}
+              </p>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="md"
+          icon={<RefreshCw size={13} />}
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
+      </div>
+    )
+  } else {
+    content = null
+  }
+
+  if (!content) return null
+
+  return (
+    <div className="rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] px-4 py-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <GitMerge size={12} className="text-[var(--color-fonts-font-color-support)]" />
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+          Promote to main
+        </span>
+        {prEntry.soc2 && (
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)] ml-1">
+            <ShieldCheck size={10} />
+            SOC II
+          </span>
+        )}
+      </div>
+      {content}
     </div>
   )
 }
