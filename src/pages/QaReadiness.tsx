@@ -20,7 +20,7 @@ import {
   ArrowUpDown,
   Loader2,
 } from 'lucide-react'
-import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
+import { ReadinessBadge } from '@/components/shared/ReadinessBadge'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
 import { TableCard } from '@/components/ui/TableCard'

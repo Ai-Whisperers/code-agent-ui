@@ -13,13 +13,9 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import { TabBar, TabButton } from '@/components/ui/Tabs'
-import {
-  ChangedFilesTab,
-  CommitsTab,
-  CommitDiffDialog,
-  ReviewTab,
-  RelativeTime,
-} from './JobDetail'
+import { ChangedFilesTab } from '@/components/job-detail/ChangedFilesTab'
+import { CommitsTab, CommitDiffDialog, RelativeTime } from '@/components/job-detail/CommitsTab'
+import { ReviewTab } from '@/components/job-detail/ReviewTab'
 import api from '@/lib/api'
 import type {
   OpenPrEntry,

@@ -35,10 +35,10 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { TableCard } from '@/components/ui/TableCard'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
 import type { BreadcrumbItem } from '@/components/ui/Breadcrumb'
-import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
+import { ReadinessBadge } from '@/components/shared/ReadinessBadge'
 import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
-import { SprintGanttView } from '@/components/scope/SprintGanttView'
-import { ProposalModal } from '@/components/scope/ProposalModal'
+import { SprintGanttView } from '@/components/shared/SprintGanttView'
+import { ProposalModal } from '@/components/shared/ProposalModal'
 import api from '@/lib/api'
 import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import type { Scope, ScopeTreeItem, ItemOverrideStatus, ScopeProposal, SystemSetting, ReviewTokenStats } from '@/types/api'
@@ -913,6 +913,7 @@ function ItemDetailPanel({
 
       {activeProposal && (
         <ProposalModal
+          variant="scope"
           proposal={activeProposal}
           scopeId={scopeId}
           onClose={() => {

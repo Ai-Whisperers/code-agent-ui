@@ -12,13 +12,11 @@ import {
   ExternalLink,
 } from 'lucide-react'
 import api from '@/lib/api'
-import type { RoadmapProposal } from '@/types/api'
+import type { ScopeProposal } from '@/types/api'
 
-interface Props {
-  proposal: RoadmapProposal
-  roadmapId: string
-  onClose: () => void
-}
+type Props =
+  | { variant: 'scope'; scopeId: string; roadmapId?: never; proposal: ScopeProposal; onClose: () => void }
+  | { variant: 'roadmap'; roadmapId: string; scopeId?: never; proposal: ScopeProposal; onClose: () => void }
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT:    'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
@@ -36,14 +34,22 @@ const TYPE_LABEL: Record<string, string> = {
   EPIC: 'Epic', FEATURE: 'Feature', USERSTORY: 'Story',
 }
 
-export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }: Props) {
+export function ProposalModal(props: Props) {
+  const { variant, onClose } = props
+  const entityId = variant === 'scope' ? props.scopeId : props.roadmapId
+  const basePath = variant === 'scope' ? `/scope/${entityId}` : `/roadmap/${entityId}`
+  const treeQueryKey = variant === 'scope' ? ['scope-tree', entityId] : ['roadmap-tree', entityId]
+  const proposalsQueryKey = variant === 'scope'
+    ? ['scope-proposals', entityId, props.proposal.issueKey]
+    : ['roadmap-proposals', entityId, props.proposal.issueKey]
+
   const qc = useQueryClient()
 
-  const [proposal, setProposal] = useState(initialProposal)
-  const [summary, setSummary]           = useState(proposal.proposedSummary ?? '')
-  const [description, setDescription]   = useState(proposal.proposedDescription ?? '')
-  const [criteria, setCriteria]         = useState(proposal.proposedCriteria ?? '')
-  const [technical, setTechnical]       = useState(proposal.proposedTechnical ?? '')
+  const [proposal, setProposal] = useState(props.proposal)
+  const [summary, setSummary]         = useState(proposal.proposedSummary ?? '')
+  const [description, setDescription] = useState(proposal.proposedDescription ?? '')
+  const [criteria, setCriteria]       = useState(proposal.proposedCriteria ?? '')
+  const [technical, setTechnical]     = useState(proposal.proposedTechnical ?? '')
   const [explanationOpen, setExplanationOpen] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
 
@@ -51,7 +57,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
 
   function markDirty() { setIsDirty(true) }
 
-  // Close on Escape — confirm if there are unsaved changes
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -64,7 +69,7 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
   }, [isDirty, onClose])
 
   const saveMutation = useMutation({
-    mutationFn: () => api.put(`/roadmap/${roadmapId}/proposals/${proposal.id}`, {
+    mutationFn: () => api.put(`${basePath}/proposals/${proposal.id}`, {
       proposedSummary: summary,
       proposedDescription: description,
       proposedCriteria: criteria,
@@ -78,16 +83,16 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
   })
 
   const acceptMutation = useMutation({
-    mutationFn: () => api.post(`/roadmap/${roadmapId}/proposals/${proposal.id}/accept`),
+    mutationFn: () => api.post(`${basePath}/proposals/${proposal.id}/accept`),
     onSuccess: (res) => {
       setProposal(res.data)
       setIsDirty(false)
-      qc.invalidateQueries({ queryKey: ['roadmap-tree', roadmapId] })
+      qc.invalidateQueries({ queryKey: treeQueryKey })
     },
   })
 
   const rejectMutation = useMutation({
-    mutationFn: () => api.post(`/roadmap/${roadmapId}/proposals/${proposal.id}/reject`),
+    mutationFn: () => api.post(`${basePath}/proposals/${proposal.id}/reject`),
     onSuccess: (res) => {
       setProposal(res.data)
       setIsDirty(false)
@@ -95,9 +100,9 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
   })
 
   const deleteMutation = useMutation({
-    mutationFn: () => api.delete(`/roadmap/${roadmapId}/proposals/${proposal.id}`),
+    mutationFn: () => api.delete(`${basePath}/proposals/${proposal.id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['roadmap-proposals', roadmapId, proposal.issueKey] })
+      qc.invalidateQueries({ queryKey: proposalsQueryKey })
       onClose()
     },
   })
@@ -109,7 +114,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40"
         onClick={() => {
@@ -118,10 +122,8 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
         }}
       />
 
-      {/* Modal */}
       <div className="relative z-10 w-full max-w-2xl max-h-[90vh] flex flex-col rounded-[var(--border-radius-card)] bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] shadow-2xl overflow-hidden">
 
-        {/* Header */}
         <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)] shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">
@@ -151,10 +153,8 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
           </button>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-          {/* Error messages */}
           {(acceptMutation.isError || rejectMutation.isError || deleteMutation.isError) && (
             <div className="p-3 rounded-[var(--border-radius-card)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-xs">
               {(acceptMutation.error as Error)?.message
@@ -164,7 +164,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             </div>
           )}
 
-          {/* Summary */}
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">
               Proposed Summary
@@ -179,7 +178,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             />
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">
               Proposed Description
@@ -193,7 +191,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             />
           </div>
 
-          {/* Acceptance Criteria */}
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">
               Acceptance Criteria
@@ -207,7 +204,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             />
           </div>
 
-          {/* Technical Notes */}
           <div>
             <label className="block text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">
               Technical Notes
@@ -221,7 +217,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             />
           </div>
 
-          {/* AI Explanation accordion */}
           {proposal.aiExplanation && (
             <div className="border border-[var(--color-borders-border-primary)] rounded-[var(--border-radius-card)] overflow-hidden">
               <button
@@ -245,9 +240,7 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
           </p>
         </div>
 
-        {/* Footer */}
         <div className="shrink-0 border-t border-[var(--color-borders-border-primary)] px-5 py-3 bg-[var(--color-cards-card-background-hover)] flex items-center gap-2">
-          {/* Accept */}
           <button
             onClick={() => acceptMutation.mutate()}
             disabled={isBusy}
@@ -257,7 +250,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             {proposal.status === 'ACCEPTED' ? 'Re-accept' : 'Accept'}
           </button>
 
-          {/* Reject */}
           <button
             onClick={() => rejectMutation.mutate()}
             disabled={isBusy}
@@ -267,7 +259,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
             Reject
           </button>
 
-          {/* Save draft */}
           <button
             onClick={() => saveMutation.mutate()}
             disabled={isBusy || !isDirty}
@@ -279,7 +270,6 @@ export function ProposalModal({ proposal: initialProposal, roadmapId, onClose }:
 
           <div className="flex-1" />
 
-          {/* Delete */}
           <button
             onClick={() => {
               if (!confirm('Permanently delete this proposal?')) return

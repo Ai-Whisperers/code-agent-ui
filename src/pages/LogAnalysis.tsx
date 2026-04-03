@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
+import type { CustomerConfig } from '@/types/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -229,6 +230,22 @@ export default function LogAnalysisPage() {
   const [severityFilter, setSeverityFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
 
+  const customersQuery = useQuery<CustomerConfig[]>({
+    queryKey: ['customers'],
+    queryFn: () =>
+      api.get<CustomerConfig[]>('/customer-registry/customers').then((r) => r.data).catch(() => [] as CustomerConfig[]),
+    staleTime: 5 * 60_000,
+  })
+
+  const logAnalysisCustomers = (customersQuery.data ?? []).filter((c) =>
+    c.environments?.some((e) => e.logAnalysis?.enabled === true)
+  )
+
+  const customerOptions = logAnalysisCustomers.map((c) => ({
+    value: c.customerId,
+    label: c.name,
+  }))
+
   const statsQuery = useQuery<FindingStats>({
     queryKey: ['log-analysis-stats'],
     queryFn: () => api.get<FindingStats>('/log-analysis/stats').then((r) => r.data),
@@ -318,6 +335,17 @@ export default function LogAnalysisPage() {
         />
       </div>
 
+      {/* No log-analysis-enabled customers warning */}
+      {!customersQuery.isLoading && logAnalysisCustomers.length === 0 && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-[var(--border-radius-card)] border border-[var(--color-tags-warning-background)] bg-[var(--color-tags-warning-background)]">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5" style={{ color: 'var(--color-tags-font-warning)' }} />
+          <p className="text-sm" style={{ color: 'var(--color-tags-font-warning)' }}>
+            Log analysis is not enabled for any customer environment. Enable it under{' '}
+            <strong>Settings → Customers</strong> by adding a log analysis configuration to at least one environment.
+          </p>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <FilterSelect
@@ -326,12 +354,11 @@ export default function LogAnalysisPage() {
           value={severityFilter}
           onChange={setSeverityFilter}
         />
-        <input
-          type="text"
-          placeholder="Filter by customer ID…"
+        <FilterSelect
+          placeholder="All customers"
+          options={customerOptions}
           value={customerFilter}
-          onChange={(e) => setCustomerFilter(e.target.value)}
-          className="h-8 px-3 text-sm rounded-[var(--border-radius-input)] border border-[var(--color-inputs-input-stroke)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-body)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-1 focus:ring-[var(--color-buttons-button-primary)]"
+          onChange={setCustomerFilter}
         />
         {(severityFilter || customerFilter) && (
           <Button

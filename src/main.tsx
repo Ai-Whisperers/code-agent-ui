@@ -38,8 +38,6 @@ import ChatPage from '@/pages/Chat'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
 import AdminUsersPage from '@/pages/AdminUsers'
-import RoadmapsPage from '@/pages/Roadmaps'
-import RoadmapDetail from '@/pages/RoadmapDetail'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
@@ -318,21 +316,6 @@ const adminUsersRoute = createRoute({
   component: AdminUsersPage,
 })
 
-const roadmapsRoute = createRoute({
-  getParentRoute: () => layoutRoute,
-  path: '/metrics/roadmap',
-  component: RoadmapsPage,
-})
-
-const roadmapDetailRoute = createRoute({
-  getParentRoute: () => layoutRoute,
-  path: '/metrics/roadmap/$id',
-  component: function RoadmapDetailRoute() {
-    const { id } = roadmapDetailRoute.useParams()
-    return <RoadmapDetail roadmapId={id} />
-  },
-})
-
 const scopesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/scope',
@@ -428,8 +411,6 @@ const routeTree = rootRoute.addChildren([
     webhookAuditRoute,
     auditLogRoute,
     adminUsersRoute,
-    roadmapsRoute,
-    roadmapDetailRoute,
     scopesRoute,
     scopeDetailRoute,
     scopeImproveRoute,

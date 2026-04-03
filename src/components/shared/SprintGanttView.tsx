@@ -13,7 +13,7 @@ import 'chartjs-adapter-date-fns'
 import { Bar } from 'react-chartjs-2'
 import { Loader2, CalendarDays } from 'lucide-react'
 import api from '@/lib/api'
-import type { RoadmapSprintGroup } from '@/types/api'
+import type { ScopeSprintGroup } from '@/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, TimeScale, Tooltip, Legend)
 
@@ -23,14 +23,24 @@ const EPIC_COLORS = [
   '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6',
 ]
 
-interface Props {
-  roadmapId: string
-}
+type Props =
+  | { scopeId: string; roadmapId?: never }
+  | { roadmapId: string; scopeId?: never }
 
-export function SprintGanttView({ roadmapId }: Props) {
-  const { data, isLoading, isError } = useQuery<RoadmapSprintGroup[]>({
-    queryKey: ['roadmap-sprints', roadmapId],
-    queryFn: () => api.get(`/roadmap/${roadmapId}/sprints`).then((r) => r.data),
+export function SprintGanttView(props: Props) {
+  const { scopeId, roadmapId } = props
+
+  const queryKey = scopeId
+    ? ['scope-sprints', scopeId]
+    : ['roadmap-sprints', roadmapId]
+
+  const queryFn = scopeId
+    ? () => api.get(`/scope/${scopeId}/evaluation/sprints`).then((r) => r.data)
+    : () => api.get(`/roadmap/${roadmapId}/sprints`).then((r) => r.data)
+
+  const { data, isLoading, isError } = useQuery<ScopeSprintGroup[]>({
+    queryKey,
+    queryFn,
   })
 
   const groups = Array.isArray(data) ? data : []
