@@ -20,7 +20,8 @@ function handler(event) {
 
     var csp = "default-src 'self'; " +
               "script-src 'self'; " +
-              "style-src 'self' 'unsafe-inline'; " +
+              "style-src-elem 'self'; " +
+              "style-src-attr 'unsafe-inline'; " +
               "img-src 'self' data: blob:; " +
               "font-src 'self'; " +
               "connect-src 'self' https://lb-code-agent.julesenergy.com https://sso-prod.julesenergy.com; " +
