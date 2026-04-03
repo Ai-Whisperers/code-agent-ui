@@ -266,7 +266,7 @@ export default function IntegrationSettingsPage() {
     <div className="flex flex-col h-full min-h-0">
       <PageHeader
         title="Integration Filters"
-        description="Enable or disable Jira projects and Confluence spaces. Disabled entries are excluded from webhooks, knowledge indexing, and UI selectors."
+        subtitle="Enable or disable Jira projects and Confluence spaces. Disabled entries are excluded from webhooks, knowledge indexing, and UI selectors."
       />
 
       <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-4">
