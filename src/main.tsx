@@ -53,6 +53,7 @@ import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
 import IntegrationSettingsPage from '@/pages/IntegrationSettings'
 import ArchitecturePage from '@/pages/Architecture'
+import LogAnalysisPage from '@/pages/LogAnalysis'
 
 import './styles/index.css'
 
@@ -289,6 +290,13 @@ const architectureRoute = createRoute({
   component: ArchitecturePage,
 })
 
+const logAnalysisRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/log-analysis',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin', 'app_developer'] }),
+  component: LogAnalysisPage,
+})
+
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
@@ -429,6 +437,7 @@ const routeTree = rootRoute.addChildren([
     soc2AuditRoute,
     securityIssuesRoute,
     architectureRoute,
+    logAnalysisRoute,
   ]),
   oauthCallbackRoute,
   accessDeniedRoute,

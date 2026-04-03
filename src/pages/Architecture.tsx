@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   RefreshCw,
   Download,
@@ -222,10 +222,16 @@ function ZoomableDiagram({ code }: { code: string }) {
 
   const clampScale = (s: number) => Math.min(4, Math.max(0.25, s))
 
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault()
-    const delta = e.deltaY > 0 ? -0.1 : 0.1
-    setScale((s) => clampScale(s + delta))
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      const delta = e.deltaY > 0 ? -0.1 : 0.1
+      setScale((s) => clampScale(s + delta))
+    }
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
   }, [])
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -299,7 +305,6 @@ function ZoomableDiagram({ code }: { code: string }) {
         ref={containerRef}
         className="overflow-hidden rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] select-none"
         style={{ minHeight: 240, cursor: isPanning ? 'grabbing' : 'grab' }}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}

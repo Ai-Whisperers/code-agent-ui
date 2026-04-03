@@ -14,8 +14,10 @@ import {
   ChevronLeft,
   Check,
   FileText,
+  ScanSearch,
 } from 'lucide-react'
 import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import api from '@/lib/api'
@@ -26,6 +28,7 @@ import type {
   UpsertCustomerRequest,
   UpsertProductRequest,
   EnvironmentConfig,
+  LogAnalysisConfig,
   TeamMember,
   CloudAccount,
   IntegrationFilter,
@@ -216,6 +219,7 @@ function CustomerModal({
           )}
           {tab === 'environments' && (
             <EnvironmentsTab
+              customerId={customerId}
               cloudAccountId={cloudAccountId}
               onCloudAccountChange={setCloudAccountId}
               environments={environments}
@@ -931,10 +935,12 @@ const ENVIRONMENT_TYPES = [
 ]
 
 function EnvironmentEditor({
+  customerId,
   env,
   onChange,
   onRemove,
 }: {
+  customerId: string
   env: EnvironmentConfig
   onChange: (updated: EnvironmentConfig) => void
   onRemove: () => void
@@ -978,16 +984,11 @@ function EnvironmentEditor({
           {/* Type */}
           <div>
             <label className={labelCls}>Environment Type</label>
-            <select
-              className={selectCls}
+            <Select
               value={env.type ?? ''}
-              onChange={(e) => onChange({ ...env, type: e.target.value || undefined })}
-            >
-              <option value="">— Select type —</option>
-              {ENVIRONMENT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </select>
+              onChange={(val) => onChange({ ...env, type: val || undefined })}
+              options={[{ value: '', label: '— Select type —' }, ...ENVIRONMENT_TYPES]}
+            />
           </div>
 
           {/* AWS */}
@@ -998,37 +999,322 @@ function EnvironmentEditor({
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className={labelCls}>Account ID</label>
-                <input
-                  className={inputCls}
+                <Input
                   value={env.aws?.accountId ?? ''}
                   onChange={(e) =>
                     onChange({ ...env, aws: { ...env.aws, accountId: e.target.value } })
                   }
                   placeholder="123456789012"
+                  className="w-full"
                 />
               </div>
               <div>
                 <label className={labelCls}>Region</label>
-                <input
-                  className={inputCls}
+                <Input
                   value={env.aws?.region ?? ''}
                   onChange={(e) =>
                     onChange({ ...env, aws: { ...env.aws, region: e.target.value } })
                   }
                   placeholder="eu-central-1"
+                  className="w-full"
                 />
               </div>
               <div>
                 <label className={labelCls}>IAM Role ARN</label>
-                <input
-                  className={inputCls}
+                <Input
                   value={env.aws?.iamRole ?? ''}
                   onChange={(e) =>
                     onChange({ ...env, aws: { ...env.aws, iamRole: e.target.value } })
                   }
                   placeholder="arn:aws:iam::..."
+                  className="w-full"
                 />
               </div>
+            </div>
+          </div>
+
+          {/* Log Analysis */}
+          <LogAnalysisSection
+            customerId={customerId}
+            iamRole={env.aws?.iamRole ?? ''}
+            region={env.aws?.region ?? ''}
+            config={env.logAnalysis}
+            onChange={(updated) => onChange({ ...env, logAnalysis: updated })}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function LogAnalysisSection({
+  customerId,
+  iamRole,
+  region,
+  config,
+  onChange,
+}: {
+  customerId: string
+  iamRole: string
+  region: string
+  config?: LogAnalysisConfig
+  onChange: (updated: LogAnalysisConfig | undefined) => void
+}) {
+  const enabled = config?.enabled ?? false
+  const [logGroupSearch, setLogGroupSearch] = useState('')
+  const [logGroupDropdownOpen, setLogGroupDropdownOpen] = useState(false)
+  const logGroupInputRef = useRef<HTMLInputElement>(null)
+  const logGroupDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Migrate legacy single logGroupName to the array on first render
+  const selectedGroups: string[] = config?.logGroupNames ??
+    (config?.logGroupName ? [config.logGroupName] : [])
+
+  // Fetch log groups from AWS when the dropdown is open — only needs customerId + AWS config
+  const canFetch = enabled && !!customerId
+  const { data: logGroupsData, isFetching: logGroupsFetching, error: logGroupsError } = useQuery<{
+    items: Array<{ name: string; retentionDays?: number }>
+    hasMore: boolean
+  }>({
+    queryKey: ['log-groups', customerId, iamRole, region, logGroupSearch],
+    queryFn: () => {
+      const params = new URLSearchParams({ customerId })
+      if (iamRole) params.set('iamRole', iamRole)
+      if (region)  params.set('region', region)
+      if (logGroupSearch) params.set('prefix', logGroupSearch)
+      return api.get(`/log-analysis/log-groups?${params}`).then((r) => r.data)
+    },
+    enabled: canFetch && logGroupDropdownOpen,
+    staleTime: 30_000,
+  })
+
+  const logGroupOptions = logGroupsData?.items ?? []
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (!logGroupInputRef.current?.contains(target) && !logGroupDropdownRef.current?.contains(target)) {
+        setLogGroupDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  function setEnabled(val: boolean) {
+    if (val) {
+      onChange({ enabled: true, logGroupNames: selectedGroups, lookbackMinutes: config?.lookbackMinutes, maxFingerprintsPerRun: config?.maxFingerprintsPerRun })
+    } else {
+      onChange(config ? { ...config, enabled: false } : undefined)
+    }
+  }
+
+  function setField<K extends keyof LogAnalysisConfig>(key: K, value: LogAnalysisConfig[K]) {
+    onChange({ enabled, logGroupNames: selectedGroups, ...config, [key]: value })
+  }
+
+  function toggleLogGroup(name: string) {
+    const next = selectedGroups.includes(name)
+      ? selectedGroups.filter((g) => g !== name)
+      : [...selectedGroups, name]
+    onChange({ enabled, ...config, logGroupNames: next, logGroupName: undefined })
+    setLogGroupSearch('')
+  }
+
+  function addCustomLogGroup(name: string) {
+    if (!name.trim() || selectedGroups.includes(name.trim())) return
+    const next = [...selectedGroups, name.trim()]
+    onChange({ enabled, ...config, logGroupNames: next, logGroupName: undefined })
+    setLogGroupSearch('')
+  }
+
+  function removeLogGroup(name: string) {
+    const next = selectedGroups.filter((g) => g !== name)
+    onChange({ enabled, ...config, logGroupNames: next, logGroupName: undefined })
+  }
+
+  return (
+    <div className="border-t border-[var(--color-cards-card-stroke)] pt-3">
+      <div className="flex items-center gap-2 mb-2">
+        <ScanSearch size={13} className="text-[var(--color-fonts-font-color-support)]" />
+        <p className="text-xs font-medium text-[var(--color-fonts-font-color-support)] flex-1">
+          Log Analysis
+        </p>
+        {/* Toggle */}
+        <button
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          onClick={() => setEnabled(!enabled)}
+          className={`relative inline-flex h-4 w-7 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none ${
+            enabled ? 'bg-[var(--color-buttons-button-primary)]' : 'bg-[var(--color-cards-card-stroke)]'
+          }`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
+              enabled ? 'translate-x-3' : 'translate-x-0'
+            }`}
+          />
+        </button>
+        <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+          {enabled ? 'Enabled' : 'Disabled'}
+        </span>
+      </div>
+
+      {enabled && (
+        <div className="space-y-3 mt-3">
+          {/* Multi-select log group picker */}
+          <div>
+            <label className={labelCls}>CloudWatch Log Groups *</label>
+
+            {/* Selected chips */}
+            {selectedGroups.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-1.5">
+                {selectedGroups.map((g) => (
+                  <span
+                    key={g}
+                    className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-xs bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-[var(--color-cards-card-stroke)]"
+                  >
+                    <span className="max-w-[200px] truncate">{g}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeLogGroup(g)}
+                      className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
+                    >
+                      <X size={10} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Search / add input */}
+            <div className="relative">
+              <div
+                className={`flex items-center gap-1.5 w-full px-2 py-1 text-xs rounded border transition-all ${
+                  logGroupDropdownOpen
+                    ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-cards-card-background)]'
+                    : 'border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] hover:border-[var(--color-buttons-button-primary)]'
+                }`}
+              >
+                <Search size={11} className="shrink-0 text-[var(--color-fonts-font-color-support)]" />
+                <input
+                  ref={logGroupInputRef}
+                  className="flex-1 bg-transparent text-xs text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none"
+                  placeholder="Search or type a log group name…"
+                  value={logGroupSearch}
+                  onFocus={() => setLogGroupDropdownOpen(true)}
+                  onChange={(e) => setLogGroupSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setLogGroupDropdownOpen(false); setLogGroupSearch('') }
+                    if (e.key === 'Enter' && logGroupSearch.trim()) {
+                      addCustomLogGroup(logGroupSearch)
+                      setLogGroupDropdownOpen(false)
+                    }
+                  }}
+                />
+                {logGroupsFetching && (
+                  <span className="shrink-0 text-[10px] text-[var(--color-fonts-font-color-support)] animate-pulse">
+                    loading…
+                  </span>
+                )}
+              </div>
+
+              {/* Dropdown */}
+              {logGroupDropdownOpen && (
+                <div
+                  ref={logGroupDropdownRef}
+                  className="absolute z-50 mt-1 w-full rounded border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] shadow-lg max-h-48 overflow-auto py-0.5"
+                >
+                  {logGroupsError && (
+                    <p className="px-3 py-2 text-xs text-red-400">
+                      Could not load log groups — check AWS config.
+                    </p>
+                  )}
+                  {!logGroupsError && logGroupOptions.length === 0 && !logGroupsFetching && (
+                    <p className="px-3 py-2 text-xs text-[var(--color-fonts-font-color-support)]">
+                      No log groups found. Type a name to add it manually.
+                    </p>
+                  )}
+                  {logGroupOptions.map((g) => {
+                    const isSelected = selectedGroups.includes(g.name)
+                    return (
+                      <button
+                        key={g.name}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); toggleLogGroup(g.name) }}
+                        className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--color-tables-table-hover)] text-left ${
+                          isSelected
+                            ? 'text-[var(--color-fonts-font-color-primary)] font-medium'
+                            : 'text-[var(--color-fonts-font-color-support)]'
+                        }`}
+                      >
+                        <Check size={10} className={`shrink-0 ${isSelected ? 'opacity-100' : 'opacity-0'}`} />
+                        <span className="flex-1 truncate">{g.name}</span>
+                        {g.retentionDays && (
+                          <span className="text-[10px] text-[var(--color-fonts-font-color-support)] shrink-0">
+                            {g.retentionDays}d
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                  {logGroupsData?.hasMore && (
+                    <p className="px-3 py-1.5 text-[10px] text-[var(--color-fonts-font-color-support)] italic">
+                      More groups available — type a prefix to filter.
+                    </p>
+                  )}
+                  {/* Add a custom name not returned by AWS */}
+                  {logGroupSearch.trim() && !logGroupOptions.some((g) => g.name === logGroupSearch.trim()) && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); addCustomLogGroup(logGroupSearch); setLogGroupDropdownOpen(false) }}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-[var(--color-buttons-button-primary)] hover:bg-[var(--color-tables-table-hover)] text-left"
+                    >
+                      <Plus size={10} className="shrink-0" />
+                      Add &ldquo;{logGroupSearch.trim()}&rdquo;
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+              Select one or more groups from AWS, or type a name and press Enter.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Lookback (minutes)</label>
+              <Input
+                type="number"
+                min={5}
+                max={1440}
+                className="w-full"
+                value={config?.lookbackMinutes ?? ''}
+                onChange={(e) =>
+                  setField('lookbackMinutes', e.target.value ? parseInt(e.target.value, 10) : undefined)
+                }
+                placeholder="30"
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Max fingerprints / run</label>
+              <Input
+                type="number"
+                min={1}
+                max={50}
+                className="w-full"
+                value={config?.maxFingerprintsPerRun ?? ''}
+                onChange={(e) =>
+                  setField('maxFingerprintsPerRun', e.target.value ? parseInt(e.target.value, 10) : undefined)
+                }
+                placeholder="5"
+              />
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
+                Caps AI triage calls per scheduler run.
+              </p>
             </div>
           </div>
         </div>
@@ -1038,11 +1324,13 @@ function EnvironmentEditor({
 }
 
 function EnvironmentsTab({
+  customerId,
   cloudAccountId,
   onCloudAccountChange,
   environments,
   onChange,
 }: {
+  customerId: string
   cloudAccountId: string
   onCloudAccountChange: (id: string) => void
   environments: EnvironmentConfig[]
@@ -1082,18 +1370,12 @@ function EnvironmentsTab({
         <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-2">
           Select which global cloud account (credentials) should be used to access this customer's environments.
         </p>
-        <select
-          className={selectCls}
+        <Select
           value={cloudAccountId}
-          onChange={(e) => onCloudAccountChange(e.target.value)}
-        >
-          <option value="">— None —</option>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name} ({a.type})
-            </option>
-          ))}
-        </select>
+          onChange={onCloudAccountChange}
+          placeholder="— None —"
+          options={accounts.map((a) => ({ value: a.id, label: `${a.name} (${a.type})` }))}
+        />
         {selectedAccount && (
           <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
             {selectedAccount.description ?? selectedAccount.type}
@@ -1125,6 +1407,7 @@ function EnvironmentsTab({
       {environments.map((env, idx) => (
         <EnvironmentEditor
           key={idx}
+          customerId={customerId}
           env={env}
           onChange={(updated) => updateEnv(idx, updated)}
           onRemove={() => removeEnv(idx)}

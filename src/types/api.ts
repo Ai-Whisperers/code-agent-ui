@@ -674,10 +674,20 @@ export interface AwsConfig {
   iamRole?: string
 }
 
+export interface LogAnalysisConfig {
+  enabled: boolean
+  logGroupNames?: string[]
+  /** @deprecated use logGroupNames */
+  logGroupName?: string
+  lookbackMinutes?: number
+  maxFingerprintsPerRun?: number
+}
+
 export interface EnvironmentConfig {
   name: string
   type?: string
   aws?: AwsConfig
+  logAnalysis?: LogAnalysisConfig
 }
 
 export interface TeamMember {
