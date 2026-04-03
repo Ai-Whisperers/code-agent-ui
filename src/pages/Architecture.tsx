@@ -15,7 +15,9 @@ import {
   ZoomOut,
   Maximize2,
   Loader2,
+  PlayCircle,
 } from 'lucide-react'
+import { useStore } from '@tanstack/react-store'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Select } from '@/components/ui/Select'
@@ -24,6 +26,7 @@ import type { ToastConfig } from '@/components/ui/Toast'
 import { MermaidDiagram } from '@/components/chat/MermaidDiagram'
 import { RepoCombobox } from '@/components/plan/RepoCombobox'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
+import { authStore } from '@/store/auth-store'
 import api from '@/lib/api'
 import type { CustomerConfig, JobStatusResponse } from '@/types/api'
 
@@ -84,6 +87,10 @@ const archApi = {
     api.post<{ jobId: string }>('/architecture/cloud/generate', body).then((r) => r.data),
   exportCloud: (customerId: string, environment: string) =>
     `${import.meta.env.VITE_API_URL}/architecture/cloud/export?customerId=${encodeURIComponent(customerId)}&environment=${encodeURIComponent(environment)}`,
+  generateAll: () =>
+    api.post<{ reposQueued: number; reposSkipped: number; cloudQueued: number; cloudSkipped: number }>(
+      '/architecture/generate-all',
+    ).then((r) => r.data),
 }
 
 // ── Job poller ─────────────────────────────────────────────────────────────
@@ -124,6 +131,50 @@ function useJobPoller(
     poll()
     return () => { cancelled = true }
   }, [jobId, intervalMs])
+}
+
+// ── Generate-all button (admin only) ──────────────────────────────────────
+
+function GenerateAllButton() {
+  const user = useStore(authStore, (s) => s.user)
+  const qc = useQueryClient()
+  const [toast, setToast] = useState<ToastConfig | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  if (!user?.appRoles.includes('ADMINISTRATOR')) return null
+
+  const handleGenerateAll = async () => {
+    setLoading(true)
+    try {
+      const result = await archApi.generateAll()
+      const total = result.reposQueued + result.cloudQueued
+      setToast({
+        variant: 'success',
+        message: `Queued ${total} job${total !== 1 ? 's' : ''} — ${result.reposQueued} repo${result.reposQueued !== 1 ? 's' : ''}, ${result.cloudQueued} cloud env${result.cloudQueued !== 1 ? 's' : ''}`,
+      })
+      qc.invalidateQueries({ queryKey: ['arch-running-jobs'] })
+    } catch {
+      setToast({ variant: 'error', message: 'Failed to queue generate-all jobs' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <>
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+      <Button
+        variant="secondary"
+        size="sm"
+        icon={<PlayCircle size={13} />}
+        loading={loading}
+        onClick={handleGenerateAll}
+        title="Queue architecture generation for all repos and cloud environments"
+      >
+        Generate All
+      </Button>
+    </>
+  )
 }
 
 // ── Running jobs badge ─────────────────────────────────────────────────────
@@ -956,7 +1007,12 @@ export default function ArchitecturePage() {
       <PageHeader
         title="Architecture"
         subtitle="View, generate, and edit C4 model architecture diagrams for repositories and cloud environments."
-        actions={<RunningJobsBadge />}
+        actions={
+          <div className="flex items-center gap-2">
+            <GenerateAllButton />
+            <RunningJobsBadge />
+          </div>
+        }
       />
 
       {/* Tab bar */}
