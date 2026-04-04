@@ -408,8 +408,12 @@ export interface RepoOption {
 
 export interface PromptTemplate {
   key: string
+  description: string
+  placeholders: string[]
   content: string
+  defaultContent: string
   isOverride: boolean
+  updatedAt?: string
 }
 
 // ---- Execution Plans ----

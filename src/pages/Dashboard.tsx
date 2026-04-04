@@ -6,6 +6,7 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Eye,
   GitBranch,
   Loader2,
   Play,
@@ -406,6 +407,100 @@ function Soc2Section() {
   )
 }
 
+interface LogAttentionItem {
+  id: number
+  exceptionClass?: string
+  customerId: string
+  environmentName: string
+  severity?: string
+  occurrenceCount: number
+  firstSeenAt: string
+  jiraKey?: string
+}
+
+interface LogAttentionData {
+  openTotal: number
+  monitoringTotal: number
+  items: LogAttentionItem[]
+}
+
+function SeverityDot({ severity }: { severity?: string }) {
+  const cls =
+    severity === 'high'
+      ? 'bg-[var(--color-tags-font-critical)]'
+      : severity === 'medium'
+        ? 'bg-[var(--color-tags-font-attention)]'
+        : 'bg-[var(--color-tags-font-neutral)]'
+  return <span className={`inline-block w-1.5 h-1.5 rounded-full shrink-0 ${cls}`} />
+}
+
+function LogFindingsAttentionSection({ data }: { data: LogAttentionData }) {
+  const navigate = useNavigate()
+  if (data.openTotal === 0 && data.monitoringTotal === 0) return null
+
+  return (
+    <div className="mb-4 rounded-[var(--border-radius-card)] border border-[var(--color-tags-critical-background)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-tags-critical-background)]">
+        <AlertTriangle size={13} className="text-[var(--color-tags-font-critical)] shrink-0" />
+        <span className="text-xs font-semibold text-[var(--color-tags-font-critical)]">
+          Log Analysis Findings
+        </span>
+        <div className="ml-auto flex items-center gap-3">
+          {data.openTotal > 0 && (
+            <span className="text-[10px] text-[var(--color-tags-font-critical)] opacity-80">
+              {data.openTotal} open
+            </span>
+          )}
+          {data.monitoringTotal > 0 && (
+            <span className="flex items-center gap-1 text-[10px] text-[var(--color-tags-font-attention)] opacity-80">
+              <Eye size={10} />
+              {data.monitoringTotal} monitoring
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="bg-[var(--color-cards-card-background)] divide-y divide-[var(--color-cards-card-stroke)]">
+        {data.items.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => navigate({ to: '/log-analysis' })}
+            className="w-full text-left px-3 py-2 hover:bg-[var(--color-cards-card-background-hover)] transition-colors flex items-center gap-2"
+          >
+            <SeverityDot severity={item.severity} />
+            <span className="text-xs font-medium text-[var(--color-fonts-font-color-primary)] truncate min-w-0 flex-1">
+              {item.exceptionClass ?? 'Unknown exception'}
+            </span>
+            <span className="text-[10px] text-[var(--color-fonts-font-color-support)] shrink-0">
+              {item.customerId}/{item.environmentName}
+            </span>
+            {item.jiraKey && (
+              <span className="text-[10px] font-mono text-[var(--color-fonts-font-color-support)] shrink-0">
+                {item.jiraKey}
+              </span>
+            )}
+            <span className="text-[10px] text-[var(--color-fonts-font-color-support)] shrink-0">
+              ×{item.occurrenceCount}
+            </span>
+            <ArrowRight size={12} className="text-[var(--color-icons-icon)] shrink-0" />
+          </button>
+        ))}
+        {data.items.length === 0 && data.openTotal > 0 && (
+          <button
+            onClick={() => navigate({ to: '/log-analysis' })}
+            className="w-full text-left px-3 py-2 hover:bg-[var(--color-cards-card-background-hover)] transition-colors flex items-center gap-2"
+          >
+            <AlertTriangle size={12} className="text-[var(--color-tags-font-critical)] shrink-0" />
+            <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
+              {data.openTotal} open finding{data.openTotal !== 1 ? 's' : ''} require attention
+            </span>
+            <ArrowRight size={12} className="text-[var(--color-icons-icon)] ml-auto shrink-0" />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const user = useStore(authStore, (s) => s.user)!
   const navigate = useNavigate()
@@ -447,6 +542,13 @@ export default function Dashboard() {
     queryKey: ['dashboard-plans'],
     queryFn: () => api.get('/plans').then((r) => r.data).catch(() => []),
     refetchInterval: 30_000,
+  })
+
+  const { data: logAttentionData } = useQuery<LogAttentionData>({
+    queryKey: ['dashboard-log-attention'],
+    queryFn: () =>
+      api.get('/log-analysis/attention').then((r) => r.data).catch(() => null),
+    refetchInterval: 60_000,
   })
 
   const jobs = Array.isArray(recentJobsData) ? recentJobsData : []
@@ -517,6 +619,10 @@ export default function Dashboard() {
       </div>
 
       <NeedsAttentionSection approvalJobs={approvalJobs} failedJobs={failedJobs} />
+
+      {logAttentionData && (logAttentionData.openTotal > 0 || logAttentionData.monitoringTotal > 0) && (
+        <LogFindingsAttentionSection data={logAttentionData} />
+      )}
 
       {activePlans.length > 0 && <ActivePlansSection plans={activePlans} />}
 

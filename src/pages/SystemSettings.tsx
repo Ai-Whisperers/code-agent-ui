@@ -551,6 +551,15 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Log Analysis ──────────────────────────────────────────────────────────────
+  {
+    id: 'log-analysis',
+    label: 'Log Analysis',
+    settings: [
+      { key: 'log-analysis.monitoring-days', label: 'Monitoring Window (days)', description: 'Number of days a finding stays in MONITORING status after its fix is merged. If the issue does not reoccur within this window it is automatically closed.', defaultValue: '7', inputType: 'number', min: 1, max: 365 },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -581,7 +590,7 @@ const TABS: TabDef[] = [
   { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
   { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido', 'transcribe'] },
-  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'self-analysis', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'self-analysis', 'job-queue', 'aws', 'schedulers', 'linter', 'review', 'log-analysis'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'compliance',      label: 'Compliance',       groupIds: ['soc2'] },
