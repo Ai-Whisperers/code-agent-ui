@@ -18,9 +18,10 @@ export const TRIGGER_OPTIONS = [
     { value: 'pr_event',       label: 'PR Event (Legacy)', description: 'Legacy PR event trigger' },
   ]},
   { category: 'Jira', triggers: [
-    { value: 'jira.issue_created',  label: 'Issue Created',  description: 'When a Jira issue is created' },
-    { value: 'jira.issue_updated',  label: 'Issue Updated',  description: 'When a Jira issue is updated' },
-    { value: 'jira.issue_assigned', label: 'Issue Assigned', description: 'When a Jira issue is assigned' },
+    { value: 'jira.issue_created',       label: 'Issue Created',       description: 'When a Jira issue is created' },
+    { value: 'jira.issue_updated',       label: 'Issue Updated',       description: 'When a Jira issue is updated' },
+    { value: 'jira.issue_assigned',      label: 'Issue Assigned',      description: 'When a Jira issue is assigned' },
+    { value: 'jira.service_desk_ticket', label: 'Service Desk Ticket', description: 'When a new Jira Service Desk ticket is created' },
   ]},
   { category: 'Confluence', triggers: [
     { value: 'confluence.page_created', label: 'Page Created', description: 'When a Confluence page is created' },

@@ -59,6 +59,11 @@ const JOB_TYPES: RadioOption[] = [
     label: 'Code Fix',
     description: 'Apply a code fix driven by a Jira issue or custom prompt, then open a PR',
   },
+  {
+    value: 'service_desk_triage',
+    label: 'Service Desk Triage',
+    description: 'Classify and deep-analyse service desk tickets — bugs and outages get AI root-cause analysis posted as an internal comment',
+  },
   { separator: true, label: 'Roadmap Reviews' },
   {
     value: 'review_epic',
