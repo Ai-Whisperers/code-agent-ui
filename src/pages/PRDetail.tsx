@@ -293,14 +293,14 @@ export default function PRDetail({ workspace, repoSlug, prId }: PRDetailProps) {
               </Tooltip>
             )}
 
-            <Tooltip text="Back to pull requests">
-              <Button
-                variant="ghost"
-                size="md"
-                icon={<ArrowLeft size={14} />}
-                onClick={() => navigate({ to: '/pull-requests' })}
-              />
-            </Tooltip>
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<ArrowLeft size={14} />}
+              onClick={() => navigate({ to: '/pull-requests' })}
+            >
+              Back
+            </Button>
           </div>
         }
       />

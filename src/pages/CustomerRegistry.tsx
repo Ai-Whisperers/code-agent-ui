@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Plus,
   Pencil,
@@ -20,6 +20,8 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Toast } from '@/components/ui/Toast'
 import api from '@/lib/api'
 import type {
   CustomerConfig,
@@ -29,26 +31,12 @@ import type {
   UpsertProductRequest,
   EnvironmentConfig,
   LogAnalysisConfig,
-  TeamMember,
+  Team,
   CloudAccount,
   IntegrationFilter,
 } from '@/types/api'
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
-
-const inputCls =
-  'h-8 w-full px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)]'
-
-const selectCls =
-  'h-8 w-full px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]'
-
 const labelCls = 'block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1'
-
-const btnPrimary =
-  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40'
-
-const btnSecondary =
-  'flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors disabled:opacity-40'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -61,44 +49,14 @@ function detectPlatform(gitPlatformUrl?: string): string {
   return 'bitbucket'
 }
 
-// ── Toast ─────────────────────────────────────────────────────────────────────
-
-interface ToastMsg {
-  id: number
-  text: string
-  type: 'success' | 'error'
-}
-
-let toastId = 0
-
-function ToastList({ toasts }: { toasts: ToastMsg[] }) {
-  if (toasts.length === 0) return null
-  return (
-    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`px-4 py-2.5 rounded-[var(--border-radius-card)] shadow-lg text-sm font-medium ${
-            t.type === 'success'
-              ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] border border-[var(--color-tags-font-success)]'
-              : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] border border-[var(--color-tags-font-critical)]'
-          }`}
-        >
-          {t.text}
-        </div>
-      ))}
-    </div>
-  )
-}
+// ── Toast helper ──────────────────────────────────────────────────────────────
 
 function useToast() {
-  const [toasts, setToasts] = useState<ToastMsg[]>([])
-  function addToast(text: string, type: 'success' | 'error') {
-    const id = ++toastId
-    setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
+  function addToast(message: string, variant: 'success' | 'error') {
+    setToast({ message, variant })
   }
-  return { toasts, addToast }
+  return { toast, setToast, addToast }
 }
 
 // ── Customer Modal ────────────────────────────────────────────────────────────
@@ -159,12 +117,9 @@ function CustomerModal({
           <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
             {isEdit ? `Edit Customer — ${initial.customerId}` : 'Add Customer'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]"
-          >
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X size={14} />
+          </Button>
         </div>
 
         <div className="flex gap-1 px-5 border-b border-[var(--color-cards-card-stroke)] shrink-0">
@@ -172,7 +127,7 @@ function CustomerModal({
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                 tab === t.id
                   ? 'border-[var(--color-buttons-button-primary)] text-[var(--color-fonts-font-color-headings)]'
                   : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
@@ -188,8 +143,8 @@ function CustomerModal({
             <div className="space-y-4">
               <div>
                 <label className={labelCls}>Customer ID *</label>
-                <input
-                  className={inputCls}
+                <Input
+                  className="w-full"
                   value={customerId}
                   onChange={(e) => setCustomerId(e.target.value)}
                   disabled={isEdit}
@@ -204,15 +159,13 @@ function CustomerModal({
               </div>
               <div>
                 <label className={labelCls}>Display Name *</label>
-                <input
-                  className={inputCls}
+                <Input
+                  className="w-full"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="e.g. Acme Corporation"
                   autoFocus={isEdit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleSubmit()
-                  }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
                 />
               </div>
             </div>
@@ -229,16 +182,16 @@ function CustomerModal({
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
-          <button className={btnSecondary} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className={btnPrimary}
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleSubmit}
             disabled={!customerId.trim() || !name.trim() || isSaving}
+            loading={isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+            Save
+          </Button>
         </div>
       </div>
     </div>
@@ -246,16 +199,6 @@ function CustomerModal({
 }
 
 // ── Product form state ────────────────────────────────────────────────────────
-
-const TEAM_ROLES: Array<{ key: string; label: string }> = [
-  { key: 'productOwner', label: 'Product Owner' },
-  { key: 'engineering', label: 'Engineering' },
-  { key: 'devops', label: 'DevOps' },
-  { key: 'operations', label: 'Operations' },
-  { key: 'qa', label: 'QA' },
-  { key: 'security', label: 'Security' },
-  { key: 'supportQueue', label: 'Support Queue' },
-]
 
 // ── Repo selector ─────────────────────────────────────────────────────────────
 
@@ -288,12 +231,12 @@ function RepoSelector({
 
   return (
     <div>
-      <input
+      <Input
         type="text"
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
         placeholder="Filter repositories…"
-        className={inputCls}
+        className="w-full"
       />
 
       {selected.length > 0 && (
@@ -384,7 +327,6 @@ interface ProductFormState {
   confluenceSpaceKey: string
   confluenceRootPageId: string
   confluenceRootPageTitle: string
-  teams: Record<string, TeamMember[]>
 }
 
 function blankProduct(): ProductFormState {
@@ -400,7 +342,6 @@ function blankProduct(): ProductFormState {
     confluenceSpaceKey: '',
     confluenceRootPageId: '',
     confluenceRootPageTitle: '',
-    teams: {},
   }
 }
 
@@ -420,7 +361,6 @@ function productToForm(p: ProductConfig): ProductFormState {
     confluenceSpaceKey: p.confluence?.spaceKey ?? '',
     confluenceRootPageId: p.confluence?.rootPageId ?? '',
     confluenceRootPageTitle: '',
-    teams: p.teams ?? {},
   }
 }
 
@@ -447,7 +387,6 @@ function formToRequest(f: ProductFormState): UpsertProductRequest {
       f.confluenceSpaceKey || f.confluenceRootPageId
         ? { spaceKey: f.confluenceSpaceKey || undefined, rootPageId: f.confluenceRootPageId || undefined }
         : undefined,
-    teams: Object.keys(f.teams).length > 0 ? f.teams : undefined,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   }
 }
@@ -497,8 +436,8 @@ function GeneralTab({
     <div className="space-y-4">
       <div>
         <label className={labelCls}>Product ID *</label>
-        <input
-          className={inputCls}
+        <Input
+          className="w-full"
           value={form.productId}
           onChange={(e) => set('productId', e.target.value)}
           disabled={isEdit}
@@ -514,8 +453,8 @@ function GeneralTab({
 
       <div>
         <label className={labelCls}>Display Name *</label>
-        <input
-          className={inputCls}
+        <Input
+          className="w-full"
           value={form.displayName}
           onChange={(e) => set('displayName', e.target.value)}
           placeholder="e.g. Acme Platform"
@@ -888,8 +827,8 @@ function IntegrationsTab({
         </p>
         <div>
           <label className={labelCls}>Jira Base URL</label>
-          <input
-            className={inputCls}
+          <Input
+            className="w-full"
             value={form.jiraBaseUrl}
             onChange={(e) => set('jiraBaseUrl', e.target.value)}
             placeholder="https://yourorg.atlassian.net (leave blank to use global setting)"
@@ -960,23 +899,19 @@ function EnvironmentEditor({
           {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
         <input
-          className="flex-1 h-7 px-2 bg-transparent text-sm font-medium text-[var(--color-fonts-font-color-headings)] focus:outline-none border-0"
+          className="flex-1 h-7 px-2 bg-transparent text-xs font-medium text-[var(--color-fonts-font-color-headings)] focus:outline-none border-0"
           placeholder="Environment name (e.g. Engie Netherlands Production)"
           value={env.name}
           onChange={(e) => onChange({ ...env, name: e.target.value })}
         />
         {typeLabel && (
-          <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] shrink-0">
+          <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] shrink-0">
             {typeLabel}
           </span>
         )}
-        <button
-          type="button"
-          onClick={onRemove}
-          className="p-1 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors"
-        >
-          <Trash2 size={13} />
-        </button>
+        <Button variant="ghost" size="sm" type="button" icon={<Trash2 size={13} />} onClick={onRemove}>
+          Remove
+        </Button>
       </div>
 
       {open && (
@@ -1190,9 +1125,9 @@ function LogAnalysisSection({
             )}
 
             {/* Search / add input */}
-            <div className="relative">
+              <div className="relative">
               <div
-                className={`flex items-center gap-1.5 w-full px-2 py-1 text-xs rounded border transition-all ${
+                className={`flex items-center gap-1.5 w-full px-2 py-1 text-xs rounded border transition-colors ${
                   logGroupDropdownOpen
                     ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-cards-card-background)]'
                     : 'border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] hover:border-[var(--color-buttons-button-primary)]'
@@ -1417,129 +1352,167 @@ function EnvironmentsTab({
   )
 }
 
-function RoleEditor({
-  role,
-  members,
-  onChange,
-}: {
-  role: string
-  members: TeamMember[]
-  onChange: (members: TeamMember[]) => void
-}) {
-  const [open, setOpen] = useState(members.length > 0)
+function ProductTeamsTab({ productId }: { productId: string }) {
+  const qc = useQueryClient()
 
-  function addMember() {
-    onChange([...members, { name: '', email: '', jiraAccountId: '' }])
-    setOpen(true)
+  const { data: allTeams = [], isLoading: teamsLoading } = useQuery<Team[]>({
+    queryKey: ['teams'],
+    queryFn: () => api.get('/teams').then((r) => r.data),
+    staleTime: 30_000,
+  })
+
+  const { data: assignedTeams = [], isLoading: assignedLoading } = useQuery<Team[]>({
+    queryKey: ['product-teams', productId],
+    queryFn: () => api.get(`/teams/by-product/${productId}`).then((r) => r.data),
+    enabled: !!productId,
+    staleTime: 10_000,
+  })
+
+  const assignedIds = useMemo(() => new Set(assignedTeams.map((t) => t.id)), [assignedTeams])
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
+
+  const assignMutation = useMutation({
+    mutationFn: ({ teamId, assign }: { teamId: string; assign: boolean }) =>
+      assign
+        ? api.put(`/teams/${teamId}/products/${productId}`)
+        : api.delete(`/teams/${teamId}/products/${productId}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['product-teams', productId] })
+    },
+  })
+
+  const isLoading = teamsLoading || assignedLoading
+
+  if (!productId) {
+    return (
+      <p className="text-xs text-[var(--color-fonts-font-color-support)] py-6 text-center">
+        Save the product first to manage team assignments.
+      </p>
+    )
   }
 
-  function updateMember(idx: number, field: keyof TeamMember, value: string) {
-    onChange(members.map((m, i) => (i === idx ? { ...m, [field]: value } : m)))
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="h-10 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+        ))}
+      </div>
+    )
   }
 
-  function removeMember(idx: number) {
-    onChange(members.filter((_, i) => i !== idx))
+  if (allTeams.length === 0) {
+    return (
+      <p className="text-xs text-[var(--color-fonts-font-color-support)] py-6 text-center">
+        No teams exist yet. Create teams in <strong>Settings → Teams</strong> first.
+      </p>
+    )
   }
 
-  return (
-    <div className="bg-[var(--color-inputs-input-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors text-left"
-      >
-        {open ? (
-          <ChevronDown size={14} className="text-[var(--color-fonts-font-color-support)]" />
-        ) : (
-          <ChevronRight size={14} className="text-[var(--color-fonts-font-color-support)]" />
-        )}
-        <span className="text-sm font-medium text-[var(--color-fonts-font-color-headings)]">
-          {role}
-        </span>
-        {members.length > 0 && (
-          <span className="ml-auto text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
-            {members.length}
-          </span>
-        )}
-      </button>
-
-      {open && (
-        <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-3">
-          {members.map((m, idx) => (
-            <div key={idx} className="grid grid-cols-4 gap-2 mb-2">
-              <input
-                className={inputCls}
-                placeholder="Name"
-                value={m.name ?? ''}
-                onChange={(e) => updateMember(idx, 'name', e.target.value)}
-              />
-              <input
-                className={inputCls}
-                placeholder="Email"
-                value={m.email ?? ''}
-                onChange={(e) => updateMember(idx, 'email', e.target.value)}
-              />
-              <input
-                className={inputCls}
-                placeholder="Jira Account ID"
-                value={m.jiraAccountId ?? ''}
-                onChange={(e) => updateMember(idx, 'jiraAccountId', e.target.value)}
-              />
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => removeMember(idx)}
-                  className="ml-auto p-1 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors shrink-0"
-                >
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={addMember}
-            className="flex items-center gap-1 text-xs text-[var(--color-buttons-button-primary)] hover:opacity-80 mt-1"
-          >
-            <Plus size={12} /> Add member
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TeamsTab({
-  form,
-  set,
-}: {
-  form: ProductFormState
-  set: <K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) => void
-}) {
-  function getMembers(roleKey: string): TeamMember[] {
-    return form.teams[roleKey] ?? []
-  }
-
-  function setMembers(roleKey: string, members: TeamMember[]) {
-    const updated = { ...form.teams }
-    if (members.length === 0) {
-      delete updated[roleKey]
-    } else {
-      updated[roleKey] = members
-    }
-    set('teams', updated)
+  const roleLabel: Record<string, string> = {
+    productOwner: 'Product Owner',
+    engineering: 'Engineering',
+    devops: 'DevOps',
+    operations: 'Operations',
+    qa: 'QA',
+    security: 'Security',
+    supportQueue: 'Support Queue',
   }
 
   return (
     <div className="space-y-2">
-      {TEAM_ROLES.map((role) => (
-        <RoleEditor
-          key={role.key}
-          role={role.label}
-          members={getMembers(role.key)}
-          onChange={(members) => setMembers(role.key, members)}
-        />
-      ))}
+      {allTeams.map((team) => {
+        const isAssigned = assignedIds.has(team.id)
+        const isExpanded = expandedTeam === team.id
+        const isPending = assignMutation.isPending && assignMutation.variables?.teamId === team.id
+
+        return (
+          <div
+            key={team.id}
+            className={`border rounded-[var(--border-radius-card)] overflow-hidden transition-colors ${
+              isAssigned
+                ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-inputs-input-background)]'
+                : 'border-[var(--color-cards-card-stroke)] bg-[var(--color-inputs-input-background)]'
+            }`}
+          >
+            <div className="flex items-center gap-3 px-4 py-2.5">
+              <button
+                type="button"
+                onClick={() => setExpandedTeam(isExpanded ? null : team.id)}
+                className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+              >
+                {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--color-fonts-font-color-headings)] truncate">
+                  {team.name}
+                </p>
+                {team.description && (
+                  <p className="text-[11px] text-[var(--color-fonts-font-color-support)] truncate">
+                    {team.description}
+                  </p>
+                )}
+              </div>
+              {isAssigned && (
+                <span
+                  className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                  style={{
+                    background: 'var(--color-tags-success-background)',
+                    color: 'var(--color-tags-font-success)',
+                  }}
+                >
+                  Assigned
+                </span>
+              )}
+              <Button
+                size="sm"
+                variant={isAssigned ? 'secondary' : 'primary'}
+                disabled={isPending}
+                loading={isPending}
+                onClick={() => assignMutation.mutate({ teamId: team.id, assign: !isAssigned })}
+              >
+                {isAssigned ? 'Unassign' : 'Assign'}
+              </Button>
+            </div>
+
+            {isExpanded && team.members && team.members.length > 0 && (
+              <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">
+                  Members
+                </p>
+                <div className="space-y-1">
+                  {team.members.map((m, idx) => {
+                    const name = [m.firstName, m.lastName].filter(Boolean).join(' ') || m.username || m.keycloakUserId
+                    return (
+                      <div key={idx} className="flex items-center gap-2 text-xs">
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0"
+                          style={{
+                            background: 'var(--color-tags-neutral-background)',
+                            color: 'var(--color-tags-font-neutral)',
+                          }}
+                        >
+                          {roleLabel[m.role] ?? m.role}
+                        </span>
+                        <span className="text-[var(--color-fonts-font-color-primary)] truncate">{name}</span>
+                        {m.email && (
+                          <span className="text-[var(--color-fonts-font-color-support)] truncate">{m.email}</span>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {isExpanded && (!team.members || team.members.length === 0) && (
+              <div className="border-t border-[var(--color-cards-card-stroke)] px-4 py-3">
+                <p className="text-xs text-[var(--color-fonts-font-color-support)]">No members in this team.</p>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1594,12 +1567,9 @@ function ProductModal({
           <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
             {isEdit ? `Edit Product — ${initial.productId}` : 'Add Product'}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]"
-          >
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose}>
+            <X size={14} />
+          </Button>
         </div>
 
         <div className="flex gap-1 px-5 border-b border-[var(--color-cards-card-stroke)] shrink-0">
@@ -1607,7 +1577,7 @@ function ProductModal({
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              className={`px-3 py-2.5 text-xs font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${
                 tab === t.id
                   ? 'border-[var(--color-buttons-button-primary)] text-[var(--color-fonts-font-color-headings)]'
                   : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
@@ -1621,20 +1591,20 @@ function ProductModal({
         <div className="overflow-y-auto flex-1 px-5 py-4">
           {tab === 'general' && <GeneralTab form={form} set={set} isEdit={isEdit} />}
           {tab === 'integrations' && <IntegrationsTab form={form} set={set} />}
-          {tab === 'teams' && <TeamsTab form={form} set={set} />}
+          {tab === 'teams' && <ProductTeamsTab productId={form.productId} />}
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
-          <button className={btnSecondary} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className={btnPrimary}
+          <Button variant="secondary" size="md" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleSubmit}
             disabled={!form.productId.trim() || !form.displayName.trim() || isSaving}
+            loading={isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+            Save
+          </Button>
         </div>
       </div>
     </div>
@@ -1663,6 +1633,8 @@ function CustomerRow({
   const qc = useQueryClient()
   const [expanded, setExpanded] = useState(false)
   const [linkProductId, setLinkProductId] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [unlinkTarget, setUnlinkTarget] = useState<string | null>(null)
 
   const { data: linkedProducts, isLoading: linkedLoading } = useQuery<ProductConfig[]>({
     queryKey: ['customer-products', customer.customerId],
@@ -1717,7 +1689,7 @@ function CustomerRow({
             <span className="text-sm font-medium text-[var(--color-fonts-font-color-headings)]">
               {customer.name}
             </span>
-            <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+            <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
               {customer.customerId}
             </code>
           </div>
@@ -1728,21 +1700,18 @@ function CustomerRow({
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <button
-            title="Edit"
-            onClick={() => onEdit(customer)}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-          >
-            <Pencil size={13} />
-          </button>
-          <button
-            title="Delete"
-            onClick={() => onDelete(customer.customerId)}
+          <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => onEdit(customer)}>
+            Edit
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={<Trash2 size={13} />}
+            onClick={() => setConfirmDelete(true)}
             disabled={isDeleting}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
           >
-            <Trash2 size={13} />
-          </button>
+            Delete
+          </Button>
         </div>
       </div>
 
@@ -1774,23 +1743,25 @@ function CustomerRow({
                   <span className="text-sm text-[var(--color-fonts-font-color-primary)]">
                     {p.displayName}
                   </span>
-                  <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                  <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                     {p.productId}
                   </code>
                   {Array.isArray(p.metadata?.repos) && (p.metadata.repos as string[]).length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                       {(p.metadata.repos as string[]).length} repo
                       {(p.metadata.repos as string[]).length !== 1 ? 's' : ''}
                     </span>
                   )}
-                  <button
-                    title="Unlink"
-                    onClick={() => unlinkMutation.mutate(p.productId)}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<X size={12} />}
+                    onClick={() => setUnlinkTarget(p.productId)}
                     disabled={unlinkMutation.isPending}
-                    className="ml-auto p-1 rounded hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+                    className="ml-auto"
                   >
-                    <X size={12} />
-                  </button>
+                    Unlink
+                  </Button>
                 </div>
               ))}
             </div>
@@ -1799,25 +1770,23 @@ function CustomerRow({
           {/* Link new product */}
           {available.length > 0 && (
             <div className="flex items-center gap-2 pt-2 border-t border-[var(--color-cards-card-stroke)]">
-              <select
-                className={selectCls}
+              <Select
                 value={linkProductId}
-                onChange={(e) => setLinkProductId(e.target.value)}
-              >
-                <option value="">— Link a product —</option>
-                {available.map((p) => (
-                  <option key={p.productId} value={p.productId}>
-                    {p.displayName} ({p.productId})
-                  </option>
-                ))}
-              </select>
-              <button
-                className={btnPrimary + ' shrink-0'}
+                onChange={setLinkProductId}
+                placeholder="— Link a product —"
+                options={available.map((p) => ({ value: p.productId, label: `${p.displayName} (${p.productId})` }))}
+                className="flex-1"
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                icon={<Link2 size={13} />}
                 onClick={() => linkProductId && linkMutation.mutate(linkProductId)}
                 disabled={!linkProductId || linkMutation.isPending}
+                loading={linkMutation.isPending}
               >
-                <Link2 size={13} /> Link
-              </button>
+                Link
+              </Button>
             </div>
           )}
 
@@ -1827,6 +1796,30 @@ function CustomerRow({
             </p>
           )}
         </div>
+      )}
+
+      {confirmDelete && (
+        <ConfirmDialog
+          title="Delete Customer"
+          variant="danger"
+          confirmLabel="Delete"
+          onConfirm={() => { setConfirmDelete(false); onDelete(customer.customerId) }}
+          onCancel={() => setConfirmDelete(false)}
+        >
+          Are you sure you want to delete <strong>{customer.name}</strong> ({customer.customerId})? This action cannot be undone.
+        </ConfirmDialog>
+      )}
+
+      {unlinkTarget && (
+        <ConfirmDialog
+          title="Unlink Product"
+          variant="danger"
+          confirmLabel="Unlink"
+          onConfirm={() => { const id = unlinkTarget; setUnlinkTarget(null); unlinkMutation.mutate(id) }}
+          onCancel={() => setUnlinkTarget(null)}
+        >
+          Are you sure you want to unlink <strong>{unlinkTarget}</strong> from {customer.name}?
+        </ConfirmDialog>
       )}
     </div>
   )
@@ -1844,7 +1837,7 @@ function CustomersTab({
   allProducts: ProductConfig[]
 }) {
   const qc = useQueryClient()
-  const { toasts, addToast } = useToast()
+  const { toast, setToast, addToast } = useToast()
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [editCustomer, setEditCustomer] = useState<CustomerConfig | null>(null)
@@ -1882,14 +1875,14 @@ function CustomersTab({
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <input
+        <Input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search customers…"
-          className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
+          className="w-64"
         />
-        <Button size="md" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
+        <Button size="sm" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
           Add Customer
         </Button>
       </div>
@@ -1939,7 +1932,9 @@ function CustomersTab({
         />
       )}
 
-      <ToastList toasts={toasts} />
+      {toast && (
+        <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />
+      )}
     </div>
   )
 }
@@ -1948,11 +1943,12 @@ function CustomersTab({
 
 function ProductsTab() {
   const qc = useQueryClient()
-  const { toasts, addToast } = useToast()
+  const { toast, setToast, addToast } = useToast()
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [editProduct, setEditProduct] = useState<ProductConfig | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [confirmDeleteProduct, setConfirmDeleteProduct] = useState<ProductConfig | null>(null)
 
   const { data: products, isLoading } = useQuery<ProductConfig[]>({
     queryKey: ['products'],
@@ -1993,14 +1989,14 @@ function ProductsTab() {
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <input
+        <Input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search products…"
-          className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
+          className="w-64"
         />
-        <Button size="md" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
+        <Button size="sm" variant="primary" icon={<Plus size={13} />} className="ml-auto" onClick={() => setAddOpen(true)}>
           Add Product
         </Button>
       </div>
@@ -2034,17 +2030,17 @@ function ProductsTab() {
                   <span className="text-sm font-medium text-[var(--color-fonts-font-color-headings)]">
                     {p.displayName}
                   </span>
-                  <code className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                  <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                     {p.productId}
                   </code>
                   {Array.isArray(p.metadata?.repos) && (p.metadata.repos as string[]).length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                       {(p.metadata.repos as string[]).length} repo
                       {(p.metadata.repos as string[]).length !== 1 ? 's' : ''}
                     </span>
                   )}
                   {p.git?.platform && (
-                    <span className="text-xs px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
                       {p.git.platform}
                     </span>
                   )}
@@ -2056,21 +2052,18 @@ function ProductsTab() {
                 )}
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <button
-                  title="Edit"
-                  onClick={() => setEditProduct(p)}
-                  className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                >
-                  <Pencil size={13} />
-                </button>
-                <button
-                  title="Delete"
-                  onClick={() => deleteMutation.mutate(p.productId)}
+                <Button variant="ghost" size="sm" icon={<Pencil size={13} />} onClick={() => setEditProduct(p)}>
+                  Edit
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  icon={<Trash2 size={13} />}
+                  onClick={() => setConfirmDeleteProduct(p)}
                   disabled={deletingId === p.productId}
-                  className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
                 >
-                  <Trash2 size={13} />
-                </button>
+                  Delete
+                </Button>
               </div>
             </div>
           ))}
@@ -2089,7 +2082,22 @@ function ProductsTab() {
         />
       )}
 
-      <ToastList toasts={toasts} />
+      {confirmDeleteProduct && (
+        <ConfirmDialog
+          title="Delete Product"
+          variant="danger"
+          confirmLabel="Delete"
+          onConfirm={() => { const p = confirmDeleteProduct; setConfirmDeleteProduct(null); deleteMutation.mutate(p.productId) }}
+          onCancel={() => setConfirmDeleteProduct(null)}
+          isPending={deletingId === confirmDeleteProduct.productId}
+        >
+          Are you sure you want to delete <strong>{confirmDeleteProduct.displayName}</strong> ({confirmDeleteProduct.productId})? This action cannot be undone.
+        </ConfirmDialog>
+      )}
+
+      {toast && (
+        <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />
+      )}
     </div>
   )
 }

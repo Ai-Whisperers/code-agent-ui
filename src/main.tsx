@@ -38,6 +38,7 @@ import ChatPage from '@/pages/Chat'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
 import AdminUsersPage from '@/pages/AdminUsers'
+import TeamsPage from '@/pages/Teams'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
@@ -316,6 +317,13 @@ const adminUsersRoute = createRoute({
   component: AdminUsersPage,
 })
 
+const teamsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/teams',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: TeamsPage,
+})
+
 const scopesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/scope',
@@ -411,6 +419,7 @@ const routeTree = rootRoute.addChildren([
     webhookAuditRoute,
     auditLogRoute,
     adminUsersRoute,
+    teamsRoute,
     scopesRoute,
     scopeDetailRoute,
     scopeImproveRoute,

@@ -451,14 +451,14 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 </Button>
               </Tooltip>
             )}
-            <Tooltip text="Back to jobs">
-              <Button
-                variant="ghost"
-                size="md"
-                icon={<ArrowLeft size={14} />}
-                onClick={() => navigate({ to: '/jobs' })}
-              />
-            </Tooltip>
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<ArrowLeft size={14} />}
+              onClick={() => navigate({ to: '/jobs' })}
+            >
+              Back
+            </Button>
           </div>
         }
       />

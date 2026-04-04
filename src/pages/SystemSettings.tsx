@@ -703,12 +703,13 @@ function BooleanSettingRow({
           <Button
             variant="ghost"
             size="sm"
-            title="Reset to default"
             onClick={() => onDelete(meta.key)}
             disabled={isDeleting}
             icon={<Trash2 size={13} />}
             className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
-          />
+          >
+            Reset
+          </Button>
         )}
       </div>
     </div>
@@ -795,22 +796,24 @@ function EditableSettingRow({
           <Button
             variant="ghost"
             size="sm"
-            title="Edit"
             onClick={startEdit}
             disabled={editing || isSaving}
             icon={<Pencil size={13} />}
-          />
+          >
+            Edit
+          </Button>
 
           {isOverridden && (
             <Button
               variant="ghost"
               size="sm"
-              title="Reset to default"
               onClick={() => onDelete(meta.key)}
               disabled={isDeleting || editing}
               icon={<Trash2 size={13} />}
               className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
-            />
+            >
+              Reset
+            </Button>
           )}
         </div>
       </div>
@@ -878,18 +881,20 @@ function EditableSettingRow({
               size="sm"
               onClick={handleSave}
               disabled={!inputValue.trim() || isSaving}
-              title="Save"
               icon={<Check size={13} />}
               className="shrink-0"
-            />
+            >
+              Save
+            </Button>
             <Button
               variant="secondary"
               size="sm"
               onClick={cancelEdit}
-              title="Cancel"
               icon={<X size={13} />}
               className="shrink-0"
-            />
+            >
+              Cancel
+            </Button>
           </div>
 
           {isSecret && (
@@ -1358,19 +1363,21 @@ function CloudAccountsSection() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="Edit"
                     onClick={() => setEditAccount(account)}
                     icon={<Pencil size={13} />}
-                  />
+                  >
+                    Edit
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
-                    title="Delete"
                     onClick={() => deleteMutation.mutate(account.id)}
                     disabled={deleteMutation.isPending}
                     icon={<Trash2 size={13} />}
                     className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
-                  />
+                  >
+                    Delete
+                  </Button>
                 </div>
               </div>
             )

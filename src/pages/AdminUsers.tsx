@@ -1,11 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo } from 'react'
-import { ShieldOff, ShieldCheck, RefreshCw, Search } from 'lucide-react'
+import { ShieldOff, ShieldCheck, RefreshCw, Search, LogOut } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Toast } from '@/components/ui/Toast'
 import api from '@/lib/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -90,6 +91,8 @@ export default function AdminUsersPage() {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
   const [pendingToggle, setPendingToggle] = useState<AdminUser | null>(null)
+  const [pendingLeave, setPendingLeave] = useState<AdminUser | null>(null)
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery<AdminUser[]>({
     queryKey: ['admin-users'],
@@ -103,6 +106,19 @@ export default function AdminUsersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
       setPendingToggle(null)
+    },
+  })
+
+  const leaveCompanyMutation = useMutation({
+    mutationFn: (user: AdminUser) => api.delete(`/admin/users/${user.id}/teams`),
+    onSuccess: (_, user) => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      setPendingLeave(null)
+      setToast({ message: `${displayName(user)} removed from all teams.`, variant: 'success' })
+    },
+    onError: () => {
+      setToast({ message: 'Failed to remove user from teams.', variant: 'error' })
+      setPendingLeave(null)
     },
   })
 
@@ -299,19 +315,30 @@ export default function AdminUsersPage() {
 
                     {/* Actions cell */}
                     <td className="px-4 py-2 text-right">
-                      <Button
-                        variant={user.enabled ? 'danger' : 'secondary'}
-                        size="xs"
-                        icon={
-                          user.enabled
-                            ? <ShieldOff size={13} />
-                            : <ShieldCheck size={13} />
-                        }
-                        onClick={() => setPendingToggle(user)}
-                        disabled={toggleMutation.isPending}
-                      >
-                        {user.enabled ? 'Block' : 'Unblock'}
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant={user.enabled ? 'danger' : 'secondary'}
+                          size="xs"
+                          icon={
+                            user.enabled
+                              ? <ShieldOff size={13} />
+                              : <ShieldCheck size={13} />
+                          }
+                          onClick={() => setPendingToggle(user)}
+                          disabled={toggleMutation.isPending}
+                        >
+                          {user.enabled ? 'Block' : 'Unblock'}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          icon={<LogOut size={13} />}
+                          onClick={() => setPendingLeave(user)}
+                          disabled={leaveCompanyMutation.isPending}
+                        >
+                          Left company
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -342,6 +369,30 @@ export default function AdminUsersPage() {
             </>
           )}
         </ConfirmDialog>
+      )}
+
+      {/* Confirm left company dialog */}
+      {pendingLeave && (
+        <ConfirmDialog
+          title="Remove from all teams?"
+          confirmLabel="Remove from teams"
+          variant="danger"
+          icon={<LogOut size={16} />}
+          isPending={leaveCompanyMutation.isPending}
+          onConfirm={() => leaveCompanyMutation.mutate(pendingLeave)}
+          onCancel={() => setPendingLeave(null)}
+        >
+          Remove <strong>{displayName(pendingLeave)}</strong> from all teams? This cannot be undone.
+        </ConfirmDialog>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          variant={toast.variant}
+          onClose={() => setToast(null)}
+        />
       )}
     </main>
   )

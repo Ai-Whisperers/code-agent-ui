@@ -690,10 +690,40 @@ export interface EnvironmentConfig {
   logAnalysis?: LogAnalysisConfig
 }
 
-export interface TeamMember {
-  name?: string
+export type TeamRole =
+  | 'productOwner'
+  | 'engineering'
+  | 'devops'
+  | 'operations'
+  | 'qa'
+  | 'security'
+  | 'supportQueue'
+
+export interface TeamMemberEntry {
+  keycloakUserId: string
+  role: TeamRole | string
+  username?: string
   email?: string
-  jiraAccountId?: string
+  firstName?: string
+  lastName?: string
+}
+
+export interface Team {
+  id: string
+  name: string
+  description?: string
+  members?: TeamMemberEntry[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UpsertTeamRequest {
+  name: string
+  description?: string
+}
+
+export interface SetMembersRequest {
+  members: Array<{ keycloakUserId: string; role: string }>
 }
 
 export interface CustomerConfig {
@@ -713,7 +743,6 @@ export interface ProductConfig {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
   createdAt?: string
   updatedAt?: string
@@ -732,7 +761,6 @@ export interface UpsertProductRequest {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
 }
 

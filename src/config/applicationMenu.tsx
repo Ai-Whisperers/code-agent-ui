@@ -374,6 +374,16 @@ export function ApplicationMenuItems(
           onClick: () => go('/settings/users'),
         },
         {
+          id: 'teams',
+          label: 'Teams',
+          icon: <Users size={16} />,
+          path: '/settings/teams',
+          isActive: currentPath === '/settings/teams',
+          type: 'item',
+          requiredPermission: 'MANAGE_USERS',
+          onClick: () => go('/settings/teams'),
+        },
+        {
           id: 'system-settings',
           label: 'System',
           icon: <Sliders size={16} />,

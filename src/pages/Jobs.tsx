@@ -118,9 +118,9 @@ export default function Jobs() {
         subtitle="Monitor and manage all agent jobs."
         actions={
           <div className="flex items-center gap-2">
-            <Tooltip text="Refresh job list">
-              <Button variant="ghost" size="md" icon={<RefreshCw size={16} />} onClick={() => refetch()} />
-            </Tooltip>
+            <Button variant="ghost" size="md" icon={<RefreshCw size={16} />} onClick={() => refetch()}>
+              Refresh
+            </Button>
             <Tooltip text="Submit a new agent job">
               <Button variant="primary" size="lg" icon={<Plus size={15} />} onClick={() => navigate({ to: '/jobs/new' })}>
                 New Job
@@ -278,53 +278,55 @@ function JobRow({ job, isEven }: { job: JobStatusResponse; isEven: boolean }) {
         <div className="flex items-center gap-1">
           {job.status === 'AWAITING_APPROVAL' && (
             <>
-              <Tooltip text="Approve and merge PR">
-                <Button
-                  variant="success"
-                  size="xs"
-                  icon={<CheckCircle size={14} />}
-                  loading={approveMutation.isPending}
-                  onClick={() => approveMutation.mutate()}
-                />
-              </Tooltip>
-              <Tooltip text="Reject and decline PR">
-                <Button
-                  variant="danger"
-                  size="xs"
-                  icon={<XCircle size={14} />}
-                  loading={rejectMutation.isPending}
-                  onClick={() => rejectMutation.mutate()}
-                />
-              </Tooltip>
+              <Button
+                variant="success"
+                size="xs"
+                icon={<CheckCircle size={14} />}
+                loading={approveMutation.isPending}
+                onClick={() => approveMutation.mutate()}
+              >
+                Approve
+              </Button>
+              <Button
+                variant="danger"
+                size="xs"
+                icon={<XCircle size={14} />}
+                loading={rejectMutation.isPending}
+                onClick={() => rejectMutation.mutate()}
+              >
+                Reject
+              </Button>
             </>
           )}
           {(job.status === 'PENDING' || job.status === 'QUEUED') && (
             job.soc2Protected ? (
               <Tooltip text="SOC II: cancellation not permitted for compliance records.">
-                <Button variant="danger" size="xs" icon={<Ban size={14} />} disabled />
+                <Button variant="danger" size="xs" icon={<Ban size={14} />} disabled>
+                  Cancel
+                </Button>
               </Tooltip>
             ) : (
-              <Tooltip text="Cancel this job">
-                <Button
-                  variant="danger"
-                  size="xs"
-                  icon={<Ban size={14} />}
-                  loading={cancelMutation.isPending}
-                  onClick={() => cancelMutation.mutate()}
-                />
-              </Tooltip>
+              <Button
+                variant="danger"
+                size="xs"
+                icon={<Ban size={14} />}
+                loading={cancelMutation.isPending}
+                onClick={() => cancelMutation.mutate()}
+              >
+                Cancel
+              </Button>
             )
           )}
           {(job.status === 'FAILED' || job.status === 'SUCCESS') && (
-            <Tooltip text="Rerun this job">
-              <Button
-                variant="ghost"
-                size="xs"
-                icon={<RotateCcw size={14} />}
-                loading={rerunMutation.isPending}
-                onClick={() => rerunMutation.mutate()}
-              />
-            </Tooltip>
+            <Button
+              variant="ghost"
+              size="xs"
+              icon={<RotateCcw size={14} />}
+              loading={rerunMutation.isPending}
+              onClick={() => rerunMutation.mutate()}
+            >
+              Rerun
+            </Button>
           )}
         </div>
       </td>

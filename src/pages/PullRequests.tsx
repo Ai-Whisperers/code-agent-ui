@@ -214,14 +214,14 @@ export default function PullRequests() {
               placeholder="Status"
               className="w-32"
             />
-            <Tooltip text={activeTab === 'ready-to-promote' ? 'Refresh from SCM (last 30 days)' : 'Refresh pull requests'}>
-              <Button
-                variant="ghost"
-                size="md"
-                icon={<RefreshCw size={16} className={(activeTab === 'ready-to-promote' ? mergedFetching : isFetching) ? 'animate-spin' : ''} />}
-                onClick={() => activeTab === 'ready-to-promote' ? refetchMerged() : refetch()}
-              />
-            </Tooltip>
+            <Button
+              variant="ghost"
+              size="md"
+              icon={<RefreshCw size={16} className={(activeTab === 'ready-to-promote' ? mergedFetching : isFetching) ? 'animate-spin' : ''} />}
+              onClick={() => activeTab === 'ready-to-promote' ? refetchMerged() : refetch()}
+            >
+              Refresh
+            </Button>
             {isAdmin && (
               <Tooltip text="Force full sync from SCM">
                 <Button

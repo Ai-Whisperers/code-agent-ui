@@ -574,15 +574,15 @@ function WebDocSourcesSection({
                           >
                             Crawl
                           </Button>
-                          <Tooltip text="Delete source">
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              icon={<Trash2 size={12} />}
-                              disabled={deleteMutation.isPending}
-                              onClick={() => setDeleteConfirm({ id: source.id, name: source.name })}
-                            />
-                          </Tooltip>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            icon={<Trash2 size={12} />}
+                            disabled={deleteMutation.isPending}
+                            onClick={() => setDeleteConfirm({ id: source.id, name: source.name })}
+                          >
+                            Delete
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -919,15 +919,15 @@ function StaticFilesSection({
                       >
                         Reindex
                       </Button>
-                      <Tooltip text="Delete file">
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          icon={<Trash2 size={12} />}
-                          disabled={deleteMutation.isPending}
-                          onClick={() => setDeleteConfirm({ id: f.id, name: f.name })}
-                        />
-                      </Tooltip>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Trash2 size={12} />}
+                        disabled={deleteMutation.isPending}
+                        onClick={() => setDeleteConfirm({ id: f.id, name: f.name })}
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </td>
                 </tr>

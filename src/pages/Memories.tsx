@@ -245,11 +245,12 @@ export default function MemoriesPage() {
                       <Button
                         variant="ghost"
                         size="xs"
-                        title="Delete memory"
                         icon={<Trash2 size={14} />}
                         onClick={() => setPendingDelete(entry)}
                         className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
-                      />
+                      >
+                        Delete
+                      </Button>
                     </td>
                   </tr>
                 ))}
