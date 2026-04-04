@@ -162,6 +162,7 @@ export default function Jobs() {
               {([
                 { label: 'Job ID',   tip: 'Unique agent job identifier' },
                 { label: 'Type',     tip: 'Job type (e.g. review, upgrade, docs)' },
+                { label: 'Repo',     tip: 'Repository and branch affected by this job' },
                 { label: 'Priority', tip: 'Dispatch priority (1–100, higher = first)' },
                 { label: 'Status',   tip: 'Current execution status' },
                 { label: 'Created',  tip: 'When the job was created' },
@@ -181,7 +182,7 @@ export default function Jobs() {
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={7} className="px-3 py-1.5">
+                    <td colSpan={8} className="px-3 py-1.5">
                       <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
@@ -189,7 +190,7 @@ export default function Jobs() {
               : list.length === 0
               ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-[var(--color-fonts-font-color-support)]">
+                  <td colSpan={8} className="px-3 py-6 text-center text-[var(--color-fonts-font-color-support)]">
                     No jobs found.
                   </td>
                 </tr>
@@ -252,6 +253,26 @@ function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: bool
         {job.jobId.slice(0, 8)}…
       </td>
       <td className="px-3 py-1.5 font-medium">{job.jobType}</td>
+      <td className="px-3 py-1.5 max-w-[200px]">
+        {job.repoSlug ? (
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <span className="truncate text-[var(--color-fonts-font-color-body)]">
+              {job.workspace && (
+                <span className="text-[var(--color-fonts-font-color-support)]">{job.workspace}/</span>
+              )}
+              <span className="font-medium">{job.repoSlug}</span>
+            </span>
+            {(job.sourceBranch || job.targetBranch) && (
+              <span className="truncate text-[10px] text-[var(--color-fonts-font-color-support)] font-mono">
+                {job.sourceBranch ?? '?'}
+                {job.targetBranch && ` → ${job.targetBranch}`}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+        )}
+      </td>
       <td className="px-3 py-1.5 text-center">
         {job.priority != null && (
           <span className="inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)]">

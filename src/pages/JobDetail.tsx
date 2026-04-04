@@ -18,6 +18,7 @@ import { AiCallModal } from '@/components/ui/AiCallModal'
 import { TabBar, TabButton } from '@/components/ui/Tabs'
 import { CommentChatDialog, type CommentChatAction } from '@/components/CommentChatDialog'
 import api from '@/lib/api'
+import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import type {
   JobStatusResponse, JobAiCallsResponse, AiCallRecord,
   JobDiffResponse, JobReviewResponse, ReviewCommentEntry, JobEvidenceResponse,
@@ -46,6 +47,13 @@ export default function JobDetail({ jobId }: JobDetailProps) {
   const dismissToast = useCallback(() => setToast(null), [])
   const [selectedCall, setSelectedCall] = useState<AiCallRecord | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>('summary')
+
+  const { data: systemConfig } = useQuery<SystemConfig>({
+    queryKey: ['mcp-system-config'],
+    queryFn: () => mcpProfilesApi.getSystemConfig(),
+    staleTime: 10 * 60_000,
+  })
+  const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
 
   const { data: job, isLoading } = useQuery<JobStatusResponse>({
     queryKey: ['job', jobId],
@@ -335,7 +343,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
         <>
           <Separator />
           <a
-            href={`https://jira.atlassian.net/browse/${job.jiraKey}`}
+            href={`${jiraBaseUrl}/browse/${job.jiraKey}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 font-mono text-[11px] hover:opacity-80 transition-opacity"

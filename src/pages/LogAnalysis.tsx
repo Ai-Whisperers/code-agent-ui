@@ -31,6 +31,7 @@ import { Input } from '@/components/ui/Input'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import api from '@/lib/api'
+import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import type { CustomerConfig, IntegrationFilter, RepoSettings } from '@/types/api'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -559,11 +560,13 @@ function FindingRow({
   onDismiss,
   isDismissing,
   readOnly,
+  jiraBaseUrl,
 }: {
   finding: LogFinding
   onDismiss: (id: number) => void
   isDismissing: boolean
   readOnly?: boolean
+  jiraBaseUrl: string
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -628,7 +631,7 @@ function FindingRow({
         <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
           {finding.jiraKey ? (
             <a
-              href={`https://jira.atlassian.net/browse/${finding.jiraKey}`}
+              href={`${jiraBaseUrl}/browse/${finding.jiraKey}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs font-medium"
@@ -816,7 +819,7 @@ function FindingRow({
                 )}
                 {finding.jiraKey && (
                   <a
-                    href={`https://jira.atlassian.net/browse/${finding.jiraKey}`}
+                    href={`${jiraBaseUrl}/browse/${finding.jiraKey}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-1 font-medium"
@@ -850,6 +853,13 @@ export default function LogAnalysisPage() {
   const [customerFilter, setCustomerFilter] = useState('')
   const [showFalsePositives, setShowFalsePositives] = useState(false)
   const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
+
+  const { data: systemConfig } = useQuery<SystemConfig>({
+    queryKey: ['mcp-system-config'],
+    queryFn: () => mcpProfilesApi.getSystemConfig(),
+    staleTime: 10 * 60_000,
+  })
+  const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
 
   const customersQuery = useQuery<CustomerConfig[]>({
     queryKey: ['customers'],
@@ -1082,6 +1092,7 @@ export default function LogAnalysisPage() {
                     onDismiss={(id) => dismissMutation.mutate(id)}
                     isDismissing={dismissMutation.isPending}
                     readOnly={showFalsePositives}
+                    jiraBaseUrl={jiraBaseUrl}
                   />
                 ))}
               </tbody>

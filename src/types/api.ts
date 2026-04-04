@@ -498,6 +498,8 @@ export interface QualityReport {
   branch: string
   measuredAt: string
   score?: number
+  archetype?: string
+  archetypeVersion?: string
   coverage?: CoverageSection
   linter?: LinterSection
   aikido?: {

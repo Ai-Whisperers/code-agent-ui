@@ -1,6 +1,7 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useStore } from '@tanstack/react-store'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -22,6 +23,7 @@ import {
   Flame,
   Loader2,
   Play,
+  PlayCircle,
   ShieldCheck,
   Wrench,
   X,
@@ -36,6 +38,8 @@ import { Toast } from '@/components/ui/Toast'
 import type { ToastConfig } from '@/components/ui/Toast'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
+import { authStore } from '@/store/auth-store'
+import { hasPermission } from '@/lib/permissions'
 import api from '@/lib/api'
 import type {
   QualityReport,
@@ -83,10 +87,14 @@ type RowData = {
 
 export default function QualityReportsPage() {
   const navigate = useNavigate()
+  const userPermissions = useStore(authStore, (s) => s.user?.permissions ?? [])
+  const isAdmin = hasPermission(userPermissions, 'MANAGE_SETTINGS')
+
   const [selected, setSelected] = useState<RowData | null>(null)
   const [fixTarget, setFixTarget] = useState<RowData | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [activeTab, setActiveTab] = useState<'reports' | 'tech-debt'>('reports')
+  const [runAllToast, setRunAllToast] = useState<ToastConfig | null>(null)
 
   // ── Tech Debt state ──────────────────────────────────────────────────────
   const [tdRepoFilter, setTdRepoFilter] = useState<string>('')
@@ -140,6 +148,30 @@ export default function QualityReportsPage() {
   }))
 
   const isLoading = reposLoading || reportQueries.some((q) => q.isLoading)
+
+  // ── Run all reports ──────────────────────────────────────────────────────
+  const runAllMutation = useMutation({
+    mutationFn: async () => {
+      const jobs: { branch: string; repoSlug: string }[] = []
+      for (const repo of qualityRepos) {
+        const repoUrl = `${(repo.gitPlatformUrl ?? import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org').replace(/\/$/, '')}/${repo.workspace}/${repo.repoSlug}.git`
+        for (const branch of ['develop', 'main']) {
+          await api.post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/${branch}`, { repoUrl })
+          jobs.push({ branch, repoSlug: repo.repoSlug })
+        }
+      }
+      return jobs
+    },
+    onSuccess: (jobs) => {
+      setRunAllToast({
+        variant: 'success',
+        message: `Queued ${jobs.length} quality report job${jobs.length !== 1 ? 's' : ''} across ${qualityRepos.length} repo${qualityRepos.length !== 1 ? 's' : ''}.`,
+      })
+    },
+    onError: () => {
+      setRunAllToast({ variant: 'error', message: 'Failed to queue one or more quality report jobs.' })
+    },
+  })
 
   // ── Tech Debt queries ────────────────────────────────────────────────────
   const { data: tdSnapshots, isLoading: tdSnapshotsLoading } = useQuery<TechDebtSnapshot[]>({
@@ -234,7 +266,26 @@ export default function QualityReportsPage() {
       <PageHeader
         title="Quality Reports"
         subtitle="Code quality metrics per repository — main and develop branches."
+        actions={
+          isAdmin ? (
+            <Tooltip text="Queue quality report jobs for all repos (develop + main)" position="bottom">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={runAllMutation.isPending
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <PlayCircle size={14} />
+                }
+                disabled={runAllMutation.isPending || qualityRepos.length === 0}
+                onClick={() => runAllMutation.mutate()}
+              >
+                {runAllMutation.isPending ? 'Queuing…' : 'Run All Reports'}
+              </Button>
+            </Tooltip>
+          ) : undefined
+        }
       />
+      {runAllToast && <Toast {...runAllToast} onClose={() => setRunAllToast(null)} />}
 
       {/* ── Tab bar ── */}
       <div className="flex gap-1 px-4 pt-3 pb-0 border-b border-[var(--color-tables-table-header-stroke)]">
@@ -435,12 +486,14 @@ export default function QualityReportsPage() {
                             report={row.mainReport ?? undefined}
                             compareReport={row.developReport ?? undefined}
                             isReference
+                            latestVersions={latestVersions}
                           />,
                           <BranchSubRow
                             key={`${key}/develop`}
                             branch="develop"
                             report={row.developReport ?? undefined}
                             compareReport={row.mainReport ?? undefined}
+                            latestVersions={latestVersions}
                           />,
                         ]
                       : []),
@@ -674,11 +727,13 @@ function BranchSubRow({
   report,
   compareReport,
   isReference = false,
+  latestVersions = {},
 }: {
   branch: string
   report: QualityReport | undefined
   compareReport: QualityReport | undefined
   isReference?: boolean
+  latestVersions?: Record<string, string>
 }) {
   const branchBadgeCls =
     branch === 'main'
@@ -697,9 +752,19 @@ function BranchSubRow({
           {branch}
         </span>
       </td>
-      {/* Archetype / Version: empty (repo-level) */}
-      <td className="px-4 py-1" />
-      <td className="px-4 py-1" />
+      {/* Archetype / Version: from the report snapshot for this branch */}
+      <td className="px-4 py-1 text-[var(--color-fonts-font-color-support)] text-xs">
+        {report?.archetype ?? ''}
+      </td>
+      <td className="px-4 py-1">
+        {report?.archetypeVersion ? (
+          <VersionBadge
+            version={report.archetypeVersion}
+            archetype={report.archetype}
+            latestVersions={latestVersions}
+          />
+        ) : null}
+      </td>
       {/* Score */}
       <td className="px-4 py-1">
         <DiffScoreBadge
