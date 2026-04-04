@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Toast } from '@/components/ui/Toast'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
@@ -229,6 +230,7 @@ export default function LogAnalysisPage() {
   const queryClient = useQueryClient()
   const [severityFilter, setSeverityFilter] = useState('')
   const [customerFilter, setCustomerFilter] = useState('')
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const customersQuery = useQuery<CustomerConfig[]>({
     queryKey: ['customers'],
@@ -270,7 +272,9 @@ export default function LogAnalysisPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['log-analysis-findings'] })
       queryClient.invalidateQueries({ queryKey: ['log-analysis-stats'] })
+      setToast({ message: 'Finding dismissed.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to dismiss finding.', variant: 'error' }),
   })
 
   const stats = statsQuery.data
@@ -421,6 +425,7 @@ export default function LogAnalysisPage() {
           </div>
         )}
       </div>
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

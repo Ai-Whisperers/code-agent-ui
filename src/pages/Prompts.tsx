@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Save, Eye, RotateCcw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Toast } from '@/components/ui/Toast'
 import api from '@/lib/api'
 import type { PromptTemplate } from '@/types/api'
 
@@ -12,6 +13,7 @@ export default function PromptsPage() {
   const [editContent, setEditContent] = useState('')
   const [preview, setPreview] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const { data: templates, isLoading } = useQuery<PromptTemplate[]>({
     queryKey: ['prompts'],
@@ -21,7 +23,8 @@ export default function PromptsPage() {
   const saveMutation = useMutation({
     mutationFn: () =>
       api.put(`/settings/prompts/${selected!.key}`, { content: editContent }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['prompts'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['prompts'] }); setToast({ message: 'Template saved.', variant: 'success' }) },
+    onError: () => setToast({ message: 'Failed to save template.', variant: 'error' }),
   })
 
   const deleteMutation = useMutation({
@@ -29,7 +32,9 @@ export default function PromptsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['prompts'] })
       setSelected(null)
+      setToast({ message: 'Template reset to default.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to reset template.', variant: 'error' }),
   })
 
   const handleSelect = (t: PromptTemplate) => {
@@ -154,6 +159,7 @@ export default function PromptsPage() {
           )}
         </div>
       </div>
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

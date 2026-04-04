@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Toast } from '@/components/ui/Toast'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import type { FilterSelectOption } from '@/components/ui/FilterSelect'
@@ -71,6 +72,7 @@ export default function Jobs() {
   const [statusFilter, setStatusFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [page, setPage] = useState(0)
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const handleStatusChange = (v: string) => { setStatusFilter(v); setPage(0) }
   const handleTypeChange   = (v: string) => { setTypeFilter(v);   setPage(0) }
@@ -193,7 +195,7 @@ export default function Jobs() {
                 </tr>
               )
               : list.map((job, i) => (
-                  <JobRow key={job.jobId} job={job} isEven={i % 2 === 0} />
+                  <JobRow key={job.jobId} job={job} isEven={i % 2 === 0} onToast={setToast} />
                 ))}
           </tbody>
         </table>
@@ -204,32 +206,39 @@ export default function Jobs() {
           {paginator}
         </div>
       </TableCard>
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }
 
-function JobRow({ job, isEven }: { job: JobStatusResponse; isEven: boolean }) {
+type ToastState = { message: string; variant: 'success' | 'error' }
+
+function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: boolean; onToast: (t: ToastState) => void }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
 
   const approveMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job.jobId}/approve`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); onToast({ message: 'PR approved.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to approve PR.', variant: 'error' }),
   })
 
   const rejectMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job.jobId}/reject`, { reason: 'Rejected via UI' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); onToast({ message: 'PR rejected.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to reject PR.', variant: 'error' }),
   })
 
   const cancelMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job.jobId}/cancel`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); onToast({ message: 'Job cancelled.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to cancel job.', variant: 'error' }),
   })
 
   const rerunMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job.jobId}/rerun`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['jobs'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); onToast({ message: 'Job queued for rerun.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to rerun job.', variant: 'error' }),
   })
 
   return (

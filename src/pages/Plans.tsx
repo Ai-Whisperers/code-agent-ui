@@ -5,6 +5,7 @@ import { Plus, Archive } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Toast } from '@/components/ui/Toast'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import type { FilterSelectOption } from '@/components/ui/FilterSelect'
 import { PlanCard } from '@/components/plans/PlanCard'
@@ -30,6 +31,7 @@ export default function PlansPage() {
     () => localStorage.getItem(ARCHIVED_KEY) === 'true',
   )
   const [statusFilter, setStatusFilter] = useState('')
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const toggleArchived = () => {
     setShowArchived((prev) => {
@@ -48,22 +50,26 @@ export default function PlansPage() {
 
   const approveMutation = useMutation({
     mutationFn: (planId: string) => api.post(`/plans/${planId}/approve`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); setToast({ message: 'Plan approved.', variant: 'success' }) },
+    onError: () => setToast({ message: 'Failed to approve plan.', variant: 'error' }),
   })
 
   const executeMutation = useMutation({
     mutationFn: (planId: string) => api.post(`/plans/${planId}/execute`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); setToast({ message: 'Plan execution started.', variant: 'success' }) },
+    onError: () => setToast({ message: 'Failed to execute plan.', variant: 'error' }),
   })
 
   const archiveMutation = useMutation({
     mutationFn: (planId: string) => api.post(`/plans/${planId}/archive`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); setToast({ message: 'Plan archived.', variant: 'success' }) },
+    onError: () => setToast({ message: 'Failed to archive plan.', variant: 'error' }),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (planId: string) => api.delete(`/plans/${planId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['plans'] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['plans'] }); setToast({ message: 'Plan deleted.', variant: 'success' }) },
+    onError: () => setToast({ message: 'Failed to delete plan.', variant: 'error' }),
   })
 
   const allPlans = Array.isArray(plans) ? plans : []
@@ -145,6 +151,7 @@ export default function PlansPage() {
               ))}
         </div>
       </TableCard>
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

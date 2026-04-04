@@ -103,8 +103,13 @@ export default function AdminUsersPage() {
   const toggleMutation = useMutation({
     mutationFn: (user: AdminUser) =>
       api.put(`/admin/users/${user.id}/enabled`, { enabled: !user.enabled }),
-    onSuccess: () => {
+    onSuccess: (_, user) => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
+      setPendingToggle(null)
+      setToast({ message: `${displayName(user)} ${user.enabled ? 'disabled' : 'enabled'}.`, variant: 'success' })
+    },
+    onError: () => {
+      setToast({ message: 'Failed to update user status.', variant: 'error' })
       setPendingToggle(null)
     },
   })

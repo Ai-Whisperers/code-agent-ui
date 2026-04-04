@@ -4,6 +4,7 @@ import { Save, X, RefreshCw, CheckCircle, XCircle, Search } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
+import { Toast } from '@/components/ui/Toast'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ChipInput } from '@/components/ui/ChipInput'
 import { JiraComponentPicker } from '@/components/repo-settings/JiraComponentPicker'
@@ -16,6 +17,7 @@ export default function RepoSettingsPage() {
   const [showArchived, setShowArchived] = useState(false)
   const [rebuildAllStatus, setRebuildAllStatus] = useState<'idle' | 'pending' | 'accepted' | 'error'>('idle')
   const [rebuildProgress, setRebuildProgress] = useState<Record<string, 'pending' | 'accepted' | 'error'>>({})
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const clearRebuildProgress = () => {
     setRebuildProgress({})
@@ -70,7 +72,9 @@ export default function RepoSettingsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['repos'] })
       setEditRepo(null)
+      setToast({ message: 'Repository settings saved.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to save repository settings.', variant: 'error' }),
   })
 
   const graphStatusMap = new Map(
@@ -287,6 +291,7 @@ export default function RepoSettingsPage() {
           </tbody>
         </table>
       </TableCard>
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

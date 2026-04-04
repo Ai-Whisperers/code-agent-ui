@@ -6,6 +6,7 @@ import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Toast } from '@/components/ui/Toast'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import api from '@/lib/api'
 import type { MemoryEntry } from '@/types/api'
@@ -92,6 +93,7 @@ export default function MemoriesPage() {
   const [pendingDelete, setPendingDelete] = useState<MemoryEntry | null>(null)
   const [filterWorkspace, setFilterWorkspace] = useState('')
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const { data: memories, isLoading } = useQuery<MemoryEntry[]>({
     queryKey: ['memories'],
@@ -102,6 +104,7 @@ export default function MemoriesPage() {
     mutationFn: (entry: MemoryEntry) =>
       api.patch(`/memories/${entry.id}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onError: () => setToast({ message: 'Failed to update memory.', variant: 'error' }),
   })
 
   const deleteMutation = useMutation({
@@ -109,7 +112,9 @@ export default function MemoriesPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories'] })
       setPendingDelete(null)
+      setToast({ message: 'Memory deleted.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to delete memory.', variant: 'error' }),
   })
 
   const list = Array.isArray(memories) ? memories : []
@@ -275,6 +280,7 @@ export default function MemoriesPage() {
           This action cannot be undone. The memory entry will be permanently removed.
         </ConfirmDialog>
       )}
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

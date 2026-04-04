@@ -1354,6 +1354,7 @@ function EnvironmentsTab({
 
 function ProductTeamsTab({ productId }: { productId: string }) {
   const qc = useQueryClient()
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const { data: allTeams = [], isLoading: teamsLoading } = useQuery<Team[]>({
     queryKey: ['teams'],
@@ -1376,9 +1377,11 @@ function ProductTeamsTab({ productId }: { productId: string }) {
       assign
         ? api.put(`/teams/${teamId}/products/${productId}`)
         : api.delete(`/teams/${teamId}/products/${productId}`),
-    onSuccess: () => {
+    onSuccess: (_, { assign }) => {
       qc.invalidateQueries({ queryKey: ['product-teams', productId] })
+      setToast({ message: assign ? 'Team assigned.' : 'Team unassigned.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to update team assignment.', variant: 'error' }),
   })
 
   const isLoading = teamsLoading || assignedLoading
@@ -1513,6 +1516,7 @@ function ProductTeamsTab({ productId }: { productId: string }) {
           </div>
         )
       })}
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </div>
   )
 }
