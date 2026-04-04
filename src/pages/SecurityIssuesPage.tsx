@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, RefreshCw, Shield, XCircle, Clock, HelpCircle, Code2, Container } from 'lucide-react'
+import { RefreshCw, Shield, Clock, HelpCircle, Code2, Container } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { FilterSelect } from '@/components/ui/FilterSelect'
@@ -27,7 +27,6 @@ const TYPE_OPTIONS = [
   { value: 'container', label: 'Container' },
 ]
 
-const CONTAINER_ISSUE_TYPES = new Set(['container', 'container_security'])
 
 function StatCard({
   label,
