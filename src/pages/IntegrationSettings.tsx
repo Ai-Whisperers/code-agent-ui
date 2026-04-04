@@ -269,7 +269,7 @@ export default function IntegrationSettingsPage() {
         subtitle="Enable or disable Jira projects and Confluence spaces. Disabled entries are excluded from webhooks, knowledge indexing, and UI selectors."
       />
 
-      <div className="flex-1 min-h-0 overflow-auto p-4 flex flex-col gap-4">
+      <div className="flex-1 min-h-0 p-4 flex flex-col gap-4 overflow-hidden">
         {/* Tab bar */}
         <TabBar>
           <TabButton active={activeTab === 'jira'} onClick={() => { setActiveTab('jira'); setJiraPage(0) }}>
@@ -297,8 +297,7 @@ export default function IntegrationSettingsPage() {
         <TableCard
           title={activeTab === 'jira' ? 'Jira Projects' : 'Confluence Spaces'}
           subtitle={`${rows.length} total`}
-          maxHeight="auto"
-          className={!isError && !isLoading && rows.length > PAGE_SIZE ? '[&]:rounded-b-none' : ''}
+          className={`flex-1 min-h-0${!isError && !isLoading && rows.length > PAGE_SIZE ? ' rounded-b-none' : ''}`}
           toolbar={
             <div className="flex items-center gap-2">
               {/* Pagination controls in header */}

@@ -883,6 +883,22 @@ export interface KnowledgeSearchResponse {
   total: number
 }
 
+export interface KnowledgeBlacklistEntry {
+  id: number
+  sourceType: string
+  sourceId: string
+  reason: string
+  contentHash: string
+  rejectedAt: string
+}
+
+export interface KnowledgeBlacklistResponse {
+  items: KnowledgeBlacklistEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
 // ---- Chat ----
 
 export interface ChatAttachment {

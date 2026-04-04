@@ -15,6 +15,8 @@ import {
   CheckCircle,
   FileText,
   Upload,
+  Ban,
+  ChevronLeft,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -35,6 +37,8 @@ import type {
   WebDocSourceCreateRequest,
   StaticFileSource,
   IntegrationFilter,
+  KnowledgeBlacklistResponse,
+  KnowledgeBlacklistEntry,
 } from '@/types/api'
 
 // ── Accordion wrapper (used for non-table sections) ───────────────────────────
@@ -1095,10 +1099,178 @@ function SemanticSearchSection() {
   )
 }
 
+// ── Blacklisted content tab ────────────────────────────────────────────────────
+
+const PAGE_SIZE = 20
+
+function BlacklistedContentTab({
+  addToast,
+}: {
+  addToast: (text: string, type: 'success' | 'error') => void
+}) {
+  const qc = useQueryClient()
+  const [page, setPage] = useState(0)
+  const [removeConfirm, setRemoveConfirm] = useState<KnowledgeBlacklistEntry | null>(null)
+
+  const { data, isLoading } = useQuery<KnowledgeBlacklistResponse>({
+    queryKey: ['knowledge-blacklist', page],
+    queryFn: () =>
+      api
+        .get(`/knowledge/blacklist?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`)
+        .then((r) => r.data),
+    placeholderData: (prev) => prev,
+  })
+
+  const removeMutation = useMutation({
+    mutationFn: ({ sourceType, sourceId }: { sourceType: string; sourceId: string }) =>
+      api.delete(`/knowledge/blacklist/${encodeURIComponent(sourceType)}/${encodeURIComponent(sourceId)}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['knowledge-blacklist'] })
+      addToast('Blacklist entry removed. The source will be re-evaluated on the next indexing run.', 'success')
+    },
+    onError: () => addToast('Failed to remove blacklist entry.', 'error'),
+  })
+
+  const items = data?.items ?? []
+  const total = data?.total ?? 0
+  const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  return (
+    <>
+      <TableCard
+        title="Blacklisted Content"
+        subtitle={!isLoading && total > 0 ? `${total.toLocaleString()} entr${total !== 1 ? 'ies' : 'y'}` : undefined}
+        maxHeight="auto"
+        className="mb-3"
+      >
+        <p className="px-4 py-2.5 text-xs text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+          Knowledge sources rejected by the Claude quality filter. Entries are automatically cleared
+          when the source content changes. You can manually lift an entry to force re-evaluation on
+          the next indexing run.
+        </p>
+
+        {isLoading ? (
+          <div className="p-4 space-y-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-10 skeleton-shimmer rounded-[var(--border-radius-card)]" />
+            ))}
+          </div>
+        ) : items.length === 0 ? (
+          <div className="px-4 py-10 text-center text-sm text-[var(--color-fonts-font-color-support)]">
+            No blacklisted entries. All indexed sources passed the quality filter.
+          </div>
+        ) : (
+          <>
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-[10px] text-[var(--color-fonts-font-color-support)] border-b border-[var(--color-cards-card-stroke)]">
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Source Type</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Source ID</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Reason</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Content Hash</th>
+                  <th className="px-4 py-2 text-left font-semibold uppercase tracking-wide">Rejected At</th>
+                  <th className="px-4 py-2 text-right font-semibold uppercase tracking-wide">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((entry) => (
+                  <tr
+                    key={entry.id}
+                    className="border-b border-[var(--color-cards-card-stroke)] last:border-0 hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
+                  >
+                    <td className="px-4 py-1.5">
+                      <SourceTypeBadge type={entry.sourceType} />
+                    </td>
+                    <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-primary)] max-w-40 truncate">
+                      {entry.sourceId}
+                    </td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                      {entry.reason}
+                    </td>
+                    <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)] max-w-28 truncate">
+                      <Tooltip text={entry.contentHash}>
+                        <span>{entry.contentHash.slice(0, 8)}…</span>
+                      </Tooltip>
+                    </td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)] whitespace-nowrap">
+                      {new Date(entry.rejectedAt).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-1.5 text-right">
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Trash2 size={12} />}
+                        disabled={removeMutation.isPending}
+                        onClick={() => setRemoveConfirm(entry)}
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Paginator */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-[var(--color-cards-card-stroke)]">
+                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+                  Page {page + 1} of {totalPages} &mdash; {total.toLocaleString()} total
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    icon={<ChevronLeft size={12} />}
+                    disabled={page === 0}
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  >
+                    Prev
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    icon={<ChevronRight size={12} />}
+                    disabled={page >= totalPages - 1}
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </TableCard>
+
+      {removeConfirm && (
+        <ConfirmDialog
+          title={`Remove blacklist entry for "${removeConfirm.sourceId}"?`}
+          variant="danger"
+          icon={<Ban size={16} />}
+          confirmLabel="Remove"
+          isPending={removeMutation.isPending}
+          onConfirm={() => {
+            removeMutation.mutate({ sourceType: removeConfirm.sourceType, sourceId: removeConfirm.sourceId })
+            setRemoveConfirm(null)
+          }}
+          onCancel={() => setRemoveConfirm(null)}
+        >
+          This will allow the source to be re-evaluated by the quality filter on the next indexing
+          run. It will be re-blacklisted if it still fails the quality check.
+        </ConfirmDialog>
+      )}
+    </>
+  )
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────────
+
+type KnowledgeTab = 'configuration' | 'blacklist'
 
 export default function KnowledgeIndexPage() {
   const qc = useQueryClient()
+  const [activeTab, setActiveTab] = useState<KnowledgeTab>('configuration')
   const [triggering, setTriggering] = useState<string | null>(null)
   const [toast, setToast] = useState<ToastConfig | null>(null)
   const dismissToast = useCallback(() => setToast(null), [])
@@ -1167,24 +1339,52 @@ export default function KnowledgeIndexPage() {
         subtitle="Manage and explore the knowledge base. Trigger Jira and Confluence indexing, monitor index stats, and run semantic searches."
       />
 
-      <StatsSection
-        stats={stats}
-        isLoading={statsLoading}
-        onRefresh={() => refetchStats()}
-        isRefreshing={statsRefreshing && !statsLoading}
-      />
+      {/* Tab bar */}
+      <div className="flex gap-1 mb-4 border-b border-[var(--color-cards-card-stroke)]">
+        {(
+          [
+            { id: 'configuration', label: 'Configuration' },
+            { id: 'blacklist', label: 'Blacklisted Content' },
+          ] as { id: KnowledgeTab; label: string }[]
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+              activeTab === tab.id
+                ? 'border-[var(--color-buttons-button-primary)] text-[var(--color-fonts-font-color-headings)]'
+                : 'border-transparent text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:border-[var(--color-cards-card-stroke)]'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <IndexManagementSection
-        onTrigger={handleTrigger}
-        triggering={triggering}
-        addToast={addToast}
-      />
+      {activeTab === 'configuration' && (
+        <>
+          <StatsSection
+            stats={stats}
+            isLoading={statsLoading}
+            onRefresh={() => refetchStats()}
+            isRefreshing={statsRefreshing && !statsLoading}
+          />
 
-      <WebDocSourcesSection addToast={addToast} />
+          <IndexManagementSection
+            onTrigger={handleTrigger}
+            triggering={triggering}
+            addToast={addToast}
+          />
 
-      <StaticFilesSection addToast={addToast} />
+          <WebDocSourcesSection addToast={addToast} />
 
-      <SemanticSearchSection />
+          <StaticFilesSection addToast={addToast} />
+
+          <SemanticSearchSection />
+        </>
+      )}
+
+      {activeTab === 'blacklist' && <BlacklistedContentTab addToast={addToast} />}
 
       {toast && <Toast {...toast} onClose={dismissToast} />}
     </main>
