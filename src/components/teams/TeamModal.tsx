@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { TabBar, TabButton } from '@/components/ui/Tabs'
 import api from '@/lib/api'
-import type { Team, TeamMemberEntry, TeamRole } from '@/types/api'
+import type { Team, TeamRole } from '@/types/api'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

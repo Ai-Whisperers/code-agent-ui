@@ -96,7 +96,7 @@ const SUPPORTED_TYPES = Object.keys(JOB_TYPE_CONFIG) as JobType[]
 export default function NewJob() {
   const navigate = useNavigate()
   const searchParams = new URLSearchParams(window.location.search)
-  const initialType = SUPPORTED_TYPES.includes(searchParams.get('type') ?? '') ? (searchParams.get('type') as string) : SUPPORTED_TYPES[0]
+  const initialType = SUPPORTED_TYPES.includes(searchParams.get('type') as JobType) ? (searchParams.get('type') as JobType) : SUPPORTED_TYPES[0]
   const initialPrompt = searchParams.get('prompt') ?? ''
 
   const [jobType, setJobType] = useState<string>(initialType)
