@@ -42,8 +42,8 @@ const BAR_OPTIONS = {
     legend: { position: 'top' as const, labels: { boxWidth: 12, font: { size: 11 } } },
     tooltip: {
       callbacks: {
-        label: (ctx: { dataset: { label?: string }; parsed: { x: number } }) =>
-          ` ${ctx.dataset.label}: ${ctx.parsed.x.toFixed(1)} hrs`,
+        label: (ctx: { dataset: { label?: string }; parsed: { x: number | null } }) =>
+          ` ${ctx.dataset.label}: ${(ctx.parsed.x ?? 0).toFixed(1)} hrs`,
       },
     },
   },

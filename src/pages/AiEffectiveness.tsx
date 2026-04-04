@@ -169,7 +169,7 @@ export default function AiEffectivenessPage() {
       legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (ctx: { parsed: { y: number } }) => ` ${ctx.parsed.y.toFixed(1)}%`,
+          label: (ctx: { parsed: { y: number | null } }) => ` ${(ctx.parsed.y ?? 0).toFixed(1)}%`,
         },
       },
     },
