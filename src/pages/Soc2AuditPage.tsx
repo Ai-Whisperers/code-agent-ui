@@ -22,7 +22,8 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import { SlaBadge } from '@/components/ui/SlaBadge'
 import api from '@/lib/api'
-import type { Soc2AuditResponse, Soc2JobSummary } from '@/types/api'
+import { IssueTable } from '@/components/security/IssueTable'
+import type { Soc2AuditResponse, Soc2JobSummary, SecurityIssuesResponse } from '@/types/api'
 
 // ── Stat card ─────────────────────────────────────────────────────────────────
 
@@ -232,30 +233,51 @@ const REVIEW_OPTIONS = [
   { value: 'COMPLETE',    label: 'Reviewed' },
 ]
 
+const PRIORITY_OPTIONS = [
+  { value: 'Critical', label: 'Critical' },
+  { value: 'High',     label: 'High' },
+  { value: 'Medium',   label: 'Medium' },
+  { value: 'Low',      label: 'Low' },
+]
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Soc2AuditPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [slaFilter, setSlaFilter] = useState('')
   const [reviewFilter, setReviewFilter] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState('')
   const [page, setPage] = useState(0)
   const limit = 50
 
   const params = new URLSearchParams({ limit: String(limit), page: String(page) })
-  if (statusFilter) params.set('status', statusFilter)
-  if (slaFilter)    params.set('slaStatus', slaFilter)
-  if (reviewFilter) params.set('reviewStatus', reviewFilter)
+  if (statusFilter)   params.set('status', statusFilter)
+  if (slaFilter)      params.set('slaStatus', slaFilter)
+  if (reviewFilter)   params.set('reviewStatus', reviewFilter)
+  if (priorityFilter) params.set('priority', priorityFilter)
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<Soc2AuditResponse>({
-    queryKey: ['soc2-audit', statusFilter, slaFilter, reviewFilter, page],
+    queryKey: ['soc2-audit', statusFilter, slaFilter, reviewFilter, priorityFilter, page],
     queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`).then(r => r.data),
+  })
+
+  const { data: secData, isLoading: secLoading } = useQuery<SecurityIssuesResponse>({
+    queryKey: ['security-issues'],
+    queryFn: () => api.get<SecurityIssuesResponse>('/security/issues').then(r => r.data),
+    refetchInterval: 60_000,
   })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
-  // Summary KPIs
+  const allSecurityIssues = (secData?.items ?? []).flatMap(p => p.repos.flatMap(r => r.issues))
+  const aikidoHighIssues  = allSecurityIssues.filter(i =>
+    i.severity.toLowerCase() === 'high' || i.severity.toLowerCase() === 'critical'
+  )
+
+  // Summary KPIs — computed from the full result set total counts via server, but
+  // for the KPI cards we use the current page items as a quick approximation.
   const overdue   = items.filter(j => j.slaStatus === 'OVERDUE').length
   const atRisk    = items.filter(j => j.slaStatus === 'AT_RISK').length
   const noReview  = items.filter(j => j.reviewStatus === 'NONE').length
@@ -281,7 +303,7 @@ export default function Soc2AuditPage() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <StatCard
           label="Overdue SLA"
           value={overdue}
@@ -314,6 +336,14 @@ export default function Soc2AuditPage() {
           accentColor={noScytale > 0 ? '#f97316' : undefined}
           tooltip="Successful jobs whose evidence has not yet been uploaded to Scytale."
         />
+        <StatCard
+          label="Aikido High+"
+          value={secLoading ? '—' : aikidoHighIssues.length}
+          icon={<ShieldCheck size={15} />}
+          accent={aikidoHighIssues.length > 0 ? 'text-red-500' : undefined}
+          accentColor={aikidoHighIssues.length > 0 ? '#ef4444' : undefined}
+          tooltip="Open Critical and High severity Aikido vulnerabilities requiring SOC II remediation."
+        />
       </div>
 
       {/* Filters */}
@@ -336,11 +366,17 @@ export default function Soc2AuditPage() {
           options={REVIEW_OPTIONS}
           placeholder="All Review Statuses"
         />
-        {(statusFilter || slaFilter || reviewFilter) && (
+        <FilterSelect
+          value={priorityFilter}
+          onChange={(v) => { setPriorityFilter(v); setPage(0) }}
+          options={PRIORITY_OPTIONS}
+          placeholder="All Priorities"
+        />
+        {(statusFilter || slaFilter || reviewFilter || priorityFilter) && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setStatusFilter(''); setSlaFilter(''); setReviewFilter(''); setPage(0) }}
+            onClick={() => { setStatusFilter(''); setSlaFilter(''); setReviewFilter(''); setPriorityFilter(''); setPage(0) }}
           >
             Clear filters
           </Button>
@@ -422,6 +458,31 @@ export default function Soc2AuditPage() {
           </Button>
         </div>
       )}
+
+      {/* Aikido High / Critical Issues */}
+      <TableCard
+        title="Aikido High & Critical Issues"
+        subtitle={
+          secLoading
+            ? 'Loading…'
+            : `${aikidoHighIssues.length} open issue${aikidoHighIssues.length !== 1 ? 's' : ''}`
+        }
+      >
+        {secLoading ? (
+          <div className="flex flex-col gap-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-8 skeleton-shimmer rounded" />
+            ))}
+          </div>
+        ) : aikidoHighIssues.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-fonts-font-color-support)]">
+            <ShieldCheck size={28} className="opacity-40" />
+            <p className="text-sm">No open High or Critical Aikido issues.</p>
+          </div>
+        ) : (
+          <IssueTable issues={aikidoHighIssues} />
+        )}
+      </TableCard>
     </main>
   )
 }
