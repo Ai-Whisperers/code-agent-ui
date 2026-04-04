@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, RefreshCw, Shield, XCircle, Clock, HelpCircle } from 'lucide-react'
+import { AlertTriangle, RefreshCw, Shield, XCircle, Clock, HelpCircle, Code2, Container } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { FilterSelect } from '@/components/ui/FilterSelect'
@@ -21,6 +21,13 @@ const SLA_OPTIONS = [
   { value: 'AT_RISK',  label: 'At Risk' },
   { value: 'OVERDUE',  label: 'Overdue' },
 ]
+
+const TYPE_OPTIONS = [
+  { value: 'software',  label: 'Software' },
+  { value: 'container', label: 'Container' },
+]
+
+const CONTAINER_ISSUE_TYPES = new Set(['container', 'container_security'])
 
 function StatCard({
   label,
@@ -62,6 +69,7 @@ export default function SecurityIssuesPage() {
   const queryClient = useQueryClient()
   const [severityFilter, setSeverityFilter] = useState('')
   const [slaFilter, setSlaFilter] = useState('')
+  const [typeFilter, setTypeFilter] = useState('')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const { data, isLoading, isError, isFetching } = useQuery<SecurityIssuesResponse>({
@@ -72,11 +80,13 @@ export default function SecurityIssuesPage() {
 
   const products = data?.items ?? []
 
-  const allIssues = products.flatMap((p) => p.repos.flatMap((r) => r.issues))
-  const totalCriticals = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + r.criticalCount, 0), 0)
-  const totalHighs     = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + r.highCount, 0), 0)
-  const overdueSla     = allIssues.filter((i) => i.slaStatus === 'OVERDUE').length
-  const noFixJob       = allIssues.filter((i) => !i.linkedJobId).length
+  const allIssues       = products.flatMap((p) => p.repos.flatMap((r) => r.issues))
+  const swCriticals     = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + (r.softwareCriticalCount ?? 0), 0), 0)
+  const swHighs         = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + (r.softwareHighCount ?? 0), 0), 0)
+  const ctnCriticals    = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + (r.containerCriticalCount ?? 0), 0), 0)
+  const ctnHighs        = products.reduce((s, p) => s + p.repos.reduce((rs, r) => rs + (r.containerHighCount ?? 0), 0), 0)
+  const overdueSla      = allIssues.filter((i) => i.slaStatus === 'OVERDUE').length
+  const noFixJob        = allIssues.filter((i) => !i.linkedJobId).length
 
   async function handleRefresh() {
     setIsRefreshing(true)
@@ -88,7 +98,7 @@ export default function SecurityIssuesPage() {
     }
   }
 
-  const hasFilters = severityFilter || slaFilter
+  const hasFilters = severityFilter || slaFilter || typeFilter
 
   return (
     <main className="flex flex-col gap-6 p-6">
@@ -120,22 +130,38 @@ export default function SecurityIssuesPage() {
       />
 
       {/* KPI strip — matches Dashboard StatCard style */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard
-          label="Criticals"
-          value={isLoading ? '—' : totalCriticals}
-          icon={<XCircle size={15} />}
+          label="SW Criticals"
+          value={isLoading ? '—' : swCriticals}
+          icon={<Code2 size={15} />}
           accent="text-red-500"
           accentColor="#ef4444"
-          tooltip="Open critical vulnerabilities across all products. SLA: fix within 7 days."
+          tooltip="Critical software vulnerabilities (SCA, SAST, dependency). SLA: fix within 7 days."
         />
         <StatCard
-          label="Highs"
-          value={isLoading ? '—' : totalHighs}
-          icon={<AlertTriangle size={15} />}
+          label="Container Criticals"
+          value={isLoading ? '—' : ctnCriticals}
+          icon={<Container size={15} />}
+          accent={ctnCriticals > 0 ? 'text-red-500' : 'text-[var(--color-icons-icon)]'}
+          accentColor={ctnCriticals > 0 ? '#ef4444' : undefined}
+          tooltip="Critical container image vulnerabilities. Requires base-image rebuild or OS package update."
+        />
+        <StatCard
+          label="SW Highs"
+          value={isLoading ? '—' : swHighs}
+          icon={<Code2 size={15} />}
           accent="text-orange-500"
           accentColor="#f97316"
-          tooltip="Open high-severity vulnerabilities across all products. SLA: fix within 30 days."
+          tooltip="High-severity software vulnerabilities (SCA, SAST, dependency). SLA: fix within 30 days."
+        />
+        <StatCard
+          label="Container Highs"
+          value={isLoading ? '—' : ctnHighs}
+          icon={<Container size={15} />}
+          accent={ctnHighs > 0 ? 'text-orange-500' : 'text-[var(--color-icons-icon)]'}
+          accentColor={ctnHighs > 0 ? '#f97316' : undefined}
+          tooltip="High-severity container image vulnerabilities. Requires base-image rebuild or OS package update."
         />
         <StatCard
           label="Overdue SLA"
@@ -158,6 +184,12 @@ export default function SecurityIssuesPage() {
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <FilterSelect
+          value={typeFilter}
+          onChange={setTypeFilter}
+          options={TYPE_OPTIONS}
+          placeholder="All Types"
+        />
+        <FilterSelect
           value={severityFilter}
           onChange={setSeverityFilter}
           options={SEVERITY_OPTIONS}
@@ -173,7 +205,7 @@ export default function SecurityIssuesPage() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setSeverityFilter(''); setSlaFilter('') }}
+            onClick={() => { setSeverityFilter(''); setSlaFilter(''); setTypeFilter('') }}
           >
             Clear filters
           </Button>
@@ -212,6 +244,7 @@ export default function SecurityIssuesPage() {
               product={product}
               severityFilter={severityFilter}
               slaFilter={slaFilter}
+              typeFilter={typeFilter}
             />
           ))}
         </div>

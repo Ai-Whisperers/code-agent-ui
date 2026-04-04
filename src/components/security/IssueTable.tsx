@@ -1,9 +1,11 @@
-import { useNavigate } from '@tanstack/react-router'
+import { useState } from 'react'
 import { SlaBadge } from '@/components/ui/SlaBadge'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { CreateFixButton } from '@/components/security/CreateFixButton'
+import { AikidoIssueDetailDialog } from '@/components/security/AikidoIssueDetailDialog'
 import type { SecurityIssueRow, SecuritySlaStatus } from '@/types/api'
+import { useNavigate } from '@tanstack/react-router'
 
 const ISSUE_TYPE_LABELS: Record<string, string> = {
   open_source: 'Open Source',
@@ -66,11 +68,22 @@ function SeverityBadge({ severity }: { severity: string }) {
   )
 }
 
-function IssueRow({ issue, isEven }: { issue: SecurityIssueRow; isEven: boolean }) {
+function IssueRow({
+  issue,
+  isEven,
+  onOpenDetail,
+}: {
+  issue: SecurityIssueRow
+  isEven: boolean
+  onOpenDetail: (issue: SecurityIssueRow) => void
+}) {
   const navigate = useNavigate()
 
   return (
-    <tr className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${isEven ? 'bg-[var(--color-tables-table-row-a)]' : ''}`}>
+    <tr
+      className={`border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors ${isEven ? 'bg-[var(--color-tables-table-row-a)]' : ''}`}
+      onClick={() => onOpenDetail(issue)}
+    >
       {/* Severity */}
       <td className="px-3 py-2 whitespace-nowrap">
         <SeverityBadge severity={issue.severity} />
@@ -124,7 +137,10 @@ function IssueRow({ issue, isEven }: { issue: SecurityIssueRow; isEven: boolean 
       </td>
 
       {/* Job */}
-      <td className="px-3 py-2 whitespace-nowrap">
+      <td
+        className="px-3 py-2 whitespace-nowrap"
+        onClick={(e) => e.stopPropagation()}
+      >
         {issue.linkedJobId ? (
           <Tooltip text={`Job: ${issue.linkedJobId.slice(0, 8)}…`}>
             <button
@@ -143,36 +159,52 @@ function IssueRow({ issue, isEven }: { issue: SecurityIssueRow; isEven: boolean 
 }
 
 export function IssueTable({ issues }: { issues: SecurityIssueRow[] }) {
+  const [selected, setSelected] = useState<SecurityIssueRow | null>(null)
+
   if (issues.length === 0) return null
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm table-fixed">
-        <colgroup>
-          <col className="w-[90px]" />
-          <col className="w-[100px]" />
-          <col />
-          <col className="w-[110px]" />
-          <col className="w-[120px]" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-[var(--color-tables-table-cell-stroke)] bg-[var(--color-tables-table-header)]">
-            {['Severity', 'Type', 'Vulnerability', 'SLA', 'Job'].map((h) => (
-              <th
-                key={h}
-                className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide"
-              >
-                {h}
-              </th>
+    <>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm table-fixed">
+          <colgroup>
+            <col className="w-[90px]" />
+            <col className="w-[100px]" />
+            <col />
+            <col className="w-[110px]" />
+            <col className="w-[120px]" />
+          </colgroup>
+          <thead>
+            <tr className="border-b border-[var(--color-tables-table-cell-stroke)] bg-[var(--color-tables-table-header)]">
+              {['Severity', 'Type', 'Vulnerability', 'SLA', 'Job'].map((h) => (
+                <th
+                  key={h}
+                  className="px-3 py-2 text-left text-[11px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide"
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {issues.map((issue, i) => (
+              <IssueRow
+                key={issue.issueGroupId}
+                issue={issue}
+                isEven={i % 2 === 0}
+                onOpenDetail={setSelected}
+              />
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {issues.map((issue, i) => (
-            <IssueRow key={issue.issueGroupId} issue={issue} isEven={i % 2 === 0} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+
+      {selected && (
+        <AikidoIssueDetailDialog
+          issue={selected}
+          onClose={() => setSelected(null)}
+        />
+      )}
+    </>
   )
 }

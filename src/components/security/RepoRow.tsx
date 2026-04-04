@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, FolderGit2, Container } from 'lucide-react'
+import { ChevronDown, FolderGit2, Container, Code2 } from 'lucide-react'
 import { IssueTable } from '@/components/security/IssueTable'
 import { CreateFixAllButton } from '@/components/security/CreateFixAllButton'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -10,20 +10,32 @@ interface RepoRowProps {
   defaultOpen?: boolean
 }
 
-function CountPill({ count, variant }: { count: number; variant: 'critical' | 'high' }) {
+function CountPill({
+  count,
+  variant,
+  kind,
+}: {
+  count: number
+  variant: 'critical' | 'high'
+  kind: 'software' | 'container'
+}) {
   if (count === 0) return null
   const cls =
     variant === 'critical'
       ? 'bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]'
       : 'bg-[var(--color-tags-warning-background)] text-[var(--color-tags-font-warning)]'
+  const label = variant === 'critical' ? 'C' : 'H'
+  const kindLabel = kind === 'container' ? ' (container)' : ' (software)'
   const tip =
     variant === 'critical'
-      ? `${count} critical vulnerabilit${count !== 1 ? 'ies' : 'y'} — fix within 7 days`
-      : `${count} high vulnerabilit${count !== 1 ? 'ies' : 'y'} — fix within 30 days`
+      ? `${count} critical${kindLabel} vulnerabilit${count !== 1 ? 'ies' : 'y'} — fix within 7 days`
+      : `${count} high${kindLabel} vulnerabilit${count !== 1 ? 'ies' : 'y'} — fix within 30 days`
+  const Icon = kind === 'container' ? Container : Code2
   return (
     <Tooltip text={tip}>
-      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-bold cursor-default ${cls}`}>
-        {count} {variant === 'critical' ? 'C' : 'H'}
+      <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-bold cursor-default ${cls}`}>
+        <Icon size={9} />
+        {count}{label}
       </span>
     </Tooltip>
   )
@@ -35,8 +47,10 @@ export function RepoRow({ repo, defaultOpen = false }: RepoRowProps) {
   const hasIssues = repo.issues.length > 0
 
   const accentColor =
-    repo.criticalCount > 0 ? '#dc2626' :
-    repo.highCount > 0     ? '#f97316' :
+    repo.softwareCriticalCount > 0 ? '#dc2626' :
+    repo.containerCriticalCount > 0 ? '#dc2626' :
+    repo.softwareHighCount > 0     ? '#f97316' :
+    repo.containerHighCount > 0    ? '#f97316' :
     'var(--color-cards-card-stroke)'
 
   return (
@@ -57,8 +71,10 @@ export function RepoRow({ repo, defaultOpen = false }: RepoRowProps) {
           </span>
         </button>
         <div className="flex items-center gap-1.5 shrink-0">
-          <CountPill count={repo.criticalCount} variant="critical" />
-          <CountPill count={repo.highCount} variant="high" />
+          <CountPill count={repo.softwareCriticalCount} variant="critical" kind="software" />
+          <CountPill count={repo.containerCriticalCount} variant="critical" kind="container" />
+          <CountPill count={repo.softwareHighCount} variant="high" kind="software" />
+          <CountPill count={repo.containerHighCount} variant="high" kind="container" />
           {repo.issues.length > 0 && (
             <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">
               {repo.issues.length} issue{repo.issues.length !== 1 ? 's' : ''}

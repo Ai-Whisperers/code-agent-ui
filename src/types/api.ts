@@ -197,7 +197,9 @@ export interface SecurityIssueRow {
   issueGroupId: number
   issueType: string
   title?: string
+  description?: string
   severity: string
+  severityScore?: number
   packageName?: string
   currentVersion?: string
   fixedVersion?: string
@@ -211,6 +213,14 @@ export interface SecurityIssueRow {
   slaStatus: SecuritySlaStatus
   linkedJobId?: string
   linkedJobStatus?: string
+  howToFix?: string
+  relatedCveIds?: string[]
+  groupStatus?: string
+  timeToFixMinutes?: number
+  /** ISO-8601 timestamp: when Aikido first detected this vulnerability. */
+  discoveredAt?: string
+  /** ISO-8601 timestamp: Aikido's own remediation deadline (sla_remediate_by). */
+  aikidoDueDate?: string
 }
 
 export interface RepoSecuritySummary {
@@ -218,6 +228,10 @@ export interface RepoSecuritySummary {
   containers: string[]
   criticalCount: number
   highCount: number
+  softwareCriticalCount: number
+  softwareHighCount: number
+  containerCriticalCount: number
+  containerHighCount: number
   issues: SecurityIssueRow[]
 }
 

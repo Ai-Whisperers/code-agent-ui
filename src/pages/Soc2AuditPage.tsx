@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   RefreshCw,
@@ -243,11 +243,13 @@ const PRIORITY_OPTIONS = [
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Soc2AuditPage() {
+  const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
   const [slaFilter, setSlaFilter] = useState('')
   const [reviewFilter, setReviewFilter] = useState('')
   const [priorityFilter, setPriorityFilter] = useState('')
   const [page, setPage] = useState(0)
+  const [secRefreshing, setSecRefreshing] = useState(false)
   const limit = 50
 
   const params = new URLSearchParams({ limit: String(limit), page: String(page) })
@@ -261,20 +263,34 @@ export default function Soc2AuditPage() {
     queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`).then(r => r.data),
   })
 
-  const { data: secData, isLoading: secLoading } = useQuery<SecurityIssuesResponse>({
+  const { data: secData, isLoading: secLoading, isError: secError } = useQuery<SecurityIssuesResponse>({
     queryKey: ['security-issues'],
     queryFn: () => api.get<SecurityIssuesResponse>('/security/issues').then(r => r.data),
     refetchInterval: 60_000,
+    retry: 1,
   })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
+  async function handleSecRefresh() {
+    setSecRefreshing(true)
+    try {
+      await api.get('/security/issues?refresh=true')
+      await queryClient.invalidateQueries({ queryKey: ['security-issues'] })
+    } finally {
+      setSecRefreshing(false)
+    }
+  }
+
   const allSecurityIssues = (secData?.items ?? []).flatMap(p => p.repos.flatMap(r => r.issues))
-  const aikidoHighIssues  = allSecurityIssues.filter(i =>
-    i.severity.toLowerCase() === 'high' || i.severity.toLowerCase() === 'critical'
-  )
+  const aikidoHighIssues  = allSecurityIssues
+    .filter(i => {
+      const sev = (i.severity ?? '').toLowerCase()
+      return sev === 'high' || sev === 'critical'
+    })
+    .sort((a, b) => (b.severityScore ?? 0) - (a.severityScore ?? 0))
 
   // Summary KPIs — computed from the full result set total counts via server, but
   // for the KPI cards we use the current page items as a quick approximation.
@@ -465,7 +481,22 @@ export default function Soc2AuditPage() {
         subtitle={
           secLoading
             ? 'Loading…'
-            : `${aikidoHighIssues.length} open issue${aikidoHighIssues.length !== 1 ? 's' : ''}`
+            : secError
+              ? 'Error'
+              : `${aikidoHighIssues.length} open issue${aikidoHighIssues.length !== 1 ? 's' : ''}`
+        }
+        toolbar={
+          <Tooltip text="Force refresh from Aikido">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<RefreshCw size={13} className={(secLoading || secRefreshing) ? 'animate-spin' : ''} />}
+              onClick={handleSecRefresh}
+              disabled={secRefreshing || secLoading}
+            >
+              Refresh
+            </Button>
+          </Tooltip>
         }
       >
         {secLoading ? (
@@ -473,6 +504,12 @@ export default function Soc2AuditPage() {
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="h-8 skeleton-shimmer rounded" />
             ))}
+          </div>
+        ) : secError ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-fonts-font-color-support)]">
+            <XCircle size={28} className="opacity-40 text-red-400" />
+            <p className="text-sm">Failed to load Aikido issues.</p>
+            <p className="text-[11px]">Check that the Aikido integration is configured and you have the required role.</p>
           </div>
         ) : aikidoHighIssues.length === 0 ? (
           <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-fonts-font-color-support)]">
