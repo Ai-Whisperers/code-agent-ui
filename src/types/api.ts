@@ -1273,3 +1273,96 @@ export interface TechDebtFileRow {
   debtScore: number
   lastCommitAt: string | null
 }
+
+// ---- PR Cycle Time ----
+
+export interface PrCycleTimeRow {
+  groupKey: string
+  totalPrs: number
+  avgOpenToReviewHrs: number | null
+  p50OpenToReviewHrs: number | null
+  p95OpenToReviewHrs: number | null
+  avgOpenToMergeHrs: number | null
+  p50OpenToMergeHrs: number | null
+  p95OpenToMergeHrs: number | null
+}
+
+export interface PrCycleTimeTrendPoint {
+  week: string
+  avgOpenToReviewHrs: number | null
+  prCount: number
+}
+
+export interface PrCycleTimeReport {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  groupBy: string
+  rows: PrCycleTimeRow[]
+}
+
+export interface PrCycleTimeTrend {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  trend: PrCycleTimeTrendPoint[]
+}
+
+// ---- AI Acceptance Rate ----
+
+export interface AiAcceptanceBreakdownRow {
+  groupKey: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+  rejectionRate: number
+  ignoredRate: number
+}
+
+export interface AiAcceptanceReport {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  groupBy: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+  rejectionRate: number
+  ignoredRate: number
+  breakdown: AiAcceptanceBreakdownRow[]
+}
+
+export interface AiAcceptanceTrendPoint {
+  week: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+}
+
+export interface AiAcceptanceTrend {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  trend: AiAcceptanceTrendPoint[]
+}
+
+// ---- Coverage Trend ----
+
+export interface CoverageTrendPoint {
+  repoSlug: string
+  week: string
+  avgLineRate: number | null
+}
+
+export interface CoverageTrendResponse {
+  workspace: string
+  branch: string
+  periodDays: number
+  trend: CoverageTrendPoint[]
+}

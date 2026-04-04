@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useCallback } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -256,6 +257,16 @@ export default function AiStatsPage() {
   return (
     <main>
       <PageHeader title="AI Stats" subtitle="Track AI API usage and costs." />
+
+      {/* Cross-link to AI Effectiveness */}
+      <div className="flex justify-end mb-4">
+        <Link
+          to="/metrics/ai-effectiveness"
+          className="text-xs text-[var(--color-fonts-font-color-brand)] hover:underline"
+        >
+          View AI Effectiveness (acceptance rate) →
+        </Link>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

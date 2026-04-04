@@ -28,6 +28,8 @@ import {
   Network,
   GitCommit,
   ScanSearch,
+  Timer,
+  TrendingUp,
 } from 'lucide-react'
 import type { Permission } from '@/lib/permissions'
 
@@ -216,7 +218,7 @@ export function ApplicationMenuItems(
       label: 'Metrics',
       type: 'parent',
       icon: <BarChart3 size={18} />,
-      isActive: currentPath.startsWith('/metrics') && !currentPath.startsWith('/metrics/scope') || currentPath.startsWith('/stats'),
+      isActive: (currentPath.startsWith('/metrics') && !currentPath.startsWith('/metrics/scope')) || currentPath.startsWith('/stats'),
       children: [
         {
           id: 'quality-reports',
@@ -253,6 +255,33 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/metrics/knowledge-graph',
           type: 'item',
           onClick: () => go('/metrics/knowledge-graph'),
+        },
+        {
+          id: 'pr-cycle-time',
+          label: 'PR Cycle Time',
+          icon: <Timer size={16} />,
+          path: '/metrics/pr-cycle-time',
+          isActive: currentPath === '/metrics/pr-cycle-time',
+          type: 'item',
+          onClick: () => go('/metrics/pr-cycle-time'),
+        },
+        {
+          id: 'ai-effectiveness',
+          label: 'AI Effectiveness',
+          icon: <BotMessageSquare size={16} />,
+          path: '/metrics/ai-effectiveness',
+          isActive: currentPath === '/metrics/ai-effectiveness',
+          type: 'item',
+          onClick: () => go('/metrics/ai-effectiveness'),
+        },
+        {
+          id: 'coverage-trend',
+          label: 'Coverage Trend',
+          icon: <TrendingUp size={16} />,
+          path: '/metrics/coverage-trend',
+          isActive: currentPath === '/metrics/coverage-trend',
+          type: 'item',
+          onClick: () => go('/metrics/coverage-trend'),
         },
         {
           id: 'ai-stats',

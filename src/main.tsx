@@ -53,6 +53,9 @@ import Unauthenticated from '@/pages/Unauthenticated'
 import IntegrationSettingsPage from '@/pages/IntegrationSettings'
 import ArchitecturePage from '@/pages/Architecture'
 import LogAnalysisPage from '@/pages/LogAnalysis'
+import PrCycleTimePage from '@/pages/PrCycleTime'
+import AiEffectivenessPage from '@/pages/AiEffectiveness'
+import CoverageTrendPage from '@/pages/CoverageTrend'
 
 import './styles/index.css'
 
@@ -389,6 +392,24 @@ const unauthenticatedRoute = createRoute({
   component: Unauthenticated,
 })
 
+const prCycleTimeRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/pr-cycle-time',
+  component: PrCycleTimePage,
+})
+
+const aiEffectivenessRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/ai-effectiveness',
+  component: AiEffectivenessPage,
+})
+
+const coverageTrendRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/coverage-trend',
+  component: CoverageTrendPage,
+})
+
 const routeTree = rootRoute.addChildren([
   layoutRoute.addChildren([
     indexRoute,
@@ -408,6 +429,9 @@ const routeTree = rootRoute.addChildren([
     reviewMetricsRoute,
     developerScorecardRoute,
     knowledgeGraphRoute,
+    prCycleTimeRoute,
+    aiEffectivenessRoute,
+    coverageTrendRoute,
     aiStatsRoute,
     memoriesRoute,
     systemSettingsRoute,

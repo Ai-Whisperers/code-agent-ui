@@ -29,6 +29,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Select } from '@/components/ui/Select'
 import { Input } from '@/components/ui/Input'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
+import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import api from '@/lib/api'
 import type { CustomerConfig, IntegrationFilter, RepoSettings } from '@/types/api'
 
@@ -53,6 +54,9 @@ interface LogFinding {
   analysedAt?: string
   jiraKey?: string
   monitoringSince?: string
+  jobId?: string
+  jobStatus?: string
+  prUrl?: string
 }
 
 interface FindingsResponse {
@@ -312,14 +316,31 @@ const ISSUE_TYPE_OPTIONS = [
   { value: 'Story', label: 'Story' },
 ]
 
-const PRIORITY_OPTIONS = [
-  { value: '',        label: 'Default' },
-  { value: 'Highest', label: 'Highest' },
-  { value: 'High',    label: 'High' },
-  { value: 'Medium',  label: 'Medium' },
-  { value: 'Low',     label: 'Low' },
-  { value: 'Lowest',  label: 'Lowest' },
-]
+interface JiraPriority { id: string; name: string }
+
+/**
+ * Given a list of Jira priority names and a finding severity, pick the best match.
+ * Strategy (case-insensitive prefix scan):
+ *   high   → High > Critical > Blocker > first option
+ *   medium → Medium > first option
+ *   low    → Low > Lowest > last option
+ */
+function guessPriority(priorities: JiraPriority[], severity?: string): string {
+  if (!priorities.length) return ''
+  const names = priorities.map((p) => p.name.toLowerCase())
+  const find = (...candidates: string[]) => {
+    for (const c of candidates) {
+      const idx = names.findIndex((n) => n === c || n.startsWith(c))
+      if (idx !== -1) return priorities[idx].name
+    }
+    return null
+  }
+  const sev = (severity ?? '').toLowerCase()
+  if (sev === 'high')   return find('high', 'critical', 'blocker') ?? priorities[0].name
+  if (sev === 'medium') return find('medium') ?? priorities[Math.floor(priorities.length / 2)].name
+  if (sev === 'low')    return find('low', 'lowest') ?? priorities[priorities.length - 1].name
+  return ''
+}
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -350,6 +371,21 @@ function CreateJiraModal({
       api.get<IntegrationFilter[]>('/integration-filters?type=jira').then((r) => r.data).catch(() => []),
     staleTime: 5 * 60_000,
   })
+
+  const prioritiesQuery = useQuery<JiraPriority[]>({
+    queryKey: ['jira-priorities'],
+    queryFn: () =>
+      api.get<JiraPriority[]>('/jira/meta/priorities').then((r) => r.data).catch(() => []),
+    staleTime: 10 * 60_000,
+  })
+
+  // Auto-select priority once priorities are loaded
+  useEffect(() => {
+    if (prioritiesQuery.data && prioritiesQuery.data.length > 0 && !priority) {
+      const guess = guessPriority(prioritiesQuery.data, finding.severity)
+      if (guess) setPriority(guess)
+    }
+  }, [prioritiesQuery.data])
 
   const enabledProjects = (projectsQuery.data ?? []).filter((p) => p.enabled)
   const projectOptions = enabledProjects.map((p) => ({ value: p.key, label: `${p.key} — ${p.name}` }))
@@ -475,11 +511,20 @@ function CreateJiraModal({
             </div>
             <div className="flex-1">
               <FieldLabel>Priority</FieldLabel>
-              <Select
-                value={priority}
-                onChange={setPriority}
-                options={PRIORITY_OPTIONS}
-              />
+              {prioritiesQuery.isLoading ? (
+                <div className="flex items-center gap-2 text-xs text-[var(--color-fonts-font-color-support)]">
+                  <Loader2 size={12} className="animate-spin" /> Loading…
+                </div>
+              ) : (
+                <Select
+                  value={priority}
+                  onChange={setPriority}
+                  options={[
+                    { value: '', label: 'Default' },
+                    ...(prioritiesQuery.data ?? []).map((p) => ({ value: p.name, label: p.name })),
+                  ]}
+                />
+              )}
             </div>
           </div>
         </div>
@@ -536,12 +581,9 @@ function FindingRow({
   })
 
   const handleJiraSuccess = (jiraKey: string, jobId: string | null) => {
-    setFinding((prev) => ({ ...prev, jiraKey }))
+    setFinding((prev) => ({ ...prev, jiraKey, ...(jobId ? { jobId, jobStatus: 'PENDING' } : {}) }))
     setShowJiraModal(false)
     queryClient.invalidateQueries({ queryKey: ['log-analysis-findings'] })
-    if (jobId) {
-      navigate({ to: '/jobs/$id', params: { id: jobId } })
-    }
   }
 
   return (
@@ -582,6 +624,50 @@ function FindingRow({
           <Tooltip text={new Date(finding.firstSeenAt).toLocaleString()}>
             <span>{timeSince(finding.firstSeenAt)}</span>
           </Tooltip>
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          {finding.jiraKey ? (
+            <a
+              href={`https://jira.atlassian.net/browse/${finding.jiraKey}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-medium"
+              style={{ color: 'var(--color-buttons-button-primary)' }}
+            >
+              <ExternalLink size={11} />
+              {finding.jiraKey}
+            </a>
+          ) : (
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          {finding.jobId ? (
+            <button
+              className="flex items-center gap-1.5 text-xs hover:opacity-80 transition-opacity"
+              onClick={() => navigate({ to: '/jobs/$id', params: { id: finding.jobId! } })}
+            >
+              <JobStatusBadge status={finding.jobStatus ?? 'PENDING'} />
+            </button>
+          ) : (
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+          )}
+        </td>
+        <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+          {finding.prUrl ? (
+            <a
+              href={finding.prUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs font-medium"
+              style={{ color: 'var(--color-buttons-button-primary)' }}
+            >
+              <ExternalLink size={11} />
+              PR
+            </a>
+          ) : (
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+          )}
         </td>
         <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1">
@@ -624,7 +710,7 @@ function FindingRow({
 
       {expanded && (
         <tr className="border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-page-background)]">
-          <td colSpan={8} className="px-6 py-4">
+          <td colSpan={11} className="px-6 py-4">
             <div className="flex flex-col gap-4">
               {finding.aiReason && (
                 <div>
@@ -982,6 +1068,9 @@ export default function LogAnalysisPage() {
                   <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">Environment</th>
                   <th className="px-4 py-2 text-right text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">Occurrences</th>
                   <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">First Seen</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">Jira</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">Job</th>
+                  <th className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wider text-[var(--color-fonts-font-color-support)]">PR</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>

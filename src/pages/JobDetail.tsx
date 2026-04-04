@@ -334,7 +334,16 @@ export default function JobDetail({ jobId }: JobDetailProps) {
       {job.jiraKey && (
         <>
           <Separator />
-          <span className="font-mono text-[11px]">{job.jiraKey}</span>
+          <a
+            href={`https://jira.atlassian.net/browse/${job.jiraKey}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1 font-mono text-[11px] hover:opacity-80 transition-opacity"
+            style={{ color: 'var(--color-buttons-button-primary)' }}
+          >
+            <ExternalLink size={11} />
+            {job.jiraKey}
+          </a>
         </>
       )}
 
