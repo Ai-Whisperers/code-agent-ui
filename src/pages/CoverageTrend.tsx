@@ -15,6 +15,7 @@ import {
 import 'chartjs-adapter-date-fns'
 import { Line } from 'react-chartjs-2'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { RadioGroup } from '@/components/ui/RadioGroup'
 import api from '@/lib/api'
 import type { CoverageTrendResponse, CoverageTrendPoint, RepoSettings } from '@/types/api'
 
@@ -29,13 +30,16 @@ ChartJS.register(
 )
 
 const PERIOD_OPTIONS = [
-  { label: '30 days',  value: 30  },
-  { label: '90 days',  value: 90  },
-  { label: '180 days', value: 180 },
-  { label: '1 year',   value: 365 },
+  { label: '30 days',  value: '30'  },
+  { label: '90 days',  value: '90'  },
+  { label: '180 days', value: '180' },
+  { label: '1 year',   value: '365' },
 ]
 
-const BRANCH_OPTIONS = ['main', 'develop']
+const BRANCH_OPTIONS = [
+  { label: 'main',    value: 'main'    },
+  { label: 'develop', value: 'develop' },
+]
 
 // Deterministic colour palette for up to 12 repos
 const PALETTE = [
@@ -54,7 +58,7 @@ const PALETTE = [
 ]
 
 export default function CoverageTrendPage() {
-  const [days, setDays]       = useState(90)
+  const [days, setDays]       = useState('90')
   const [branch, setBranch]   = useState('main')
   const [threshold, setThreshold] = useState(80)
   const [hiddenRepos, setHiddenRepos] = useState<Set<string>>(new Set())
@@ -73,7 +77,7 @@ export default function CoverageTrendPage() {
     queryKey: ['coverage-trend', workspace, branch, days],
     queryFn: () =>
       api
-        .get(`/metrics/quality-reports/${workspace}/all/coverage-trend?branch=${branch}&days=${days}`)
+        .get(`/metrics/quality-reports/${workspace}/all/coverage-trend?branch=${branch}&days=${Number(days)}`)
         .then((r) => r.data),
     enabled: !!workspace,
   })
@@ -98,7 +102,7 @@ export default function CoverageTrendPage() {
     const pointsByWeek = new Map<string, number | null>()
     trendData?.trend
       ?.filter((pt: CoverageTrendPoint) => pt.repoSlug === slug)
-      .forEach((pt) => pointsByWeek.set(pt.week, pt.avgLineRate != null ? pt.avgLineRate * 100 : null))
+      .forEach((pt) => pointsByWeek.set(pt.week, pt.avgLineRate != null ? pt.avgLineRate : null))
 
     return {
       label: slug,
@@ -183,50 +187,29 @@ export default function CoverageTrendPage() {
       />
 
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-4 mb-4">
-        {/* Period */}
+      <div className="flex flex-wrap items-center gap-5 mb-4">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Period:</span>
-          <div className="flex gap-1">
-            {PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setDays(opt.value)}
-                className={`px-3 py-1 text-xs rounded-[var(--border-radius-button-small)] font-medium transition-colors ${
-                  days === opt.value
-                    ? 'bg-[var(--color-buttons-button-primary)] text-[var(--color-buttons-button-primary-text)]'
-                    : 'bg-[var(--color-cards-small-section-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
+          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Period</span>
+          <RadioGroup
+            variant="pills"
+            options={PERIOD_OPTIONS}
+            value={days}
+            onChange={setDays}
+          />
         </div>
 
-        {/* Branch */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Branch:</span>
-          <div className="flex gap-1">
-            {BRANCH_OPTIONS.map((b) => (
-              <button
-                key={b}
-                onClick={() => setBranch(b)}
-                className={`px-3 py-1 text-xs rounded-[var(--border-radius-button-small)] font-medium transition-colors ${
-                  branch === b
-                    ? 'bg-[var(--color-buttons-button-primary)] text-[var(--color-buttons-button-primary-text)]'
-                    : 'bg-[var(--color-cards-small-section-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
-                }`}
-              >
-                {b}
-              </button>
-            ))}
-          </div>
+          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Branch</span>
+          <RadioGroup
+            variant="pills"
+            options={BRANCH_OPTIONS}
+            value={branch}
+            onChange={setBranch}
+          />
         </div>
 
-        {/* Threshold */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Threshold:</span>
+          <span className="text-sm text-[var(--color-fonts-font-color-support)]">Threshold</span>
           <input
             type="number"
             min={0}
