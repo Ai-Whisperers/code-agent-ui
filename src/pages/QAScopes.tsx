@@ -18,6 +18,7 @@ interface ScopeFormValues {
   epicIssuetype: string
   featureIssuetype: string
   userstoryIssuetype: string
+  etrProjectKey: string
 }
 
 type ToastState = { message: string; variant: 'success' | 'error' }
@@ -104,6 +105,7 @@ function LabelPreviewTable({ labels, jiraBaseUrl }: { labels: string[]; jiraBase
 function QAScopeFormDialog({
   initial,
   defaultIssuetypes,
+  globalEtrKey,
   jiraBaseUrl,
   onSubmit,
   onClose,
@@ -111,16 +113,18 @@ function QAScopeFormDialog({
 }: {
   initial?: Partial<ScopeFormValues>
   defaultIssuetypes: { epic: string; feature: string; story: string }
+  globalEtrKey: string
   jiraBaseUrl: string
   onSubmit: (v: ScopeFormValues) => void
   onClose: () => void
   isPending: boolean
 }) {
-  const [name,    setName]    = useState(initial?.name  ?? '')
-  const [labels,  setLabels]  = useState<string[]>(initial?.labels ?? [])
-  const [epic,    setEpic]    = useState(initial?.epicIssuetype        ?? defaultIssuetypes.epic)
-  const [feature, setFeature] = useState(initial?.featureIssuetype     ?? defaultIssuetypes.feature)
-  const [story,   setStory]   = useState(initial?.userstoryIssuetype   ?? defaultIssuetypes.story)
+  const [name,         setName]         = useState(initial?.name  ?? '')
+  const [labels,       setLabels]       = useState<string[]>(initial?.labels ?? [])
+  const [epic,         setEpic]         = useState(initial?.epicIssuetype        ?? defaultIssuetypes.epic)
+  const [feature,      setFeature]      = useState(initial?.featureIssuetype     ?? defaultIssuetypes.feature)
+  const [story,        setStory]        = useState(initial?.userstoryIssuetype   ?? defaultIssuetypes.story)
+  const [etrProjectKey, setEtrProjectKey] = useState(initial?.etrProjectKey ?? '')
   const [showIssueTypes, setShowIssueTypes] = useState(false)
 
   const isEdit = Boolean(initial?.name)
@@ -160,6 +164,14 @@ function QAScopeFormDialog({
             <LabelPreviewTable labels={labels} jiraBaseUrl={jiraBaseUrl} />
           </div>
 
+          <Field
+            label="ETR Project Key"
+            value={etrProjectKey}
+            onChange={setEtrProjectKey}
+            placeholder={globalEtrKey || 'ETR'}
+            hint="Jira project key for importing existing test cases (e.g. ETR). Leave blank to use the global default."
+          />
+
           <div>
             <Tooltip text="Override the Jira issue type names used when syncing this scope">
               <button
@@ -196,7 +208,7 @@ function QAScopeFormDialog({
           <Tooltip text={isEdit ? 'Save changes to this QA scope' : 'Create QA scope and sync issues from Jira'}>
             <button
               disabled={!valid || isPending}
-              onClick={() => onSubmit({ name: name.trim(), labels, epicIssuetype: epic.trim(), featureIssuetype: feature.trim(), userstoryIssuetype: story.trim() })}
+              onClick={() => onSubmit({ name: name.trim(), labels, epicIssuetype: epic.trim(), featureIssuetype: feature.trim(), userstoryIssuetype: story.trim(), etrProjectKey: etrProjectKey.trim() })}
               className="flex items-center gap-2 px-4 py-2 text-sm rounded bg-[var(--color-buttons-button-primary)] text-white hover:bg-[var(--color-buttons-button-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isPending && <Loader2 size={14} className="animate-spin" />}
@@ -236,6 +248,7 @@ export default function QAScopesPage() {
     feature: settingMap['roadmap.jira.feature-issuetype']   ?? 'Story',
     story:   settingMap['roadmap.jira.userstory-issuetype'] ?? 'Sub-task',
   }
+  const globalEtrKey = settingMap['xray.test-project-key'] ?? ''
 
   const { data: mcpConfig } = useQuery<{ jira?: { baseUrl?: string } }>({
     queryKey: ['mcp-system-config'],
@@ -366,6 +379,7 @@ export default function QAScopesPage() {
       {showCreate && (
         <QAScopeFormDialog
           defaultIssuetypes={defaultIssuetypes}
+          globalEtrKey={globalEtrKey}
           jiraBaseUrl={jiraBaseUrl}
           onSubmit={(v) => createMutation.mutate(v)}
           onClose={() => setShowCreate(false)}
@@ -381,8 +395,10 @@ export default function QAScopesPage() {
             epicIssuetype:      editTarget.epicIssuetype,
             featureIssuetype:   editTarget.featureIssuetype,
             userstoryIssuetype: editTarget.userstoryIssuetype,
+            etrProjectKey:      (editTarget as any).etrProjectKey ?? '',
           }}
           defaultIssuetypes={defaultIssuetypes}
+          globalEtrKey={globalEtrKey}
           jiraBaseUrl={jiraBaseUrl}
           onSubmit={(v) => updateMutation.mutate({ id: editTarget.id, ...v })}
           onClose={() => setEditTarget(null)}

@@ -1,9 +1,9 @@
-import React from 'react'
-import { useQuery, useMutation } from '@tanstack/react-query'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, BookOpen, Target, GitBranch, ShieldAlert, FlaskConical,
   Network, BarChart3, LogIn, Flag, HelpCircle, CheckCircle2, AlertTriangle, Loader2,
-  TestTube2, ExternalLink,
+  TestTube2, ExternalLink, ChevronRight, Download, Check, X,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
@@ -12,11 +12,38 @@ import { IdPill } from '@/components/shared/IdPill'
 import { PriorityBadge } from '@/components/shared/PriorityBadge'
 import { RiskBadge } from '@/components/shared/RiskBadge'
 import api from '@/lib/api'
+import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type {
   QaTestPlanRecord, FeatureTestPlan,
   StoryBehaviour, Risk, ConditionGroup, StoryCoverage, RiskCoverage, Gap,
   Clarification, ReadinessItem, TraceRow,
 } from '@/types/api'
+
+const TERMINAL_JOB_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED']
+const jobStorageKey = (key: string) => `qa-testcase-job:${key}`
+
+// ── Jira link helper ──────────────────────────────────────────────────────────
+
+function JiraLink({ id, jiraBaseUrl }: { id: string; jiraBaseUrl: string }) {
+  if (!jiraBaseUrl || !id) return <IdPill id={id} />
+  return (
+    <a
+      href={`${jiraBaseUrl}/browse/${id}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-0.5 group/jira"
+    >
+      <IdPill
+        id={id}
+        className="group-hover/jira:border-blue-400 group-hover/jira:text-blue-600 group-hover/jira:bg-blue-50 dark:group-hover/jira:bg-blue-900/30 dark:group-hover/jira:text-blue-300 transition-colors duration-150"
+      />
+      <ExternalLink
+        size={9}
+        className="opacity-0 group-hover/jira:opacity-60 transition-opacity duration-150 text-blue-500 shrink-0 -mt-0.5"
+      />
+    </a>
+  )
+}
 
 // ── Local badge helpers ───────────────────────────────────────────────────────
 
@@ -110,7 +137,7 @@ function SubHeading({ children }: { children: React.ReactNode }) {
 
 // ── Section components ────────────────────────────────────────────────────────
 
-function ExecSummary({ s }: { s: FeatureTestPlan['section01_executiveSummary'] }) {
+function ExecSummary({ s, jiraBaseUrl }: { s: FeatureTestPlan['section01_executiveSummary']; jiraBaseUrl: string }) {
   const childStories = s.childStories ?? []
   return (
     <Section id="exec-summary" icon={BookOpen} title={s.title}>
@@ -152,7 +179,7 @@ function ExecSummary({ s }: { s: FeatureTestPlan['section01_executiveSummary'] }
                   <tbody>
                     {childStories.map((story) => (
                       <tr key={story.storyId} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                        <td className="px-3 py-2"><IdPill id={story.storyId} /></td>
+                        <td className="px-3 py-2"><JiraLink id={story.storyId} jiraBaseUrl={jiraBaseUrl} /></td>
                         <td className="px-3 py-2 text-[var(--color-fonts-font-color-primary)]">{story.summary}</td>
                         <td className="px-3 py-2">
                           <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
@@ -178,7 +205,7 @@ function ExecSummary({ s }: { s: FeatureTestPlan['section01_executiveSummary'] }
   )
 }
 
-function CapabilitySection({ s }: { s: FeatureTestPlan['section02_featureCapabilityBreakdown'] }) {
+function CapabilitySection({ s, jiraBaseUrl }: { s: FeatureTestPlan['section02_featureCapabilityBreakdown']; jiraBaseUrl: string }) {
   const colors = [
     'text-[var(--color-fonts-font-color-brand)] border-l-[var(--color-fonts-font-color-brand)]',
     'text-cyan-600 border-l-cyan-500',
@@ -205,7 +232,7 @@ function CapabilitySection({ s }: { s: FeatureTestPlan['section02_featureCapabil
                 </div>
                 <p className="text-xs leading-relaxed text-[var(--color-fonts-font-color-support)]">{ca.description}</p>
                 <div className="flex flex-wrap gap-1 mt-1">
-                  {ca.relatedStories.map((s) => <IdPill key={s} id={s} />)}
+                  {ca.relatedStories.map((s) => <JiraLink key={s} id={s} jiraBaseUrl={jiraBaseUrl} />)}
                 </div>
               </div>
             )
@@ -216,20 +243,24 @@ function CapabilitySection({ s }: { s: FeatureTestPlan['section02_featureCapabil
   )
 }
 
-function BehavioursSection({ s }: { s: FeatureTestPlan['section03_storyBehaviourBreakdown'] }) {
+function BehavioursSection({ s, jiraBaseUrl }: { s: FeatureTestPlan['section03_storyBehaviourBreakdown']; jiraBaseUrl: string }) {
   return (
     <Section id="behaviours" icon={GitBranch} title={s.title}>
       <div className="flex flex-col gap-3">
         {s.stories.map((story: StoryBehaviour) => (
           <Card key={story.storyId}>
             <details className="group">
-              <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 list-none select-none">
+              <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5 list-none select-none rounded-[var(--border-radius-card)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors duration-150">
                 <div className="flex items-center gap-3 min-w-0">
-                  <IdPill id={story.storyId} />
+                  <ChevronRight
+                    size={14}
+                    className="shrink-0 text-[var(--color-fonts-font-color-support)] transition-transform duration-200 group-open:rotate-90"
+                  />
+                  <JiraLink id={story.storyId} jiraBaseUrl={jiraBaseUrl} />
                   <span className="text-sm font-medium truncate text-[var(--color-fonts-font-color-primary)]">{story.summary}</span>
                 </div>
-                <span className="text-xs shrink-0 text-[var(--color-fonts-font-color-support)]">
-                  {story.behaviours.length} behaviours
+                <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                  {story.behaviours.length} behaviour{story.behaviours.length !== 1 ? 's' : ''}
                 </span>
               </summary>
               <div className="px-4 pb-4 flex flex-col gap-4 border-t border-[var(--color-cards-card-stroke)]">
@@ -309,12 +340,13 @@ function RisksSection({ s }: { s: FeatureTestPlan['section04_riskAssessment'] })
 }
 
 function TestConditionsSection({
-  id, icon: Icon, title, groups,
+  id, icon: Icon, title, groups, jiraBaseUrl,
 }: {
   id: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   title: string
   groups: ConditionGroup[]
+  jiraBaseUrl: string
 }) {
   return (
     <Section id={id} icon={Icon} title={title}>
@@ -327,15 +359,22 @@ function TestConditionsSection({
           return (
             <Card key={groupKey}>
               <details className="group">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 p-4 list-none select-none">
+                <summary className="flex cursor-pointer items-center justify-between gap-3 px-4 py-3.5 list-none select-none rounded-t-[var(--border-radius-card)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors duration-150 group-open:rounded-b-none">
                   <div className="flex items-center gap-3 min-w-0">
-                    <IdPill id={group.storyId ?? group.capabilityArea ?? ''} />
+                    <ChevronRight
+                      size={14}
+                      className="shrink-0 text-[var(--color-fonts-font-color-support)] transition-transform duration-200 group-open:rotate-90"
+                    />
+                    {group.storyId
+                      ? <JiraLink id={group.storyId} jiraBaseUrl={jiraBaseUrl} />
+                      : <IdPill id={group.capabilityArea ?? ''} />
+                    }
                     <span className="text-sm font-medium truncate text-[var(--color-fonts-font-color-primary)]">
                       {group.storySummary ?? group.capabilityArea ?? groupLabel}
                     </span>
                   </div>
-                  <span className="text-xs shrink-0 text-[var(--color-fonts-font-color-support)]">
-                    {group.conditions.length} conditions
+                  <span className="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+                    {group.conditions.length} condition{group.conditions.length !== 1 ? 's' : ''}
                   </span>
                 </summary>
                 <div className="border-t border-[var(--color-cards-card-stroke)]">
@@ -382,7 +421,7 @@ function TestConditionsSection({
   )
 }
 
-function TraceabilitySection({ s }: { s: FeatureTestPlan['section07_traceabilityMatrix'] }) {
+function TraceabilitySection({ s, jiraBaseUrl }: { s: FeatureTestPlan['section07_traceabilityMatrix']; jiraBaseUrl: string }) {
   return (
     <Section id="traceability" icon={Network} title={s.title}>
       <Card>
@@ -398,9 +437,9 @@ function TraceabilitySection({ s }: { s: FeatureTestPlan['section07_traceability
             <tbody>
               {s.matrix.map((row: TraceRow, i) => (
                 <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                  <td className="px-4 py-2.5"><IdPill id={row.featureId} /></td>
+                  <td className="px-4 py-2.5"><JiraLink id={row.featureId} jiraBaseUrl={jiraBaseUrl} /></td>
                   <td className="px-4 py-2.5 text-[var(--color-fonts-font-color-support)]">{row.capabilityArea}</td>
-                  <td className="px-4 py-2.5"><IdPill id={row.storyId} /></td>
+                  <td className="px-4 py-2.5"><JiraLink id={row.storyId} jiraBaseUrl={jiraBaseUrl} /></td>
                   <td className="px-4 py-2.5 text-[var(--color-fonts-font-color-support)] text-[10px]">{row.behaviourId}</td>
                   <td className="px-4 py-2.5">
                     <div className="flex flex-wrap gap-1">
@@ -423,7 +462,7 @@ function TraceabilitySection({ s }: { s: FeatureTestPlan['section07_traceability
   )
 }
 
-function CoverageSection({ s }: { s: FeatureTestPlan['section08_coverageAnalysis'] }) {
+function CoverageSection({ s, jiraBaseUrl }: { s: FeatureTestPlan['section08_coverageAnalysis']; jiraBaseUrl: string }) {
   return (
     <Section id="coverage" icon={BarChart3} title={s.title}>
       <div className="flex flex-col gap-4">
@@ -444,7 +483,7 @@ function CoverageSection({ s }: { s: FeatureTestPlan['section08_coverageAnalysis
               <tbody>
                 {s.storyCoverageStatus.map((sc: StoryCoverage) => (
                   <tr key={sc.storyId} className="border-t border-[var(--color-tables-table-cell-stroke)]">
-                    <td className="px-4 py-2.5"><IdPill id={sc.storyId} /></td>
+                    <td className="px-4 py-2.5"><JiraLink id={sc.storyId} jiraBaseUrl={jiraBaseUrl} /></td>
                     <td className="px-4 py-2.5 text-[var(--color-fonts-font-color-primary)]">{sc.behavioursCovered}</td>
                     <td className="px-4 py-2.5 text-[var(--color-fonts-font-color-primary)] tabular-nums">{sc.testConditions}</td>
                     <td className="px-4 py-2.5"><CoverageStatusBadge status={sc.status} /></td>
@@ -577,7 +616,7 @@ function EntryExitSection({ s }: { s: FeatureTestPlan['section10_entryExitCriter
   )
 }
 
-function ReadinessSection({ s }: { s: FeatureTestPlan['section13_readinessForTestCaseDesign'] }) {
+function ReadinessSection({ s, jiraBaseUrl }: { s: FeatureTestPlan['section13_readinessForTestCaseDesign']; jiraBaseUrl: string }) {
   const r = s.readinessAssessment
   const readyCls = r.overallReadiness === 'Ready'
     ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]'
@@ -617,7 +656,7 @@ function ReadinessSection({ s }: { s: FeatureTestPlan['section13_readinessForTes
                   : <AlertTriangle size={14} className="shrink-0 mt-0.5 text-[var(--color-tags-font-attention)]" />}
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <IdPill id={item.storyId} />
+                    <JiraLink id={item.storyId} jiraBaseUrl={jiraBaseUrl} />
                     <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
                       {item.ready ? 'Ready' : 'Not Ready'}
                     </span>
@@ -673,32 +712,102 @@ function ClarificationsSection({ s }: { s: FeatureTestPlan['section14_clarificat
 // ── Sticky nav ────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
-  { id: 'exec-summary', label: 'Summary' },
-  { id: 'capabilities', label: 'Capabilities' },
-  { id: 'behaviours', label: 'Behaviours' },
-  { id: 'risks', label: 'Risks' },
-  { id: 'behaviour-tcs', label: 'Behaviour TCs' },
-  { id: 'capability-tcs', label: 'Capability TCs' },
-  { id: 'traceability', label: 'Traceability' },
-  { id: 'coverage', label: 'Coverage' },
-  { id: 'entry-exit', label: 'Entry/Exit' },
-  { id: 'readiness', label: 'Readiness' },
-  { id: 'clarifications', label: 'Clarifications' },
+  { id: 'exec-summary',   label: 'Summary',        icon: BookOpen    },
+  { id: 'capabilities',  label: 'Capabilities',   icon: Target      },
+  { id: 'behaviours',    label: 'Behaviours',     icon: GitBranch   },
+  { id: 'risks',         label: 'Risks',          icon: ShieldAlert },
+  { id: 'behaviour-tcs', label: 'Behaviour TCs',  icon: FlaskConical },
+  { id: 'capability-tcs',label: 'Capability TCs', icon: FlaskConical },
+  { id: 'traceability',  label: 'Traceability',   icon: Network     },
+  { id: 'coverage',      label: 'Coverage',       icon: BarChart3   },
+  { id: 'entry-exit',    label: 'Entry/Exit',     icon: LogIn       },
+  { id: 'readiness',     label: 'Readiness',      icon: Flag        },
+  { id: 'clarifications',label: 'Clarifications', icon: HelpCircle  },
 ]
 
 function StickyNav() {
+  const [activeId, setActiveId] = useState(NAV_ITEMS[0].id)
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)
+        if (visible.length > 0) setActiveId(visible[0].target.id)
+      },
+      { rootMargin: '-10% 0px -75% 0px', threshold: 0 },
+    )
+    NAV_ITEMS.forEach(({ id }) => {
+      const el = document.getElementById(id)
+      if (el) observer.observe(el)
+    })
+    return () => observer.disconnect()
+  }, [])
+
+  const handleClick = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
+    setActiveId(id)
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
   return (
-    <nav className="sticky top-0 z-20 bg-[var(--color-page-background)] border-b border-[var(--color-borders-border-primary)] -mx-4 px-4 py-2 mb-6 overflow-x-auto">
-      <div className="flex items-center gap-1 min-w-max">
-        {NAV_ITEMS.map((item) => (
-          <a
-            key={item.id}
-            href={`#${item.id}`}
-            className="px-3 py-1 text-xs font-medium rounded-[var(--border-radius-tag)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors whitespace-nowrap"
-          >
-            {item.label}
-          </a>
-        ))}
+    <nav className="sticky top-0 z-20 bg-[var(--color-page-background)]/90 backdrop-blur-md border-b border-[var(--color-borders-border-primary)] -mx-4 px-4 mb-6 overflow-x-auto">
+      <div className="flex items-center min-w-max">
+        {NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+          const isActive = activeId === id
+          return (
+            <a
+              key={id}
+              href={`#${id}`}
+              onClick={(e) => handleClick(e, id)}
+              className={`
+                group relative flex items-center gap-1.5 px-3 py-2.5 text-xs font-medium
+                whitespace-nowrap outline-none select-none
+                transition-colors duration-150
+                ${isActive
+                  ? 'text-[var(--color-fonts-font-color-brand)]'
+                  : 'text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]'
+                }
+              `}
+            >
+              {/* Hover / active background pill */}
+              <span
+                className={`
+                  absolute inset-x-1 inset-y-1.5 rounded-[var(--border-radius-tag)]
+                  transition-all duration-200
+                  ${isActive
+                    ? 'bg-[var(--color-fonts-font-color-brand)]/10 opacity-100'
+                    : 'bg-[var(--color-cards-card-background-hover)] opacity-0 group-hover:opacity-100 group-hover:scale-105'
+                  }
+                `}
+              />
+
+              {/* Icon + label */}
+              <Icon
+                size={11}
+                className={`
+                  relative shrink-0 transition-transform duration-200
+                  group-hover:-translate-y-px
+                  ${isActive ? 'opacity-100' : 'opacity-60 group-hover:opacity-80'}
+                `}
+              />
+              <span className="relative transition-transform duration-200 group-hover:-translate-y-px">
+                {label}
+              </span>
+
+              {/* Active bottom bar — scales in from centre */}
+              <span
+                className={`
+                  absolute bottom-0 left-3 right-3 h-0.5 rounded-full
+                  bg-[var(--color-fonts-font-color-brand)]
+                  transition-all duration-300 ease-out origin-center
+                  ${isActive ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0'}
+                `}
+              />
+            </a>
+          )
+        })}
       </div>
     </nav>
   )
@@ -711,9 +820,43 @@ interface TestPlanDetailProps {
   issueKey: string
 }
 
+interface MatchSuggestion {
+  etrKey: string
+  etrTitle: string
+  matchedAiId: string
+  confidence: number
+  reasoning: string
+}
+
 export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProps) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
   const [toast, setToast] = React.useState<{ message: string; variant: 'success' | 'error' | 'info' } | null>(null)
+  const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([])
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [etrProjectKey, setEtrProjectKey] = useState('')
+
+  // ── Active job state (shared with TestCasesPage via localStorage) ──────────
+  const [activeJobId, setActiveJobId] = useState<string | null>(
+    () => localStorage.getItem(jobStorageKey(issueKey))
+  )
+
+  const setJob = useCallback((jobId: string | null) => {
+    setActiveJobId(jobId)
+    if (jobId) localStorage.setItem(jobStorageKey(issueKey), jobId)
+    else localStorage.removeItem(jobStorageKey(issueKey))
+  }, [issueKey])
+
+  const { data: jobStatus } = useQuery<{ status: string }>({
+    queryKey: ['job-status', activeJobId],
+    queryFn: () => api.get(`/jobs/status/${activeJobId}`).then((r) => r.data),
+    enabled: !!activeJobId,
+    refetchInterval: (query) =>
+      query.state.data?.status && TERMINAL_JOB_STATUSES.includes(query.state.data.status)
+        ? false
+        : query.state.data?.status === 'RUNNING' ? 5_000 : 3_000,
+    staleTime: 0,
+  })
 
   const { data: record, isLoading, isError } = useQuery<QaTestPlanRecord>({
     queryKey: ['qa-test-plan', scopeId, issueKey],
@@ -729,6 +872,22 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
     staleTime: 60_000,
   })
 
+  const { data: mcpConfig } = useQuery({
+    queryKey: ['mcp-system-config'],
+    queryFn: () => mcpProfilesApi.getSystemConfig().catch(() => ({ jira: { baseUrl: '', username: '' }, confluence: { baseUrl: '', username: '' }, xray: { baseUrl: '' } })),
+    staleTime: 5 * 60_000,
+  })
+  const jiraBaseUrl = mcpConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
+
+  const { data: systemSettings } = useQuery<Record<string, string>>({
+    queryKey: ['system-settings'],
+    queryFn: () => api.get('/settings').then((r) => {
+      const arr: { key: string; value: string }[] = r.data ?? []
+      return Object.fromEntries(arr.map((s) => [s.key, s.value]))
+    }).catch(() => ({})),
+    staleTime: 5 * 60_000,
+  })
+
   const { data: testCaseCount } = useQuery<number>({
     queryKey: ['qa-test-case-count', record?.id],
     queryFn: async () => {
@@ -740,13 +899,64 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
     staleTime: 30_000,
   })
 
+  useEffect(() => {
+    if (!etrProjectKey && systemSettings) {
+      const defaultKey = systemSettings['xray.test-project-key'] ?? ''
+      if (defaultKey) setEtrProjectKey(defaultKey)
+    }
+  }, [systemSettings])
+
+  useEffect(() => {
+    if (!jobStatus?.status || !TERMINAL_JOB_STATUSES.includes(jobStatus.status)) return
+    setJob(null)
+    qc.invalidateQueries({ queryKey: ['qa-test-case-count', record?.id] })
+    qc.invalidateQueries({ queryKey: ['qa-test-plan', scopeId, issueKey] })
+  }, [jobStatus?.status, qc, record?.id, scopeId, issueKey, setJob])
+
+  const isJobActive = !!activeJobId
+  const jobStatusLabel = jobStatus?.status
+    ? jobStatus.status.charAt(0).toUpperCase() + jobStatus.status.slice(1).toLowerCase()
+    : 'Starting…'
+
   const generateTestCasesMutation = useMutation({
     mutationFn: () => api.post(`/qa/test-plans/${record!.id}/test-cases/generate`),
     onSuccess: (res) => {
       const jobId = res.data?.jobId
-      setToast({ message: `Test case generation queued (job ${jobId})`, variant: 'info' })
+      if (jobId) setJob(jobId)
+      setToast({ message: `Test case generation queued (job ${jobId?.slice(0, 8)})`, variant: 'info' })
     },
     onError: () => setToast({ message: 'Failed to queue test case generation', variant: 'error' }),
+  })
+
+  const importFromJiraMutation = useMutation({
+    mutationFn: (key: string) =>
+      api.post(`/qa/test-plans/${record!.id}/test-cases/import-from-jira`, key ? { etrProjectKey: key } : {}),
+    onSuccess: (res) => {
+      setImportDialogOpen(false)
+      const { autoLinked = 0, newInserted = 0, suggestions: sugg = [] } = res.data ?? {}
+      const suggList = sugg as MatchSuggestion[]
+      setSuggestions(suggList)
+      const parts = []
+      if (autoLinked > 0) parts.push(`${autoLinked} auto-linked`)
+      if (newInserted > 0) parts.push(`${newInserted} new`)
+      if (suggList.length > 0) parts.push(`${suggList.length} suggestion${suggList.length !== 1 ? 's' : ''} need review`)
+      setToast({ message: parts.length > 0 ? parts.join(', ') : 'Import complete — no new tests found', variant: 'success' })
+      qc.invalidateQueries({ queryKey: ['qa-test-case-count', record?.id] })
+    },
+    onError: (err: any) => {
+      setImportDialogOpen(false)
+      const msg = err?.response?.data?.error ?? 'Import from Jira failed'
+      setToast({ message: msg, variant: 'error' })
+    },
+  })
+
+  const linkSuggestionMutation = useMutation({
+    mutationFn: ({ tcId, jiraKey }: { tcId: string; jiraKey: string }) =>
+      api.put(`/qa/test-plans/${record!.id}/test-cases/${tcId}/jira-key`, { jiraIssueKey: jiraKey }),
+    onSuccess: (_data, vars) => {
+      setSuggestions((prev) => prev.filter((s) => s.matchedAiId !== vars.tcId))
+      setToast({ message: 'Test case linked', variant: 'success' })
+    },
   })
 
   const breadcrumbs: BreadcrumbItem[] = [
@@ -827,11 +1037,13 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
                 <>
                   <span>·</span>
                   <a
-                    href={`#jira-${record.jiraIssueKey}`}
+                    href={jiraBaseUrl ? `${jiraBaseUrl}/browse/${record.jiraIssueKey}` : undefined}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 font-mono font-semibold hover:underline"
                     title="Linked Jira Test Plan"
                   >
-                    {record.jiraIssueKey}
+                    {record.jiraIssueKey} <ExternalLink size={10} />
                   </a>
                 </>
               )}
@@ -856,15 +1068,32 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
             )}
             {record.testPlanStatus === 'json_ready' && (
               <button
-                onClick={() => generateTestCasesMutation.mutate()}
-                disabled={generateTestCasesMutation.isPending}
-                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                onClick={() => setImportDialogOpen(true)}
+                disabled={importFromJiraMutation.isPending}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] disabled:opacity-50 transition-colors"
               >
-                {generateTestCasesMutation.isPending
-                  ? <Loader2 size={13} className="animate-spin" />
-                  : <TestTube2 size={13} />}
-                {(testCaseCount ?? 0) > 0 ? 'Regenerate Test Cases' : 'Generate Test Cases'}
+                <Download size={13} />
+                Import from Jira
               </button>
+            )}
+            {record.testPlanStatus === 'json_ready' && (
+              isJobActive ? (
+                <span className="inline-flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)]">
+                  <Loader2 size={13} className="animate-spin" />
+                  Job #{activeJobId!.slice(0, 8)} · {jobStatusLabel}
+                </span>
+              ) : (
+                <button
+                  onClick={() => generateTestCasesMutation.mutate()}
+                  disabled={generateTestCasesMutation.isPending}
+                  className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {generateTestCasesMutation.isPending
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <TestTube2 size={13} />}
+                  {(testCaseCount ?? 0) > 0 ? 'Regenerate Test Cases' : 'Generate Test Cases'}
+                </button>
+              )
             )}
             <button
               onClick={() => navigate({ to: `/qa/scope/${scopeId}` })}
@@ -876,6 +1105,72 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
         </div>
       </div>
 
+      {/* Import from Jira dialog */}
+      {importDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setImportDialogOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-[var(--color-fonts-font-color-headings)] mb-1">
+              Import ETR Test Cases from Jira
+            </h2>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-4">
+              Searches the ETR project for Xray tests linked (via "tests" link type) to each story under{' '}
+              <code className="font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">{record.issueKey}</code>.
+              AI matching will compare imported tests against generated test cases.
+            </p>
+
+            <label className="block text-xs font-medium text-[var(--color-fonts-font-color-primary)] mb-1">
+              ETR Project Key
+            </label>
+            <input
+              type="text"
+              value={etrProjectKey}
+              onChange={(e) => setEtrProjectKey(e.target.value)}
+              placeholder="e.g. ETR"
+              className="w-full text-sm px-3 py-2 rounded-[var(--border-radius-input)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] placeholder:text-[var(--color-fonts-font-color-support)] focus:outline-none focus:ring-2 focus:ring-[var(--color-fonts-font-color-brand)] mb-4"
+            />
+
+            {(() => {
+              const storyIds = (record.planJson?.section03_storyBehaviourBreakdown?.stories ?? [])
+                .map((s) => s.storyId).filter(Boolean)
+              return storyIds.length > 0 ? (
+                <div className="mb-4 rounded-md border border-[var(--color-borders-border-primary)] bg-[var(--color-tags-neutral-background)] px-3 py-2">
+                  <p className="text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1.5">Stories that will be searched</p>
+                  <div className="flex flex-wrap gap-1">
+                    {storyIds.map((id) => (
+                      <code key={id} className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-brand)]">
+                        {id}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              ) : null
+            })()}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setImportDialogOpen(false)}
+                className="text-sm px-4 py-2 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => importFromJiraMutation.mutate(etrProjectKey)}
+                disabled={importFromJiraMutation.isPending}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-[var(--border-radius-button)] bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {importFromJiraMutation.isPending
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : <Download size={13} />}
+                {importFromJiraMutation.isPending ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`fixed bottom-4 right-4 z-50 flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-card)] shadow-lg text-sm font-medium
@@ -886,30 +1181,83 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
         </div>
       )}
 
+      {/* Review Matches panel */}
+      {suggestions.length > 0 && (
+        <div className="mb-6 rounded-lg border border-[var(--color-tags-attention-background)] bg-[var(--color-cards-card-background)] overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-tags-attention-background)]">
+            <div className="flex items-center gap-2">
+              <AlertTriangle size={14} className="text-[var(--color-tags-font-attention)]" />
+              <span className="text-sm font-semibold text-[var(--color-tags-font-attention)]">
+                Review Matches — {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} need review
+              </span>
+            </div>
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+              Confidence 40–79% — confirm or skip each match
+            </span>
+          </div>
+          <div className="divide-y divide-[var(--color-tables-table-cell-stroke)]">
+            {suggestions.map((s) => (
+              <div key={s.etrKey} className="flex items-start gap-4 px-4 py-3 hover:bg-[var(--color-tables-table-hover)]">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <code className="text-xs font-mono text-[var(--color-fonts-font-color-brand)]">{s.etrKey}</code>
+                    <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0 rounded-full
+                      bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]`}>
+                      {s.confidence}%
+                    </span>
+                    <span className="text-xs text-[var(--color-fonts-font-color-support)]">→</span>
+                    <code className="text-xs font-mono text-[var(--color-fonts-font-color-support)]">{s.matchedAiId}</code>
+                  </div>
+                  <p className="text-xs text-[var(--color-fonts-font-color-primary)] truncate">{s.etrTitle}</p>
+                  <p className="text-xs text-[var(--color-fonts-font-color-support)] italic mt-0.5">{s.reasoning}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                  <button
+                    onClick={() => linkSuggestionMutation.mutate({ tcId: s.matchedAiId, jiraKey: s.etrKey })}
+                    disabled={linkSuggestionMutation.isPending}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] hover:opacity-80 disabled:opacity-50 transition-opacity"
+                  >
+                    <Check size={11} /> Link
+                  </button>
+                  <button
+                    onClick={() => setSuggestions((prev) => prev.filter((x) => x.etrKey !== s.etrKey))}
+                    className="flex items-center gap-1 px-2 py-1 text-xs rounded bg-[var(--color-tags-neutral-background)] text-[var(--color-fonts-font-color-support)] hover:opacity-80 transition-opacity"
+                  >
+                    <X size={11} /> Skip
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <StickyNav />
 
       {/* Sections */}
       <div className="flex flex-col gap-10">
-        <ExecSummary s={plan.section01_executiveSummary} />
-        <CapabilitySection s={plan.section02_featureCapabilityBreakdown} />
-        <BehavioursSection s={plan.section03_storyBehaviourBreakdown} />
+        <ExecSummary s={plan.section01_executiveSummary} jiraBaseUrl={jiraBaseUrl} />
+        <CapabilitySection s={plan.section02_featureCapabilityBreakdown} jiraBaseUrl={jiraBaseUrl} />
+        <BehavioursSection s={plan.section03_storyBehaviourBreakdown} jiraBaseUrl={jiraBaseUrl} />
         <RisksSection s={plan.section04_riskAssessment} />
         <TestConditionsSection
           id="behaviour-tcs"
           icon={FlaskConical}
           title={plan.section05_behaviourTestConditions.title}
           groups={plan.section05_behaviourTestConditions.testConditions}
+          jiraBaseUrl={jiraBaseUrl}
         />
         <TestConditionsSection
           id="capability-tcs"
           icon={FlaskConical}
           title={plan.section06_capabilityTestConditions.title}
           groups={plan.section06_capabilityTestConditions.testConditions}
+          jiraBaseUrl={jiraBaseUrl}
         />
-        <TraceabilitySection s={plan.section07_traceabilityMatrix} />
-        <CoverageSection s={plan.section08_coverageAnalysis} />
+        <TraceabilitySection s={plan.section07_traceabilityMatrix} jiraBaseUrl={jiraBaseUrl} />
+        <CoverageSection s={plan.section08_coverageAnalysis} jiraBaseUrl={jiraBaseUrl} />
         <EntryExitSection s={plan.section10_entryExitCriteria} />
-        <ReadinessSection s={plan.section13_readinessForTestCaseDesign} />
+        <ReadinessSection s={plan.section13_readinessForTestCaseDesign} jiraBaseUrl={jiraBaseUrl} />
         <ClarificationsSection s={plan.section14_clarificationsNeeded} />
       </div>
     </main>

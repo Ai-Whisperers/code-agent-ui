@@ -3,6 +3,7 @@ import {
   Clock, FlaskConical, Target, CheckCircle2, Circle, XCircle, AlertTriangle,
   ListChecks, CheckCheck, ExternalLink,
 } from 'lucide-react'
+import { Select } from '@/components/ui/Select'
 import api from '@/lib/api'
 import type { QaTestCase } from '@/types/api'
 
@@ -42,6 +43,8 @@ const STATUS_STYLES: Record<string, { cls: string; icon: React.ComponentType<{ s
   Blocked: { cls: 'bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]', icon: AlertTriangle },
 }
 
+const STATUS_OPTIONS = Object.keys(STATUS_STYLES).map((value) => ({ value, label: value }))
+
 function StatusBadge({ status, id, planId, onStatusChange }: {
   status: string
   id: string
@@ -62,22 +65,17 @@ function StatusBadge({ status, id, planId, onStatusChange }: {
   })
 
   return (
-    <div className="relative group/status">
-      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] cursor-pointer ${s.cls}`}>
+    <div className="flex items-center gap-1">
+      <span className={`inline-flex items-center justify-center rounded-full p-0.5 ${s.cls}`}>
         <Icon size={10} />
-        {status}
       </span>
-      <div className="absolute left-0 top-full mt-1 z-10 hidden group-hover/status:flex flex-col bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-lg overflow-hidden min-w-[90px]">
-        {Object.keys(STATUS_STYLES).map((s) => (
-          <button
-            key={s}
-            onClick={() => mutation.mutate(s)}
-            className="px-3 py-1.5 text-xs text-left hover:bg-[var(--color-cards-card-background-hover)] text-[var(--color-fonts-font-color-primary)]"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
+      <Select
+        value={status}
+        onChange={(newStatus) => mutation.mutate(newStatus)}
+        options={STATUS_OPTIONS}
+        disabled={mutation.isPending}
+        className="w-28"
+      />
     </div>
   )
 }

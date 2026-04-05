@@ -1,10 +1,10 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   RefreshCw, Loader2, X, Save, Wand2, FileText, Eye, Pencil,
   FlaskConical, BookOpen, ShieldAlert, AlertTriangle,
-  ChevronUp, ChevronDown, Search,
+  ChevronUp, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Search, Download,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
@@ -15,14 +15,20 @@ import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import { Input } from '@/components/ui/Input'
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { TestPlanStatusBadge } from '@/components/shared/TestPlanStatusBadge'
 import api from '@/lib/api'
-import type { Scope, QaFeatureItem } from '@/types/api'
+import { mcpProfilesApi } from '@/lib/mcpProfiles'
+import type { Scope, QaFeatureItem, ScopeTreeItem } from '@/types/api'
 
-type ToastState = { message: string; variant: 'success' | 'error' }
+type ToastState = { message: string; variant: 'success' | 'error'; action?: { label: string; onClick: () => void } }
 type SortCol = 'key' | 'summary' | 'jiraStatus' | 'testPlanStatus' | 'generatedAt'
+
+const TERMINAL_JOB_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED']
+
+const jobStorageKey = (scopeId: string, issueKey: string) => `qa-job:${scopeId}:${issueKey}`
 
 const STATUS_ORDER: Record<string, number> = {
   none: 0, analysis: 1, stale: 2, json_ready: 3,
@@ -192,6 +198,7 @@ function AnalysisEditDrawer({
   onToast: (t: ToastState) => void
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const [editText, setEditText] = useState<string | null>(null)
 
   const { data: plan, isLoading } = useQuery({
@@ -223,7 +230,11 @@ function AnalysisEditDrawer({
     onSuccess: (res) => {
       const jobId = res.data?.jobId
       qc.invalidateQueries({ queryKey: ['qa-features', scopeId] })
-      onToast({ message: `JSON conversion queued${jobId ? ` (job ${jobId})` : ''}.`, variant: 'success' })
+      onToast({
+        message: 'JSON conversion queued.',
+        variant: 'success',
+        action: jobId ? { label: 'View job', onClick: () => navigate({ to: '/jobs/$id', params: { id: jobId } }) } : undefined,
+      })
       onClose()
     },
     onError: () => onToast({ message: 'JSON generation failed.', variant: 'error' }),
@@ -325,6 +336,9 @@ function FeatureRow({
   feature,
   scopeId,
   jiraBaseUrl,
+  expanded,
+  hasStories,
+  onToggle,
   onViewAnalysis,
   onEditAnalysis,
   onToast,
@@ -332,18 +346,55 @@ function FeatureRow({
   feature: QaFeatureItem
   scopeId: string
   jiraBaseUrl: string
+  expanded: boolean
+  hasStories: boolean
+  onToggle: () => void
   onViewAnalysis: (f: QaFeatureItem) => void
   onEditAnalysis: (f: QaFeatureItem) => void
   onToast: (t: ToastState) => void
 }) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  const [activeJobId, setActiveJobId] = useState<string | null>(
+    () => localStorage.getItem(jobStorageKey(scopeId, feature.issueKey))
+  )
+
+  const setJob = useCallback((jobId: string | null) => {
+    setActiveJobId(jobId)
+    if (jobId) localStorage.setItem(jobStorageKey(scopeId, feature.issueKey), jobId)
+    else localStorage.removeItem(jobStorageKey(scopeId, feature.issueKey))
+  }, [scopeId, feature.issueKey])
+
+  const { data: jobStatus } = useQuery<{ status: string }>({
+    queryKey: ['job-status', activeJobId],
+    queryFn: () => api.get(`/jobs/status/${activeJobId}`).then((r) => r.data),
+    enabled: !!activeJobId,
+    refetchInterval: (query) =>
+      query.state.data?.status && TERMINAL_JOB_STATUSES.includes(query.state.data.status)
+        ? false
+        : query.state.data?.status === 'RUNNING' ? 5_000 : 3_000,
+    staleTime: 0,
+  })
+
+  useEffect(() => {
+    if (!jobStatus?.status || !TERMINAL_JOB_STATUSES.includes(jobStatus.status)) return
+    setJob(null)
+    qc.invalidateQueries({ queryKey: ['qa-features', scopeId] })
+  }, [jobStatus?.status, qc, scopeId, setJob])
+
+  const isJobActive = !!activeJobId
 
   const generateAnalysisMutation = useMutation({
     mutationFn: () =>
       api.post(`/qa-scope/${scopeId}/features/${feature.issueKey}/test-plan/generate-analysis`),
     onSuccess: (res) => {
       const jobId = res.data?.jobId
-      onToast({ message: `Analysis queued for ${feature.issueKey}${jobId ? ` (job ${jobId})` : ''}.`, variant: 'success' })
+      if (jobId) setJob(jobId)
+      onToast({
+        message: `Analysis queued for ${feature.issueKey}.`,
+        variant: 'success',
+        action: jobId ? { label: 'View job', onClick: () => navigate({ to: '/jobs/$id', params: { id: jobId } }) } : undefined,
+      })
     },
     onError: () => onToast({ message: `Analysis generation failed for ${feature.issueKey}.`, variant: 'error' }),
   })
@@ -353,7 +404,12 @@ function FeatureRow({
       api.post(`/qa-scope/${scopeId}/features/${feature.issueKey}/test-plan/generate-json`),
     onSuccess: (res) => {
       const jobId = res.data?.jobId
-      onToast({ message: `JSON conversion queued for ${feature.issueKey}${jobId ? ` (job ${jobId})` : ''}.`, variant: 'success' })
+      if (jobId) setJob(jobId)
+      onToast({
+        message: `JSON conversion queued for ${feature.issueKey}.`,
+        variant: 'success',
+        action: jobId ? { label: 'View job', onClick: () => navigate({ to: '/jobs/$id', params: { id: jobId } }) } : undefined,
+      })
     },
     onError: () => onToast({ message: `JSON generation failed for ${feature.issueKey}.`, variant: 'error' }),
   })
@@ -365,13 +421,26 @@ function FeatureRow({
       className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] group cursor-pointer"
       onClick={() => onViewAnalysis(feature)}
     >
-      {/* Issue key */}
+      {/* Issue key + type icon + expand toggle */}
       <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-        <JiraIssueLink
-          issueKey={feature.issueKey}
-          jiraBaseUrl={jiraBaseUrl}
-          className="font-mono text-xs font-semibold text-[var(--color-fonts-font-color-brand)]"
-        />
+        <div className="flex items-center gap-1.5">
+          {hasStories ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggle() }}
+              className="shrink-0 p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+            >
+              {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+            </button>
+          ) : (
+            <span className="w-[18px] shrink-0" />
+          )}
+          <IssueTypeIcon issueType="FEATURE" size={12} />
+          <JiraIssueLink
+            issueKey={feature.issueKey}
+            jiraBaseUrl={jiraBaseUrl}
+            className="font-mono text-xs font-semibold text-[var(--color-fonts-font-color-brand)]"
+          />
+        </div>
       </td>
 
       {/* Summary */}
@@ -424,62 +493,114 @@ function FeatureRow({
 
       {/* Actions */}
       <td className="px-4 py-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Tooltip text="Queue an AI analysis job (step 1)" position="left">
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={generateAnalysisMutation.isPending}
-              icon={<Wand2 size={12} />}
-              onClick={() => generateAnalysisMutation.mutate()}
-              disabled={isGenerating}
-            >
-              Analyse
-            </Button>
-          </Tooltip>
-
-          {(feature.testPlanStatus === 'analysis' || feature.testPlanStatus === 'json_ready' || feature.testPlanStatus === 'stale') && (
-            <Tooltip text="View and manually edit the AI analysis before converting to JSON" position="left">
+        {isJobActive ? (
+          <button
+            onClick={() => navigate({ to: '/jobs/$id', params: { id: activeJobId! } })}
+            className="flex items-center gap-1.5 text-xs text-[var(--color-tags-font-attention)] hover:underline"
+          >
+            <Loader2 size={11} className="animate-spin shrink-0" />
+            <span>Job #{activeJobId!.slice(0, 8)} · {jobStatus?.status ? jobStatus.status.charAt(0).toUpperCase() + jobStatus.status.slice(1).toLowerCase() : 'Starting…'}</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <Tooltip text="Queue an AI analysis job (step 1)" position="left">
               <Button
                 variant="secondary"
                 size="sm"
-                icon={<Pencil size={12} />}
-                onClick={() => onEditAnalysis(feature)}
-              >
-                Edit
-              </Button>
-            </Tooltip>
-          )}
-
-          {(feature.testPlanStatus === 'analysis' || feature.testPlanStatus === 'stale') && (
-            <Tooltip text="Queue a JSON conversion job (step 2)" position="left">
-              <Button
-                variant="secondary"
-                size="sm"
-                loading={generateJsonMutation.isPending}
-                icon={<FileText size={12} />}
-                onClick={() => generateJsonMutation.mutate()}
+                loading={generateAnalysisMutation.isPending}
+                icon={<Wand2 size={12} />}
+                onClick={() => generateAnalysisMutation.mutate()}
                 disabled={isGenerating}
               >
-                Convert
+                Analyse
               </Button>
             </Tooltip>
-          )}
 
-          {feature.testPlanStatus === 'json_ready' && (
-            <Tooltip text="Open the full structured test plan" position="left">
-              <Button
-                variant="primary"
-                size="sm"
-                icon={<Eye size={12} />}
-                onClick={() => navigate({ to: `/qa/scope/${scopeId}/test-plan/${feature.issueKey}` })}
-              >
-                View Plan
-              </Button>
-            </Tooltip>
-          )}
+            {(feature.testPlanStatus === 'analysis' || feature.testPlanStatus === 'json_ready' || feature.testPlanStatus === 'stale') && (
+              <Tooltip text="View and manually edit the AI analysis before converting to JSON" position="left">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Pencil size={12} />}
+                  onClick={() => onEditAnalysis(feature)}
+                >
+                  Edit
+                </Button>
+              </Tooltip>
+            )}
+
+            {(feature.testPlanStatus === 'analysis' || feature.testPlanStatus === 'stale') && (
+              <Tooltip text="Queue a JSON conversion job (step 2)" position="left">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={generateJsonMutation.isPending}
+                  icon={<FileText size={12} />}
+                  onClick={() => generateJsonMutation.mutate()}
+                  disabled={isGenerating}
+                >
+                  Convert
+                </Button>
+              </Tooltip>
+            )}
+
+            {feature.testPlanStatus === 'json_ready' && (
+              <Tooltip text="Open the full structured test plan" position="left">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<Eye size={12} />}
+                  onClick={() => navigate({ to: `/qa/scope/${scopeId}/test-plan/${feature.issueKey}` })}
+                >
+                  View Plan
+                </Button>
+              </Tooltip>
+            )}
+          </div>
+        )}
+      </td>
+    </tr>
+  )
+}
+
+// ── User story row (child of feature in tree) ─────────────────────────────────
+
+function UserStoryRow({ story, jiraBaseUrl }: { story: ScopeTreeItem; jiraBaseUrl: string }) {
+  return (
+    <tr className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] bg-[var(--color-page-background)]">
+      {/* Indented issue key with type icon + Jira link */}
+      <td className="px-4 py-2 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1.5 pl-7">
+          <IssueTypeIcon issueType="USERSTORY" size={12} />
+          <JiraIssueLink
+            issueKey={story.issueKey}
+            jiraBaseUrl={jiraBaseUrl}
+            className="font-mono text-xs text-[var(--color-fonts-font-color-brand)]"
+          />
         </div>
       </td>
+
+      {/* Summary */}
+      <td className="px-4 py-2">
+        <p className="text-xs text-[var(--color-fonts-font-color-support)] line-clamp-1">{story.summary}</p>
+      </td>
+
+      {/* Jira status */}
+      <td className="px-4 py-2 whitespace-nowrap">
+        {story.jiraStatus ? (
+          <span className="inline-flex items-center text-xs font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+            {story.jiraStatus}
+          </span>
+        ) : (
+          <span className="text-[var(--color-fonts-font-color-support)]">—</span>
+        )}
+      </td>
+
+      {/* Test plan, Jira TP, last generated, actions — not applicable for stories */}
+      <td className="px-4 py-2" />
+      <td className="px-4 py-2" />
+      <td className="px-4 py-2" />
+      <td className="px-4 py-2" />
     </tr>
   )
 }
@@ -502,6 +623,9 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
   const [sortCol, setSortCol] = useState<SortCol>('key')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
 
+  // ── Tree expand state ─────────────────────────────────────────────────────
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set())
+
   const { data: scope } = useQuery<Scope>({
     queryKey: ['scope', scopeId],
     queryFn: () => api.get(`/scope/${scopeId}`).then((r) => r.data),
@@ -511,20 +635,49 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
   const { data: features = [], isLoading } = useQuery<QaFeatureItem[]>({
     queryKey: ['qa-features', scopeId],
     queryFn: () => api.get(`/qa-scope/${scopeId}/features`).then((r) => r.data),
-    refetchInterval: 15_000,
+    refetchInterval: 10_000,
   })
 
-  const { data: mcpConfig } = useQuery<{ jira?: { baseUrl?: string } }>({
+  const { data: systemConfig } = useQuery({
     queryKey: ['mcp-system-config'],
-    queryFn: () => api.get('/mcp/system-config').then((r) => r.data).catch(() => ({})),
+    queryFn: () => mcpProfilesApi.getSystemConfig(),
     staleTime: 5 * 60_000,
   })
-  const jiraBaseUrl = mcpConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
+  const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
+
+  const { data: treeItems = [] } = useQuery<ScopeTreeItem[]>({
+    queryKey: ['scope-tree', scopeId],
+    queryFn: () => api.get(`/scope/${scopeId}/evaluation/tree`).then((r) => r.data).catch(() => []),
+    staleTime: 30_000,
+  })
+
+  // Map each feature key → its user story items (for tree expand/collapse)
+  const storyMap = useMemo(() => {
+    const map = new Map<string, ScopeTreeItem[]>()
+    treeItems.filter((i) => i.issueType === 'USERSTORY').forEach((story) => {
+      if (story.parentKey) {
+        if (!map.has(story.parentKey)) map.set(story.parentKey, [])
+        map.get(story.parentKey)!.push(story)
+      }
+    })
+    return map
+  }, [treeItems])
+
+
+  const toggleExpand = useCallback((key: string) => {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }, [])
 
   const syncMutation = useMutation({
     mutationFn: () => api.post(`/scope/${scopeId}/sync`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['qa-features', scopeId] })
+      qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
       setToast({ message: 'Sync started.', variant: 'success' })
     },
     onError: () => setToast({ message: 'Sync failed.', variant: 'error' }),
@@ -604,6 +757,32 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
     { value: 'stale',      label: 'Stale',      dotClass: 'bg-[var(--color-tags-font-attention)]' },
   ]
 
+  function handleExport() {
+    const esc = (v: string | number | undefined | null) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
+        : s
+    }
+    const headers = ['Key', 'Type', 'Parent', 'Summary', 'Jira Status', 'Test Plan Status', 'Jira TP', 'Last Generated']
+    const rows: string[] = []
+    filteredSorted.forEach((f) => {
+      rows.push([f.issueKey, 'Feature', '', f.summary, f.jiraStatus ?? '', f.testPlanStatus, f.jiraIssueKey ?? '', f.generatedAt ?? ''].map(esc).join(','))
+      const stories = storyMap.get(f.issueKey) ?? []
+      stories.forEach((s) => {
+        rows.push([s.issueKey, 'Story', f.issueKey, s.summary, s.jiraStatus ?? '', '', '', ''].map(esc).join(','))
+      })
+    })
+    const csv = [headers.join(','), ...rows].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${scope?.name ?? 'qa-scope'}-features.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <main>
       <div className="mb-4">
@@ -663,6 +842,26 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
           <p className="text-sm">Sync this scope from Jira to load features.</p>
         </div>
       ) : (
+        <>
+          {/* Filter bar */}
+          <div className="flex flex-wrap items-center gap-2 mb-3">
+            <div className="relative">
+              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] pointer-events-none" />
+              <Input
+                placeholder="Search features…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-6 w-48"
+              />
+            </div>
+            <FilterSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={statusOptions}
+              placeholder="All statuses"
+            />
+          </div>
+
         <TableCard
           title="Features"
           subtitle={filteredSorted.length !== features.length
@@ -670,21 +869,36 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
             : `${features.length}`}
           toolbar={
             <>
-              <div className="relative">
-                <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] pointer-events-none" />
-                <Input
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-6 w-36"
-                />
-              </div>
-              <FilterSelect
-                value={statusFilter}
-                onChange={setStatusFilter}
-                options={statusOptions}
-                placeholder="All statuses"
-              />
+              <Tooltip text="Expand all features to show their user stories" position="bottom">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<ChevronsDown size={12} />}
+                  onClick={() => setExpandedKeys(new Set(storyMap.keys()))}
+                >
+                  Expand All
+                </Button>
+              </Tooltip>
+              <Tooltip text="Collapse all features" position="bottom">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<ChevronsUp size={12} />}
+                  onClick={() => setExpandedKeys(new Set())}
+                >
+                  Collapse All
+                </Button>
+              </Tooltip>
+              <Tooltip text="Export visible rows to CSV" position="bottom">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  icon={<Download size={12} />}
+                  onClick={handleExport}
+                >
+                  Export
+                </Button>
+              </Tooltip>
             </>
           }
           maxHeight="auto"
@@ -693,7 +907,7 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
             <thead>
               <tr className="bg-[var(--color-tables-table-header-background)] border-b border-[var(--color-tables-table-header-stroke)]">
                 <SortableHeader
-                  col="key" label="Key"
+                  col="key" label="Issue"
                   tooltip="Jira issue key — click to sort"
                   currentCol={sortCol} currentDir={sortDir} onSort={handleSort}
                 />
@@ -737,21 +951,41 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
                   </td>
                 </tr>
               ) : (
-                filteredSorted.map((feature) => (
-                  <FeatureRow
-                    key={feature.issueKey}
-                    feature={feature}
-                    scopeId={scopeId}
-                    jiraBaseUrl={jiraBaseUrl}
-                    onViewAnalysis={handleViewAnalysis}
-                    onEditAnalysis={handleEditAnalysis}
-                    onToast={setToast}
-                  />
-                ))
+                filteredSorted.flatMap((feature) => {
+                  const stories = storyMap.get(feature.issueKey) ?? []
+                  const isExpanded = expandedKeys.has(feature.issueKey)
+                  const rows = [
+                    <FeatureRow
+                      key={feature.issueKey}
+                      feature={feature}
+                      scopeId={scopeId}
+                      jiraBaseUrl={jiraBaseUrl}
+                      expanded={isExpanded}
+                      hasStories={stories.length > 0}
+                      onToggle={() => toggleExpand(feature.issueKey)}
+                      onViewAnalysis={handleViewAnalysis}
+                      onEditAnalysis={handleEditAnalysis}
+                      onToast={setToast}
+                    />,
+                  ]
+                  if (isExpanded) {
+                    stories.forEach((story) => {
+                      rows.push(
+                        <UserStoryRow
+                          key={story.issueKey}
+                          story={story}
+                          jiraBaseUrl={jiraBaseUrl}
+                        />
+                      )
+                    })
+                  }
+                  return rows
+                })
               )}
             </tbody>
           </table>
         </TableCard>
+        </>
       )}
 
       {/* Analysis view drawer (read-only) */}
@@ -777,7 +1011,7 @@ export default function QAScopeDetail({ scopeId }: QAScopeDetailProps) {
         />
       )}
 
-      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
+      {toast && <Toast message={toast.message} variant={toast.variant} action={toast.action} onClose={() => setToast(null)} />}
     </main>
   )
 }
