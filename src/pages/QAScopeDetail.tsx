@@ -121,7 +121,7 @@ function AnalysisViewDrawer({
       <div className="flex-1 bg-black/30" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="w-full max-w-2xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
+      <div className="w-full max-w-4xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
           <div className="min-w-0">
@@ -235,7 +235,7 @@ function AnalysisEditDrawer({
       <div className="flex-1 bg-black/30" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="w-full max-w-2xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
+      <div className="w-full max-w-4xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
           <div className="min-w-0">

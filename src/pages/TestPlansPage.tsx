@@ -93,11 +93,12 @@ function PlanCard({
   onView: (plan: QaTestPlanSummary) => void
 }) {
   const hasKpis = plan.kpiBehaviourTcCount != null || plan.kpiCapabilityTcCount != null
+  const canView = plan.testPlanStatus === 'json_ready'
 
   return (
     <div
-      className="group rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] p-5 flex flex-col gap-3 transition-shadow hover:shadow-[var(--shadow-card-hover)] cursor-pointer"
-      onClick={() => plan.testPlanStatus === 'json_ready' && onView(plan)}
+      className={`group rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] p-5 flex flex-col gap-3 transition-shadow ${canView ? 'hover:shadow-[var(--shadow-card-hover)] cursor-pointer' : 'cursor-default'}`}
+      onClick={() => canView && onView(plan)}
     >
       {/* ── Top row ── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -105,7 +106,7 @@ function PlanCard({
           <JiraIssueLink
             issueKey={plan.issueKey}
             jiraBaseUrl={jiraBaseUrl}
-            className="font-mono text-sm font-bold text-[var(--color-fonts-font-color-brand)] group-hover:underline"
+            className={`font-mono text-sm font-bold text-[var(--color-fonts-font-color-brand)] ${canView ? 'group-hover:underline' : ''}`}
           />
           <TestPlanStatusBadge status={plan.testPlanStatus} analysisEdited={plan.analysisEdited} />
           <ReadinessPill value={plan.kpiReadiness} />
@@ -117,16 +118,15 @@ function PlanCard({
             <Clock size={11} />
             {fmtDate(plan.generatedAt)}
           </div>
-          {plan.testPlanStatus === 'json_ready' && (
-            <Tooltip text="View test plan" position="left">
-              <button
-                onClick={(e) => { e.stopPropagation(); onView(plan) }}
-                className="p-1 rounded text-[var(--color-fonts-font-color-brand)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
-              >
-                <ArrowUpRight size={15} />
-              </button>
-            </Tooltip>
-          )}
+          <Tooltip text={canView ? 'Open test plan' : 'Test plan not yet converted'} position="left">
+            <button
+              onClick={(e) => { e.stopPropagation(); if (canView) onView(plan) }}
+              disabled={!canView}
+              className="p-1 rounded text-[var(--color-fonts-font-color-brand)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <ArrowUpRight size={15} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 

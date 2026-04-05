@@ -717,7 +717,15 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
 
   const { data: record, isLoading, isError } = useQuery<QaTestPlanRecord>({
     queryKey: ['qa-test-plan', scopeId, issueKey],
-    queryFn: () => api.get(`/qa-scope/${scopeId}/features/${issueKey}/test-plan`).then((r) => r.data),
+    queryFn: () => {
+      // When opened from the global test-plans list there is no scopeId; use the
+      // by-key endpoint directly. The scope-aware endpoint is used when navigating
+      // from a QA scope detail page (adds the isStale field).
+      const url = scopeId
+        ? `/qa-scope/${scopeId}/features/${issueKey}/test-plan`
+        : `/qa/test-plans/by-key/${issueKey}`
+      return api.get(url).then((r) => r.data)
+    },
     staleTime: 60_000,
   })
 
