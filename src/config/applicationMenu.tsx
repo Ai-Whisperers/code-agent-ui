@@ -136,10 +136,7 @@ export function ApplicationMenuItems(
       label: 'Insights',
       type: 'parent',
       icon: <Telescope size={18} />,
-      isActive:
-        currentPath.startsWith('/metrics') ||
-        currentPath.startsWith('/stats') ||
-        currentPath === '/qa-readiness',
+      isActive: currentPath.startsWith('/metrics') || currentPath.startsWith('/stats'),
       children: [
         // ── Code quality ──────────────────────────────────────────────────────
         {
@@ -169,16 +166,6 @@ export function ApplicationMenuItems(
           type: 'item',
           requiredPermission: 'VIEW_SCOPE',
           onClick: () => go('/metrics/scope'),
-        },
-        {
-          id: 'qa-readiness',
-          label: 'QA Readiness',
-          icon: <FlaskConical size={16} />,
-          path: '/qa-readiness',
-          isActive: currentPath === '/qa-readiness',
-          type: 'item',
-          requiredPermission: 'VIEW_SCOPE',
-          onClick: () => go('/qa-readiness'),
         },
         // ── Delivery ──────────────────────────────────────────────────────────
         {
@@ -265,6 +252,34 @@ export function ApplicationMenuItems(
           isActive: currentPath === '/log-analysis',
           type: 'item',
           onClick: () => go('/log-analysis'),
+        },
+      ],
+    },
+    {
+      id: 'qa-section',
+      label: 'QA',
+      type: 'parent',
+      icon: <FlaskConical size={18} />,
+      isActive: currentPath.startsWith('/qa/'),
+      requiredPermission: 'VIEW_SCOPE',
+      children: [
+        {
+          id: 'qa-scopes',
+          label: 'QA Scopes',
+          icon: <Target size={16} />,
+          path: '/qa/scope',
+          isActive: currentPath.startsWith('/qa/scope'),
+          type: 'item',
+          onClick: () => go('/qa/scope'),
+        },
+        {
+          id: 'qa-test-plans',
+          label: 'Test Plans',
+          icon: <ClipboardList size={16} />,
+          path: '/qa/test-plans',
+          isActive: currentPath.startsWith('/qa/test-plans'),
+          type: 'item',
+          onClick: () => go('/qa/test-plans'),
         },
       ],
     },

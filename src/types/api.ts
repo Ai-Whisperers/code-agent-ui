@@ -1091,6 +1091,8 @@ export interface Scope {
   featureIssuetype: string
   userstoryIssuetype: string
   createdAt: string
+  /** {@code "po"} for product/roadmap scopes, {@code "qa"} for QA test-plan scopes. */
+  scopeType: 'po' | 'qa'
 }
 
 /** A single row in the live preview table returned by GET /scope/preview-labels */
@@ -1381,4 +1383,305 @@ export interface CoverageTrendResponse {
   branch: string
   periodDays: number
   trend: CoverageTrendPoint[]
+}
+
+// ── QA Test Plans ─────────────────────────────────────────────────────────────
+
+export type TestPlanStatus = 'none' | 'analysis' | 'json_ready' | 'stale'
+
+/**
+ * Lightweight summary row returned by GET /qa/test-plans (global list, no analysisText / planJson).
+ * The issueKey is the Jira feature key; featureOverview is extracted from the stored plan JSON
+ * and may be absent for plans that only have an analysis (not yet formatted to JSON).
+ */
+export interface QaTestPlanSummary {
+  id: string
+  issueKey: string
+  generatedAt?: string
+  generatedBy?: string
+  analysisEdited: boolean
+  testPlanStatus: TestPlanStatus
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiCoveragePct?: number
+  kpiHighRisks?: number
+  kpiGapsCount?: number
+  kpiReadiness?: string
+  kpiRegenCount: number
+  kpiAnalysisEditCount: number
+  kpiDriftDetectedAt?: string
+}
+
+/** One row in the QA feature list — returned by GET /qa-scope/:scopeId/features */
+export interface QaFeatureItem {
+  issueKey: string
+  summary: string
+  jiraStatus?: string
+  childStoryCount: number
+  testPlanStatus: TestPlanStatus
+  generatedAt?: string
+  analysisEdited?: boolean
+  /** Jira test plan ticket key linked via "is tested by" relationship (e.g. "QA-42"). */
+  jiraIssueKey?: string
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiReadiness?: string
+}
+
+/** Full test plan record — returned by GET /qa-scope/:scopeId/features/:issueKey/test-plan */
+export interface QaTestPlanRecord {
+  id: string
+  issueKey: string
+  analysisText?: string
+  analysisEdited: boolean
+  planJson?: FeatureTestPlan
+  generatedAt: string
+  generatedBy?: string
+  testPlanStatus: TestPlanStatus
+  isStale: boolean
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiCoveragePct?: number
+  kpiHighRisks?: number
+  kpiGapsCount?: number
+  kpiReadiness?: string
+  kpiSpecHash?: string
+  kpiDriftDetectedAt?: string
+  kpiRegenCount: number
+  kpiAnalysisEditCount: number
+  jiraIssueKey?: string
+  xraySyncStatus?: XraySyncStatus
+  xraySyncedAt?: string
+}
+
+export type XraySyncStatus = 'pending' | 'synced' | 'error'
+export type AutomationStatus = 'manual' | 'automated' | 'in_progress'
+
+export interface QaTestCase {
+  id: string
+  planId: string
+  featureKey: string
+  storyKey: string
+  testCaseId: string
+  title: string
+  description?: string
+  preConditions: string[]
+  testSteps: string[]
+  expectedResults: string[]
+  testCaseType: 'Behaviour' | 'Capability' | string
+  priority: string
+  status: string
+  estimatedDuration?: string
+  kpiStepCount?: number
+  kpiEstimatedMins?: number
+  kpiPreconditionCount?: number
+  kpiExecutionCount: number
+  kpiLastResult?: string
+  kpiLastExecutedAt?: string
+  kpiAutomationStatus: AutomationStatus
+  jiraIssueKey?: string
+  xraySyncStatus: XraySyncStatus
+  xraySyncedAt?: string
+  generatedAt: string
+}
+
+// ── featureTestPlan JSON schema (mirrors argus TestPlanData) ──────────────────
+
+export interface StoryRef {
+  storyId: string
+  summary: string
+  status: string
+  priority: string
+}
+
+export interface CapabilityArea {
+  capabilityAreaId: string
+  name: string
+  description: string
+  relatedStories: string[]
+}
+
+export interface Behaviour {
+  behaviourId: string
+  description: string
+  source: string
+}
+
+export interface StoryBehaviour {
+  storyId: string
+  summary: string
+  behaviours: Behaviour[]
+  businessRules: string[]
+}
+
+export interface Risk {
+  riskId: string
+  description: string
+  likelihood: string
+  impact: string
+  riskLevel: string
+  impactedBehaviours: string[]
+  impactedCapabilities: string[]
+  mitigation: string
+}
+
+export interface TestCondition {
+  testConditionId: string
+  behaviourId?: string
+  description: string
+  type: string
+  priority: string
+  riskLink: string
+  relatedStories?: string[]
+  flowType?: string
+}
+
+export interface ConditionGroup {
+  storyId?: string
+  storySummary?: string
+  capabilityArea?: string
+  conditions: TestCondition[]
+}
+
+export interface TraceRow {
+  featureId: string
+  capabilityArea: string
+  storyId: string
+  behaviourId: string
+  testConditionIds: string[]
+  riskIds: string[]
+  coverageStatus: string
+}
+
+export interface ACCoverage {
+  featureAC: string
+  coveredBy: string[]
+  status: string
+}
+
+export interface StoryCoverage {
+  storyId: string
+  behavioursCovered: string
+  testConditions: number
+  status: string
+}
+
+export interface RiskCoverage {
+  riskId: string
+  riskLevel: string
+  coveredByBehaviourTests?: string[]
+  coveredByCapabilityTests?: string[]
+  status: string
+}
+
+export interface Gap {
+  gapId: string
+  description: string
+  severity: string
+  recommendation: string
+}
+
+export interface Clarification {
+  clarificationId: string
+  priority: string
+  relatedTo: string
+  question: string
+  impact: string
+  status: string
+}
+
+export interface ReadinessItem {
+  storyId: string
+  ready: boolean
+  notes: string
+}
+
+export interface FeatureTestPlan {
+  metadata: {
+    documentTitle: string
+    version: string
+    createdDate: string
+    createdBy: string
+    featureId: string
+    featureStatus: string
+    project: string
+    methodology: string
+  }
+  section01_executiveSummary: {
+    title: string
+    featureOverview: string
+    scope?: string
+    businessCriticality?: string
+    childStories?: StoryRef[]
+    testApproach: string
+    totalBehaviourTestConditions: number
+    totalCapabilityTestConditions: number
+    totalRisksIdentified: number
+    criticalClarificationsNeeded: number
+  }
+  section02_featureCapabilityBreakdown: {
+    title: string
+    featureId: string
+    featureName: string
+    businessOutcome: string
+    capabilityAreas: CapabilityArea[]
+  }
+  section03_storyBehaviourBreakdown: {
+    title: string
+    stories: StoryBehaviour[]
+  }
+  section04_riskAssessment: {
+    title: string
+    risks: Risk[]
+  }
+  section05_behaviourTestConditions: {
+    title: string
+    testConditions: ConditionGroup[]
+  }
+  section06_capabilityTestConditions: {
+    title: string
+    featureId: string
+    testConditions: ConditionGroup[]
+  }
+  section07_traceabilityMatrix: {
+    title: string
+    matrix: TraceRow[]
+  }
+  section08_coverageAnalysis: {
+    title: string
+    featureAcceptanceCriteriaCoverage: ACCoverage[]
+    storyCoverageStatus: StoryCoverage[]
+    riskCoverageStatus: RiskCoverage[]
+    gaps: Gap[]
+  }
+  section10_entryExitCriteria: {
+    title: string
+    entryCriteria: { behaviourTesting: string[]; capabilityTesting: string[] }
+    exitCriteria: { behaviourTesting: string[]; capabilityTesting: string[]; featureQualityGate: string[] }
+  }
+  section13_readinessForTestCaseDesign: {
+    title: string
+    readinessAssessment: {
+      overallReadiness: string
+      readyForTestCaseDesign: ReadinessItem[]
+      blockers: string[]
+    }
+  }
+  section14_clarificationsNeeded: {
+    title: string
+    clarifications: Clarification[]
+  }
+  preGenerationValidation: {
+    title: string
+    validationChecklist: { item: string; status: string }[]
+  }
 }

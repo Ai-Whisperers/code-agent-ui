@@ -42,7 +42,11 @@ import TeamsPage from '@/pages/Teams'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
 import ScopeImprove from '@/pages/ScopeImprove'
-import { QaReadinessPage } from '@/pages/QaReadiness'
+import QAScopesPage from '@/pages/QAScopes'
+import QAScopeDetail from '@/pages/QAScopeDetail'
+import TestPlanDetail from '@/pages/TestPlanDetail'
+import TestPlansPage from '@/pages/TestPlansPage'
+import TestCasesPage from '@/pages/TestCasesPage'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
 import SecurityIssuesPage from '@/pages/SecurityIssuesPage'
 import PullRequestsPage from '@/pages/PullRequests'
@@ -354,11 +358,59 @@ const scopeImproveRoute = createRoute({
   },
 })
 
-const qaReadinessRoute = createRoute({
+const qaScopesRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/qa-readiness',
+  path: '/qa/scope',
   beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
-  component: QaReadinessPage,
+  component: QAScopesPage,
+})
+
+const qaScopeDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/scope/$id',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QAScopeDetailRoute() {
+    const { id } = qaScopeDetailRoute.useParams()
+    return <QAScopeDetail scopeId={id} />
+  },
+})
+
+const qaTestPlanDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/scope/$id/test-plan/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestPlanDetailRoute() {
+    const { id, issueKey } = qaTestPlanDetailRoute.useParams()
+    return <TestPlanDetail scopeId={id} issueKey={issueKey} />
+  },
+})
+
+const qaTestPlansRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-plans',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: TestPlansPage,
+})
+
+const qaTestPlanGlobalDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-plans/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestPlanGlobalDetailRoute() {
+    const { issueKey } = qaTestPlanGlobalDetailRoute.useParams()
+    // scopeId is not needed for display-only — pass empty string; the page only reads planJson
+    return <TestPlanDetail scopeId="" issueKey={issueKey} />
+  },
+})
+
+const qaTestCasesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-cases/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestCasesRoute() {
+    const { issueKey } = qaTestCasesRoute.useParams()
+    return <TestCasesPage issueKey={issueKey} />
+  },
 })
 
 const soc2AuditRoute = createRoute({
@@ -447,7 +499,12 @@ const routeTree = rootRoute.addChildren([
     scopesRoute,
     scopeDetailRoute,
     scopeImproveRoute,
-    qaReadinessRoute,
+    qaScopesRoute,
+    qaScopeDetailRoute,
+    qaTestPlanDetailRoute,
+    qaTestPlansRoute,
+    qaTestPlanGlobalDetailRoute,
+    qaTestCasesRoute,
     soc2AuditRoute,
     securityIssuesRoute,
     architectureRoute,

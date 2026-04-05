@@ -1,76 +1,40 @@
-import type React from 'react'
 import { ChevronRight } from 'lucide-react'
-import { Tooltip } from './Tooltip'
+import { useNavigate } from '@tanstack/react-router'
 
 export interface BreadcrumbItem {
-  /** Primary text label (e.g. issue key) */
   label: string
-  /** Optional badge displayed before the label. When className is empty the node is rendered unwrapped. */
-  badge?: {
-    text: React.ReactNode
-    className: string
-  }
-  /** Tooltip text shown on hover (bottom position) */
-  tooltip?: string
-  /** When provided the item becomes a link */
-  href?: string
+  to?: string
 }
 
 interface BreadcrumbProps {
   items: BreadcrumbItem[]
-  className?: string
 }
 
-function BreadcrumbNode({ item }: { item: BreadcrumbItem }) {
-  const inner = (
-    <span className="flex items-center gap-1 text-[10px]">
-      {item.badge && (
-        item.badge.className ? (
-          <span className={`inline-flex items-center font-medium px-1 py-0 rounded-[var(--border-radius-tag)] text-[9px] ${item.badge.className}`}>
-            {item.badge.text}
-          </span>
-        ) : (
-          <span className="inline-flex items-center">{item.badge.text}</span>
-        )
-      )}
-      <span className="font-mono text-[var(--color-fonts-font-color-brand)]">{item.label}</span>
-    </span>
-  )
-
-  const linked = item.href ? (
-    <a
-      href={item.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(e) => e.stopPropagation()}
-      className="hover:opacity-75 transition-opacity"
-    >
-      {inner}
-    </a>
-  ) : inner
-
-  return item.tooltip ? (
-    <Tooltip text={item.tooltip} position="bottom">
-      {linked}
-    </Tooltip>
-  ) : linked
-}
-
-export function Breadcrumb({ items, className = '' }: BreadcrumbProps) {
-  if (items.length === 0) return null
+export function Breadcrumb({ items }: BreadcrumbProps) {
+  const navigate = useNavigate()
 
   return (
-    <div className={`flex items-center gap-1 flex-nowrap overflow-hidden ${className}`}>
-      {items.map((item, i) => (
-        <span key={`${item.label}-${i}`} className="flex items-center gap-1 min-w-0">
-          {i > 0 && (
-            <ChevronRight size={10} className="shrink-0 text-[var(--color-fonts-font-color-support)] opacity-50" />
-          )}
-          <span className="shrink-0">
-            <BreadcrumbNode item={item} />
+    <nav className="flex items-center gap-1 text-xs text-[var(--color-fonts-font-color-support)]">
+      {items.map((item, i) => {
+        const isLast = i === items.length - 1
+        return (
+          <span key={i} className="flex items-center gap-1">
+            {i > 0 && <ChevronRight size={12} className="opacity-40 shrink-0" />}
+            {item.to && !isLast ? (
+              <button
+                onClick={() => navigate({ to: item.to! })}
+                className="hover:text-[var(--color-fonts-font-color-primary)] hover:underline underline-offset-2 transition-colors"
+              >
+                {item.label}
+              </button>
+            ) : (
+              <span className={isLast ? 'text-[var(--color-fonts-font-color-primary)] font-medium' : ''}>
+                {item.label}
+              </span>
+            )}
           </span>
-        </span>
-      ))}
-    </div>
+        )
+      })}
+    </nav>
   )
 }
