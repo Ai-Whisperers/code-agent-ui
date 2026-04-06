@@ -3,12 +3,24 @@ import { AlertTriangle } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
 
-// Initialize mermaid once at module level
+// Initialize mermaid once at module level.
+//
+// htmlLabels defaults to true in Mermaid, which causes node labels to be rendered
+// inside <foreignObject> HTML elements. DOMPurify's SVG profile strips the HTML
+// content inside <foreignObject> (div, span, p …) because those tags are not valid
+// SVG — producing empty boxes with no text while leaving the shapes intact.
+// Sequence diagrams were unaffected because they use plain SVG <text> elements.
+//
+// Setting htmlLabels: false for every diagram type that supports it forces Mermaid
+// to use SVG <text>/<tspan> elements for all labels, which DOMPurify preserves.
 mermaid.initialize({
   startOnLoad: false,
   theme: 'neutral',
-  securityLevel: 'antiscript',
+  securityLevel: 'strict',
   suppressErrorRendering: true,
+  flowchart: { htmlLabels: false },
+  classDiagram: { htmlLabels: false },
+  stateDiagram: { htmlLabels: false },
 } as Parameters<typeof mermaid.initialize>[0])
 
 export function MermaidDiagram({ code }: { code: string }) {

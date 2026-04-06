@@ -485,7 +485,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 </Button>
               </Tooltip>
             )}
-            {job?.status === 'FAILED' && job?.hasCheckpoint && (
+            {(job?.status === 'FAILED' || job?.status === 'CANCELLED') && job?.hasCheckpoint && (
               <Tooltip text="Resume from last checkpoint">
                 <Button
                   variant="ghost"
