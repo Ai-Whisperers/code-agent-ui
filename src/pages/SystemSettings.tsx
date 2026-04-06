@@ -310,6 +310,13 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'generate-tests.job-timeout-minutes', label: 'Generate Tests: Timeout (minutes)', description: 'Total wall-clock timeout for a test-generation job', defaultValue: '60', inputType: 'number', min: 1 },
       { key: 'generate-docs.max-loop-iterations', label: 'Generate Docs: Max Iterations', description: 'Maximum agent loop cycles for a documentation-generation job', defaultValue: '200', inputType: 'number', min: 1 },
       { key: 'build.java-home', label: 'Java Home', description: 'Path to the JDK installation used for building, linting (PMD/SpotBugs), and validation. Leave blank to use the JVM that runs the agent.' },
+      {
+        key: 'run-fix.shell-static-analysis-enabled',
+        label: 'Shell Static Analysis',
+        description: 'Block dangerous shell patterns (eval, curl|bash, rm -rf /, IFS injection, process substitution, backtick substitution, etc.) even when the command prefix is on the allowlist. Disable only in fully sandboxed environments where the allowlist alone is sufficient.',
+        defaultValue: 'true',
+        inputType: 'boolean',
+      },
       { key: 'run-fix.self-review.enabled', label: 'Self-Review', description: 'Agent self-reviews its own changes before submitting', defaultValue: 'true', inputType: 'boolean' },
       { key: 'run-fix.self-review.max-iterations', label: 'Self-Review Max Iterations', description: 'Maximum self-review loop cycles', defaultValue: '15', inputType: 'number', min: 1 },
       { key: 'run-fix.self-review.max-diff-chars', label: 'Self-Review Max Diff Chars', description: 'Maximum diff size sent to self-review (characters)', defaultValue: '30000', inputType: 'number', min: 1000, step: 1000 },
