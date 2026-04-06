@@ -316,6 +316,11 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'tools.fetch-url.enabled', label: 'Fetch URL Tool', description: 'Allow the agent to fetch external documentation URLs', defaultValue: 'true', inputType: 'boolean' },
       { key: 'tools.fetch-url.timeout-seconds', label: 'Fetch URL Timeout (seconds)', description: 'Timeout for external URL fetches', defaultValue: '15', inputType: 'number', min: 1 },
       { key: 'tools.fetch-url.allowed-domains', label: 'Fetch URL Allowed Domains', description: 'Optional strict allowlist. Blank (default) = allow all public HTTPS. Reserved internal TLDs (.local, .internal, .corp, etc.) and private IPs are always blocked regardless of this setting.', defaultValue: '', inputType: 'textarea' },
+      { key: 'agent.context.window-size', label: 'Context Window Size (tokens)', description: 'Total token capacity of the model context window. Used with the threshold percentage to decide when to trigger context compaction.', defaultValue: '200000', inputType: 'number', min: 10000, step: 10000 },
+      { key: 'agent.context.compaction-threshold-pct', label: 'Compaction Threshold (%)', description: 'Fraction of the context window at which compaction is triggered (e.g. 0.75 = 75%). Compaction fires when input tokens ≥ floor(window-size × pct) − max-tokens.', defaultValue: '0.75', inputType: 'number', min: 0.1, max: 1.0, step: 0.05 },
+      { key: 'agent.tool-summary.enabled', label: 'Tool-Result Summarization', description: 'Replace large, old tool-result blocks with compact one-liners to reduce input-token counts on subsequent API calls. Results within the grace window are always kept verbatim.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'agent.tool-summary.grace-turns', label: 'Tool-Result Grace Turns', description: 'Number of recent turns whose tool results are never summarized. Older results are eligible for summarization.', defaultValue: '3', inputType: 'number', min: 1 },
+      { key: 'agent.tool-summary.threshold-chars', label: 'Tool-Result Summary Threshold (chars)', description: 'Minimum character length a tool result must exceed before it is eligible for summarization. Results shorter than this are always kept verbatim.', defaultValue: '2000', inputType: 'number', min: 100, step: 100 },
     ],
   },
   {
