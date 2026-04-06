@@ -20,8 +20,14 @@ import { patchStreamingContent, DIAGRAM_LOADING_PLACEHOLDER } from './streamingU
  * next RAF update will contain valid content and MermaidDiagram / ChartBlock
  * render normally.
  */
-export function StreamingMarkdownMessage({ content }: { content: string }) {
-  const safeContent = useMemo(() => patchStreamingContent(content), [content])
+export function StreamingMarkdownMessage({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const safeContent = useMemo(() => {
+    const patched = patchStreamingContent(content)
+    // Append a block cursor while tokens are arriving so the eye has a stable
+    // focal point. This makes the irregular token cadence feel intentional
+    // rather than jarring.
+    return isStreaming ? patched + ' ▍' : patched
+  }, [content, isStreaming])
 
   const components = useMemo(() => ({
     ...markdownComponents,

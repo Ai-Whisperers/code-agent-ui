@@ -33,10 +33,18 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
   const inputBarRef = useRef<ChatInputHandle>(null)
   const hasGreeted = useRef(false)
 
-  // Scroll to bottom on new messages
+  // Smooth scroll when a complete message is added
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, streamingContent])
+  }, [messages])
+
+  // Instant scroll while tokens arrive — smooth scroll at token frequency
+  // creates competing animations that feel choppy
+  useEffect(() => {
+    if (isStreaming && streamingContent) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+  }, [streamingContent, isStreaming])
 
   // Close on Escape
   useEffect(() => {
@@ -290,7 +298,7 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
                   <ThinkingPanel steps={streamingThinkingSteps} isLive />
                 )}
                 {streamingContent ? (
-                  <StreamingMarkdownMessage content={streamingContent} />
+                  <StreamingMarkdownMessage content={streamingContent} isStreaming={true} />
                 ) : (
                   <div className="flex items-center gap-1.5">
                     <Loader2 size={13} className="animate-spin text-[var(--color-fonts-font-color-support)]" />

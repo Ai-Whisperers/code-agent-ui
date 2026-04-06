@@ -280,7 +280,6 @@ export default function Chat() {
             let event: ChatEvent
             try {
               event = JSON.parse(raw)
-              console.log('🔍 Parsed SSE event:', event.type, event)
             } catch (parseError) {
               console.error('❌ Failed to parse SSE event:', raw, parseError)
               continue
@@ -977,7 +976,7 @@ export default function Chat() {
                     <ThinkingPanel steps={streamingThinkingSteps} isLive={true} />
                   )}
                   {streamingContent ? (
-                    <StreamingMarkdownMessage content={streamingContent} />
+                    <StreamingMarkdownMessage content={streamingContent} isStreaming={true} />
                   ) : streamingThinkingSteps.length === 0 ? (
                     <div className="flex items-center gap-1.5 py-1 text-[var(--color-fonts-font-color-support)] opacity-60">
                       <span className="text-sm">Thinking</span>

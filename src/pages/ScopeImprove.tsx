@@ -507,10 +507,20 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingContentRef = useRef('')
+  const streamingRafRef = useRef<number | null>(null)
 
+  // Smooth scroll when a complete message is added/removed
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages, streamingContent])
+  }, [chatMessages])
+
+  // Instant scroll while tokens arrive — smooth scroll at token frequency creates
+  // competing animations that cause the jarring "rubber-band" choppiness
+  useEffect(() => {
+    if (isStreaming && streamingContent) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
+    }
+  }, [streamingContent, isStreaming])
 
   const sendMessage = useCallback(
     async (
@@ -527,6 +537,10 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
       setStreamingContent('')
       setStreamingThinkingSteps([])
       streamingContentRef.current = ''
+      if (streamingRafRef.current) {
+        cancelAnimationFrame(streamingRafRef.current)
+        streamingRafRef.current = null
+      }
 
       const proposalIds = tabs.map((t) => t.proposal?.id).filter(Boolean) as string[]
       // Use the active tab's key so the backend receives the correct issue type for the prompt.
@@ -588,7 +602,12 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
               case 'text':
                 accContent += (event.text as string) ?? ''
                 streamingContentRef.current = accContent
-                setStreamingContent(accContent)
+                if (!streamingRafRef.current) {
+                  streamingRafRef.current = requestAnimationFrame(() => {
+                    setStreamingContent(streamingContentRef.current)
+                    streamingRafRef.current = null
+                  })
+                }
                 break
               case 'thinking': {
                 const last = accThinking[accThinking.length - 1]
@@ -643,11 +662,20 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           }
           setChatMessages((prev) => [...prev, assistantMsg])
         }
+        // Cancel any pending RAF and flush the final accumulated content
+        if (streamingRafRef.current) {
+          cancelAnimationFrame(streamingRafRef.current)
+          streamingRafRef.current = null
+        }
         setStreamingContent('')
         setStreamingThinkingSteps([])
       } catch (err: unknown) {
         if ((err as Error)?.name !== 'AbortError') {
           console.error('ScopeImprove chat error:', err)
+        }
+        if (streamingRafRef.current) {
+          cancelAnimationFrame(streamingRafRef.current)
+          streamingRafRef.current = null
         }
         setStreamingContent('')
         setStreamingThinkingSteps([])
@@ -1051,7 +1079,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
                     <ThinkingPanel steps={streamingThinkingSteps} isLive={true} />
                   )}
                   {streamingContent ? (
-                    <StreamingMarkdownMessage content={streamingContent} />
+                    <StreamingMarkdownMessage content={streamingContent} isStreaming={true} />
                   ) : (
                     streamingThinkingSteps.length === 0 && (
                       <span className="text-[var(--color-fonts-font-color-support)] text-sm italic">
