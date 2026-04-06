@@ -246,7 +246,7 @@ function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: bool
 
   const restartMutation = useMutation({
     mutationFn: (additionalIterations: number) =>
-      api.post(`/jobs/${job.jobId}/restart`, { additionalIterations }),
+      api.post(`/jobs/${job.jobId}/restart`, { additionalIterations }).then(res => res.data),
     onSuccess: (data: { jobId: string }) => {
       qc.invalidateQueries({ queryKey: ['jobs'] })
       setShowRestartDialog(false)

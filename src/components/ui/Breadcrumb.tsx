@@ -12,13 +12,14 @@ export interface BreadcrumbItem {
 
 interface BreadcrumbProps {
   items: BreadcrumbItem[]
+  className?: string
 }
 
-export function Breadcrumb({ items }: BreadcrumbProps) {
+export function Breadcrumb({ items, className }: BreadcrumbProps) {
   const navigate = useNavigate()
 
   return (
-    <nav className="flex items-center gap-1 text-xs text-[var(--color-fonts-font-color-support)]">
+    <nav className={`flex items-center gap-1 text-xs text-[var(--color-fonts-font-color-support)]${className ? ` ${className}` : ''}`}>
       {items.map((item, i) => {
         const isLast = i === items.length - 1
 

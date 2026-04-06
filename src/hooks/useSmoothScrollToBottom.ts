@@ -27,7 +27,7 @@ const LERP = 0.25
 const STOP_THRESHOLD = 0.5 // px — below this the loop terminates
 
 export function useSmoothScrollToBottom(
-  containerRef: React.RefObject<HTMLDivElement>,
+  containerRef: React.RefObject<HTMLDivElement | null>,
 ) {
   const rafRef = useRef<number | null>(null)
 

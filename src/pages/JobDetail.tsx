@@ -289,7 +289,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
   const [showRestartDialog, setShowRestartDialog] = useState(false)
   const restartMutation = useMutation({
     mutationFn: (additionalIterations: number) =>
-      api.post(`/jobs/${jobId}/restart`, { additionalIterations }),
+      api.post(`/jobs/${jobId}/restart`, { additionalIterations }).then(res => res.data),
     onSuccess: (data: { jobId: string }) => {
       qc.invalidateQueries({ queryKey: ['jobs'] })
       setShowRestartDialog(false)

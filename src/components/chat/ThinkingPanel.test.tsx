@@ -619,7 +619,7 @@ describe('ThinkingPanel', () => {
     })
 
     it('cleans up timer on unmount', () => {
-      const spy = vi.spyOn(global, 'clearInterval')
+      const spy = vi.spyOn(globalThis, 'clearInterval')
       
       const steps = [createToolStep('search', 'running')]
       const { unmount } = render(<ThinkingPanel steps={steps} isLive={true} />)

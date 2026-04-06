@@ -3,7 +3,6 @@ import {
   loadMessagesFromStorage, 
   groupConversations, 
   CONV_LS_KEY,
-  type ConvGroup 
 } from './conversationUtils'
 import type { ChatMessage, ConversationSummary } from '@/types/api'
 
@@ -249,6 +248,7 @@ describe('conversationUtils', () => {
       title,
       updatedAt,
       createdAt: updatedAt,
+      messageCount: 0,
     })
 
     it('should return empty array for empty input', () => {
@@ -434,6 +434,7 @@ describe('conversationUtils', () => {
         title: 'Test conv',
         updatedAt: '2024-01-15T09:00:00Z',
         createdAt: '2024-01-15T09:00:00Z',
+        messageCount: 0,
         productId: 'test-product'
       }
       
@@ -496,25 +497,29 @@ describe('conversationUtils', () => {
           conversationId: '1',
           title: 'Debug API issue',
           updatedAt: '2024-01-15T09:30:00Z', // Today
-          createdAt: '2024-01-15T08:00:00Z'
+          createdAt: '2024-01-15T08:00:00Z',
+          messageCount: 0,
         },
         {
           conversationId: '2', 
           title: 'React component help',
           updatedAt: '2024-01-14T16:20:00Z', // Yesterday
-          createdAt: '2024-01-14T10:00:00Z'
+          createdAt: '2024-01-14T10:00:00Z',
+          messageCount: 0,
         },
         {
           conversationId: '3',
           title: 'Database optimization',
           updatedAt: '2024-01-10T11:00:00Z', // 5 days ago
-          createdAt: '2024-01-10T09:00:00Z'
+          createdAt: '2024-01-10T09:00:00Z',
+          messageCount: 0,
         },
         {
           conversationId: '4',
           title: 'Old project discussion', 
           updatedAt: '2023-12-20T14:30:00Z', // Last month
-          createdAt: '2023-12-20T10:00:00Z'
+          createdAt: '2023-12-20T10:00:00Z',
+          messageCount: 0,
         }
       ]
       

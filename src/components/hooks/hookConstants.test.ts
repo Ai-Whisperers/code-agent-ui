@@ -9,8 +9,6 @@ import {
   getTriggerLabel,
   generatePromptTemplate,
   subTriggerLabel,
-  type TriggerCategory,
-  type ActionTypeDef
 } from './hookConstants'
 import type { AutomationHook } from '@/types/api'
 

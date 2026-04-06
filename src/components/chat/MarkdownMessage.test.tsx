@@ -167,7 +167,7 @@ console.log('code block');
       { name: 'blockquotes', content: '> This is a quote\n> with multiple lines' },
     ]
 
-    testCases.forEach(({ name, content }) => {
+    testCases.forEach(({ content }) => {
       const { unmount } = render(<MarkdownMessage content={content} />)
       
       const element = screen.getByTestId('markdown-content')

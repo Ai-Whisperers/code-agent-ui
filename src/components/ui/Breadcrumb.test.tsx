@@ -1,5 +1,4 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { Breadcrumb, type BreadcrumbItem } from './Breadcrumb'
 
 // Mock lucide-react

@@ -31,7 +31,7 @@ vi.mock('@/lib/keycloak', () => ({
 
 // Mock fetch
 const mockFetch = vi.fn()
-global.fetch = mockFetch
+globalThis.fetch = mockFetch
 
 describe('PlanIndicator', () => {
   const createPlan = (status: ExecutionPlan['status'], overrides: Partial<ExecutionPlan> = {}): ExecutionPlan => ({
@@ -464,7 +464,7 @@ describe('PlanIndicator', () => {
 
       // Since onClick is provided, view plan button won't render, 
       // but we can test with a wrapper that has onClick
-      const { container } = render(
+      render(
         <div onClick={onClick}>
           <PlanIndicator plan={plan} {...defaultProps} />
         </div>
