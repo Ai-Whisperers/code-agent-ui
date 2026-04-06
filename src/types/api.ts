@@ -26,6 +26,8 @@ export type JobType =
   | 'REVIEW_EPIC'
   | 'REVIEW_FEATURE'
   | 'REVIEW_USERSTORY'
+  | 'GENERATE_ARCHITECTURE'
+  | 'GENERATE_CLOUD_ARCHITECTURE'
 
 export interface JobCoverageData {
   before?: CoverageSection
@@ -51,6 +53,8 @@ export interface JobStatusResponse {
   sourceBranch?: string
   targetBranch?: string
   coverageData?: JobCoverageData
+  workspace?: string
+  repoSlug?: string
   // SOC II / SLA fields
   jiraIssueType?: string
   jiraPriority?: string
@@ -61,6 +65,11 @@ export interface JobStatusResponse {
   soc2Protected?: boolean
   scytaleEvidenceRef?: string
   scytaleEnabled?: boolean
+  promotionJobId?: string
+  // Checkpoint / restart fields
+  hasCheckpoint?: boolean
+  checkpointIteration?: number
+  iterationCap?: number
 }
 
 // ---- PR Diff ----
@@ -93,12 +102,32 @@ export interface JobDiffResponse {
   files: DiffFileEntry[]
 }
 
+// ---- PR Commits ----
+
+export interface PrCommitEntry {
+  sha: string
+  shortSha: string
+  message: string
+  authorName: string
+  authorDate: string
+}
+
+export interface JobCommitsResponse {
+  commits: PrCommitEntry[]
+}
+
 // ---- SOC II Review & Evidence ----
 
 export interface ReviewCommentEntry {
+  commentId: number
   filePath: string
   line: number
   content: string
+  resolved: boolean
+  resolvedAt?: string | null
+  resolvedBy?: string | null
+  /** ID of the parent comment this is a reply to. 0 or absent means root (top-level) comment. */
+  parentId?: number
 }
 
 export interface JobReviewResponse {
@@ -164,6 +193,68 @@ export interface Soc2AuditResponse {
   limit: number
 }
 
+// ---- Security Issues ----
+
+export type SecuritySlaStatus = 'ON_TRACK' | 'AT_RISK' | 'OVERDUE'
+
+export interface SecurityIssueRow {
+  issueGroupId: number
+  issueType: string
+  title?: string
+  description?: string
+  severity: string
+  severityScore?: number
+  packageName?: string
+  currentVersion?: string
+  fixedVersion?: string
+  cveId?: string
+  cvssScore?: number
+  repoName?: string
+  repoUrl?: string
+  containerImage?: string
+  createdAt: string
+  slaDeadline: string
+  slaStatus: SecuritySlaStatus
+  linkedJobId?: string
+  linkedJobStatus?: string
+  howToFix?: string
+  relatedCveIds?: string[]
+  groupStatus?: string
+  timeToFixMinutes?: number
+  /** ISO-8601 timestamp: when Aikido first detected this vulnerability. */
+  discoveredAt?: string
+  /** ISO-8601 timestamp: Aikido's own remediation deadline (sla_remediate_by). */
+  aikidoDueDate?: string
+}
+
+export interface RepoSecuritySummary {
+  repoSlug: string
+  containers: string[]
+  criticalCount: number
+  highCount: number
+  softwareCriticalCount: number
+  softwareHighCount: number
+  containerCriticalCount: number
+  containerHighCount: number
+  issues: SecurityIssueRow[]
+}
+
+export interface ProductSecuritySummary {
+  productId: string
+  displayName: string
+  repos: RepoSecuritySummary[]
+}
+
+export interface SecurityIssuesResponse {
+  items: ProductSecuritySummary[]
+  cachedAt: string
+}
+
+export interface SecurityCountsResponse {
+  criticals: number
+  highs: number
+}
+
 export interface RunFixRequest {
   repoUrl: string
   branchName?: string
@@ -217,6 +308,87 @@ export interface RepoSettings {
   archetype?: string
   archetypeVersion?: string
   archived?: boolean
+  description?: string
+  primaryLanguage?: string
+  jiraComponents?: string[]
+  tags?: string[]
+}
+
+// ---- Pull Requests ----
+
+export interface OpenPrEntry {
+  workspace: string
+  repoSlug: string
+  prId: string
+  prUrl: string
+  title: string
+  sourceBranch: string
+  targetBranch: string
+  author: string
+  createdOn: string
+  updatedOn: string
+  jobId?: string
+  status: string
+  soc2?: boolean
+}
+
+export interface PrListResponse {
+  items: OpenPrEntry[]
+  total: number
+  page: number
+  size: number
+}
+
+export interface PrInfoResponse {
+  title: string
+  sourceBranch: string
+  targetBranch: string
+  author?: string
+  prUrl?: string
+  createdOn?: string
+  updatedOn?: string
+  jobId?: string
+}
+
+export interface PromoteJobResponse {
+  jobId: string
+}
+
+export interface MergedPrListResponse {
+  items: OpenPrEntry[]
+  days: number
+}
+
+// ---- Jira Meta ----
+
+export interface JiraProjectMeta {
+  id: string
+  key: string
+  name: string
+}
+
+export interface JiraComponentMeta {
+  id: string
+  name: string
+}
+
+// ---- Integration Filters ----
+
+export interface IntegrationFilter {
+  id: number
+  integrationType: string
+  key: string
+  name: string
+  enabled: boolean
+  webhookEnabled: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface UpsertIntegrationFilterRequest {
+  name: string
+  enabled: boolean
+  webhookEnabled: boolean
 }
 
 // ---- Automation Hooks ----
@@ -254,8 +426,12 @@ export interface RepoOption {
 
 export interface PromptTemplate {
   key: string
+  description: string
+  placeholders: string[]
   content: string
+  defaultContent: string
   isOverride: boolean
+  updatedAt?: string
 }
 
 // ---- Execution Plans ----
@@ -265,9 +441,11 @@ export type PlanStatus = 'DRAFT' | 'APPROVED' | 'EXECUTING' | 'PAUSED' | 'CANCEL
 export interface PlanStep {
   stepId: string
   order: number
+  jobType?: string
   title: string
   description?: string
   status: string
+  jobId?: string | null
   errorMessage?: string | null
 }
 
@@ -338,6 +516,8 @@ export interface QualityReport {
   branch: string
   measuredAt: string
   score?: number
+  archetype?: string
+  archetypeVersion?: string
   coverage?: CoverageSection
   linter?: LinterSection
   aikido?: {
@@ -485,8 +665,13 @@ export interface MemoryEntry {
   workspace: string
   repoSlug: string
   content: string
-  createdAt: string
+  category: string | null
+  source: string
+  sourceCommentId: number | null
+  sourcePrId: string | null
   active: boolean
+  createdAt: string
+  createdBy: string | null
 }
 
 // ---- Customer Registry ----
@@ -513,16 +698,56 @@ export interface AwsConfig {
   iamRole?: string
 }
 
+export interface LogAnalysisConfig {
+  enabled: boolean
+  logGroupNames?: string[]
+  /** @deprecated use logGroupNames */
+  logGroupName?: string
+  lookbackMinutes?: number
+  maxFingerprintsPerRun?: number
+}
+
 export interface EnvironmentConfig {
   name: string
   type?: string
   aws?: AwsConfig
+  logAnalysis?: LogAnalysisConfig
 }
 
-export interface TeamMember {
-  name?: string
+export type TeamRole =
+  | 'productOwner'
+  | 'engineering'
+  | 'devops'
+  | 'operations'
+  | 'qa'
+  | 'security'
+  | 'supportQueue'
+
+export interface TeamMemberEntry {
+  keycloakUserId: string
+  role: TeamRole | string
+  username?: string
   email?: string
-  jiraAccountId?: string
+  firstName?: string
+  lastName?: string
+}
+
+export interface Team {
+  id: string
+  name: string
+  description?: string
+  members?: TeamMemberEntry[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface UpsertTeamRequest {
+  name: string
+  description?: string
+}
+
+export interface SetMembersRequest {
+  members: Array<{ keycloakUserId: string; role: string }>
 }
 
 export interface CustomerConfig {
@@ -542,7 +767,6 @@ export interface ProductConfig {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
   createdAt?: string
   updatedAt?: string
@@ -561,7 +785,6 @@ export interface UpsertProductRequest {
   git?: GitConfig
   jira?: JiraProjectConfig
   confluence?: ConfluenceProductConfig
-  teams?: Record<string, TeamMember[]>
   metadata?: Record<string, unknown>
 }
 
@@ -684,6 +907,22 @@ export interface KnowledgeSearchResponse {
   total: number
 }
 
+export interface KnowledgeBlacklistEntry {
+  id: number
+  sourceType: string
+  sourceId: string
+  reason: string
+  contentHash: string
+  rejectedAt: string
+}
+
+export interface KnowledgeBlacklistResponse {
+  items: KnowledgeBlacklistEntry[]
+  total: number
+  limit: number
+  offset: number
+}
+
 // ---- Chat ----
 
 export interface ChatAttachment {
@@ -706,8 +945,15 @@ export interface ChatRequest {
   attachmentIds?: string[]
 }
 
+export interface ClarificationQuestion {
+  id: string
+  question: string
+  type: 'text' | 'single_choice' | 'multiple_choice' | 'boolean'
+  options?: string[]
+}
+
 export interface ChatEvent {
-  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_start' | 'plan_created' | 'plan_updated' | 'done' | 'error'
+  type: 'text' | 'thinking' | 'tool_start' | 'tool_end' | 'plan_start' | 'plan_created' | 'plan_updated' | 'clarification_request' | 'done' | 'error'
   text?: string
   tool?: string
   input?: Record<string, unknown>
@@ -718,17 +964,33 @@ export interface ChatEvent {
   planId?: string
   title?: string
   status?: string
+  questions?: ClarificationQuestion[]
 }
 
 export type ThinkingStep =
   | { kind: 'thought'; text: string; timestamp?: number }
   | { kind: 'tool'; name: string; input?: Record<string, unknown>; result?: string; status: 'running' | 'completed' | 'error'; startTime: number; endTime?: number }
 
+/** A single web search result, parsed from a web_search tool response. */
+export interface WebSource {
+  title: string
+  url: string
+  snippet?: string
+  /** The search query that produced this result. */
+  query?: string
+}
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   thinkingSteps?: ThinkingStep[]
+  /** Sources collected from web_search tool calls in this message. */
+  webSources?: WebSource[]
+  /** Clarification questions emitted by ask_clarification tool during this message's turn. */
+  clarificationQuestions?: ClarificationQuestion[]
+  /** True once the user has submitted their answers — locks the form to a read-only summary. */
+  clarificationAnswered?: boolean
 }
 
 export interface ConversationSummary {
@@ -833,6 +1095,8 @@ export interface Scope {
   featureIssuetype: string
   userstoryIssuetype: string
   createdAt: string
+  /** {@code "po"} for product/roadmap scopes, {@code "qa"} for QA test-plan scopes. */
+  scopeType: 'po' | 'qa'
 }
 
 /** A single row in the live preview table returned by GET /scope/preview-labels */
@@ -917,6 +1181,24 @@ export interface ScopeLinkedProduct {
 /** @deprecated Use ScopeLinkedProduct */
 export type RoadmapLinkedProduct = ScopeLinkedProduct
 
+export interface JiraIssueReview {
+  id?: string
+  scopeId?: string
+  issueKey: string
+  issueType: string
+  issueSummary?: string
+  parentKey?: string
+  jiraStatus?: string
+  readinessScore?: number
+  readinessLabel?: string
+  complexityScore?: number
+  improvementSummary?: string
+  reviewJson?: string
+  jobId?: string
+  reviewedAt?: string
+  createdAt?: string
+}
+
 export interface ScopeProposal {
   id: string
   scopeId: string
@@ -928,11 +1210,482 @@ export interface ScopeProposal {
   proposedCriteria?: string
   proposedTechnical?: string
   aiExplanation?: string
+  proposedLabel?: string
+  proposedPriority?: string
   status: 'DRAFT' | 'ACCEPTED' | 'REJECTED'
   jiraResultKey?: string
   createdAt: string
   updatedAt: string
+  /** Display name of the user who last saved the proposal. */
+  updatedBy?: string
+  /** Display name of the user who synced the proposal to Jira. */
+  syncedBy?: string
 }
 
 /** @deprecated Use ScopeProposal */
 export type RoadmapProposal = ScopeProposal
+
+export interface JiraAttachment {
+  id: string
+  filename: string
+  mimeType: string
+  size: number
+  /** Jira content URL — use the backend proxy endpoint to download */
+  contentUrl: string
+}
+
+export interface ScopeProposalInitResult {
+  proposal: ScopeProposal
+  attachments: JiraAttachment[]
+  /** ISO timestamp of when the Jira issue was last modified. */
+  jiraUpdatedAt?: string
+}
+
+export interface ProposalUpdatedEvent {
+  type: 'proposal_updated'
+  proposalId: string
+  proposal: ScopeProposal
+}
+
+export type ExtendedChatEvent = ChatEvent | ProposalUpdatedEvent
+
+// ---- QA Readiness ----
+
+export interface QaReadinessSummary {
+  totalItems: number
+  reviewed: number
+  fullyReadyCount: number
+  minorImprovementsCount: number
+  needsRefinementCount: number
+  poorCount: number
+  inQaStatusCount: number
+  closedCount: number
+  staleCount: number
+  readyForDeliveryCount: number
+}
+
+export interface QaReadinessResponse {
+  summary: QaReadinessSummary
+  items: ScopeTreeItem[]
+}
+
+// ---- Technical Debt Heatmap ----
+
+export interface TechDebtSnapshot {
+  id: number
+  productId: string | null
+  computedAt: string
+  lookbackDays: number
+  totalFiles: number
+}
+
+export interface TechDebtFileRow {
+  snapshotId: number
+  repoSlug: string
+  filePath: string
+  /** Complexity signal [0–1]: fraction of methods above cyclomatic-complexity threshold */
+  complexityScore: number
+  /** Coverage gap signal [0–1]: 1 − line coverage rate */
+  coverageGap: number
+  /** Churn signal [0–1]: normalised lines added + deleted relative to 95th-percentile */
+  churnScore: number
+  /** Staleness signal [0–1]: days since last commit / 365 */
+  stalenessScore: number
+  /** Composite debt score [0–1]: higher = more debt */
+  debtScore: number
+  lastCommitAt: string | null
+}
+
+// ---- PR Cycle Time ----
+
+export interface PrCycleTimeRow {
+  groupKey: string
+  totalPrs: number
+  avgOpenToReviewHrs: number | null
+  p50OpenToReviewHrs: number | null
+  p95OpenToReviewHrs: number | null
+  avgOpenToMergeHrs: number | null
+  p50OpenToMergeHrs: number | null
+  p95OpenToMergeHrs: number | null
+}
+
+export interface PrCycleTimeTrendPoint {
+  week: string
+  avgOpenToReviewHrs: number | null
+  prCount: number
+}
+
+export interface PrCycleTimeReport {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  groupBy: string
+  rows: PrCycleTimeRow[]
+}
+
+export interface PrCycleTimeTrend {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  trend: PrCycleTimeTrendPoint[]
+}
+
+// ---- AI Acceptance Rate ----
+
+export interface AiAcceptanceBreakdownRow {
+  groupKey: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+  rejectionRate: number
+  ignoredRate: number
+}
+
+export interface AiAcceptanceReport {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  groupBy: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+  rejectionRate: number
+  ignoredRate: number
+  breakdown: AiAcceptanceBreakdownRow[]
+}
+
+export interface AiAcceptanceTrendPoint {
+  week: string
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+}
+
+export interface AiAcceptanceTrend {
+  workspace: string
+  repoSlug: string
+  periodDays: number
+  trend: AiAcceptanceTrendPoint[]
+}
+
+// ---- Coverage Trend ----
+
+export interface CoverageTrendPoint {
+  repoSlug: string
+  week: string
+  avgLineRate: number | null
+}
+
+export interface CoverageTrendResponse {
+  workspace: string
+  branch: string
+  periodDays: number
+  trend: CoverageTrendPoint[]
+}
+
+// ── QA Test Plans ─────────────────────────────────────────────────────────────
+
+export type TestPlanStatus = 'none' | 'analysis' | 'json_ready' | 'stale'
+
+/**
+ * Lightweight summary row returned by GET /qa/test-plans (global list, no analysisText / planJson).
+ * The issueKey is the Jira feature key; featureOverview is extracted from the stored plan JSON
+ * and may be absent for plans that only have an analysis (not yet formatted to JSON).
+ */
+export interface QaTestPlanSummary {
+  id: string
+  issueKey: string
+  generatedAt?: string
+  generatedBy?: string
+  analysisEdited: boolean
+  testPlanStatus: TestPlanStatus
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiCoveragePct?: number
+  kpiHighRisks?: number
+  kpiGapsCount?: number
+  kpiReadiness?: string
+  kpiRegenCount: number
+  kpiAnalysisEditCount: number
+  kpiDriftDetectedAt?: string
+}
+
+/** One row in the QA feature list — returned by GET /qa-scope/:scopeId/features */
+export interface QaFeatureItem {
+  issueKey: string
+  summary: string
+  jiraStatus?: string
+  childStoryCount: number
+  testPlanStatus: TestPlanStatus
+  generatedAt?: string
+  analysisEdited?: boolean
+  /** Jira test plan ticket key linked via "is tested by" relationship (e.g. "QA-42"). */
+  jiraIssueKey?: string
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiReadiness?: string
+}
+
+/** Full test plan record — returned by GET /qa-scope/:scopeId/features/:issueKey/test-plan */
+export interface QaTestPlanRecord {
+  id: string
+  issueKey: string
+  analysisText?: string
+  analysisEdited: boolean
+  planJson?: FeatureTestPlan
+  generatedAt: string
+  generatedBy?: string
+  testPlanStatus: TestPlanStatus
+  isStale: boolean
+  kpiStoryCount?: number
+  kpiBehaviourTcCount?: number
+  kpiCapabilityTcCount?: number
+  kpiRiskCount?: number
+  kpiOpenClarifications?: number
+  kpiCoveragePct?: number
+  kpiHighRisks?: number
+  kpiGapsCount?: number
+  kpiReadiness?: string
+  kpiSpecHash?: string
+  kpiDriftDetectedAt?: string
+  kpiRegenCount: number
+  kpiAnalysisEditCount: number
+  jiraIssueKey?: string
+  xraySyncStatus?: XraySyncStatus
+  xraySyncedAt?: string
+}
+
+export type XraySyncStatus = 'pending' | 'synced' | 'error'
+export type AutomationStatus = 'manual' | 'automated' | 'in_progress'
+
+export interface QaTestCase {
+  id: string
+  planId: string
+  featureKey: string
+  storyKey: string
+  testCaseId: string
+  title: string
+  description?: string
+  preConditions: string[]
+  testSteps: string[]
+  expectedResults: string[]
+  testCaseType: 'Behaviour' | 'Capability' | string
+  priority: string
+  status: string
+  estimatedDuration?: string
+  kpiStepCount?: number
+  kpiEstimatedMins?: number
+  kpiPreconditionCount?: number
+  kpiExecutionCount: number
+  kpiLastResult?: string
+  kpiLastExecutedAt?: string
+  kpiAutomationStatus: AutomationStatus
+  jiraIssueKey?: string
+  xraySyncStatus: XraySyncStatus
+  xraySyncedAt?: string
+  generatedAt: string
+}
+
+// ── featureTestPlan JSON schema (mirrors argus TestPlanData) ──────────────────
+
+export interface StoryRef {
+  storyId: string
+  summary: string
+  status: string
+  priority: string
+}
+
+export interface CapabilityArea {
+  capabilityAreaId: string
+  name: string
+  description: string
+  relatedStories: string[]
+}
+
+export interface Behaviour {
+  behaviourId: string
+  description: string
+  source: string
+}
+
+export interface StoryBehaviour {
+  storyId: string
+  summary: string
+  behaviours: Behaviour[]
+  businessRules: string[]
+}
+
+export interface Risk {
+  riskId: string
+  description: string
+  likelihood: string
+  impact: string
+  riskLevel: string
+  impactedBehaviours: string[]
+  impactedCapabilities: string[]
+  mitigation: string
+}
+
+export interface TestCondition {
+  testConditionId: string
+  behaviourId?: string
+  description: string
+  type: string
+  priority: string
+  riskLink: string
+  relatedStories?: string[]
+  flowType?: string
+}
+
+export interface ConditionGroup {
+  storyId?: string
+  storySummary?: string
+  capabilityArea?: string
+  conditions: TestCondition[]
+}
+
+export interface TraceRow {
+  featureId: string
+  capabilityArea: string
+  storyId: string
+  behaviourId: string
+  testConditionIds: string[]
+  riskIds: string[]
+  coverageStatus: string
+}
+
+export interface ACCoverage {
+  featureAC: string
+  coveredBy: string[]
+  status: string
+}
+
+export interface StoryCoverage {
+  storyId: string
+  behavioursCovered: string
+  testConditions: number
+  status: string
+}
+
+export interface RiskCoverage {
+  riskId: string
+  riskLevel: string
+  coveredByBehaviourTests?: string[]
+  coveredByCapabilityTests?: string[]
+  status: string
+}
+
+export interface Gap {
+  gapId: string
+  description: string
+  severity: string
+  recommendation: string
+}
+
+export interface Clarification {
+  clarificationId: string
+  priority: string
+  relatedTo: string
+  question: string
+  impact: string
+  status: string
+}
+
+export interface ReadinessItem {
+  storyId: string
+  ready: boolean
+  notes: string
+}
+
+export interface FeatureTestPlan {
+  metadata: {
+    documentTitle: string
+    version: string
+    createdDate: string
+    createdBy: string
+    featureId: string
+    featureStatus: string
+    project: string
+    methodology: string
+  }
+  section01_executiveSummary: {
+    title: string
+    featureOverview: string
+    scope?: string
+    businessCriticality?: string
+    childStories?: StoryRef[]
+    testApproach: string
+    totalBehaviourTestConditions: number
+    totalCapabilityTestConditions: number
+    totalRisksIdentified: number
+    criticalClarificationsNeeded: number
+  }
+  section02_featureCapabilityBreakdown: {
+    title: string
+    featureId: string
+    featureName: string
+    businessOutcome: string
+    capabilityAreas: CapabilityArea[]
+  }
+  section03_storyBehaviourBreakdown: {
+    title: string
+    stories: StoryBehaviour[]
+  }
+  section04_riskAssessment: {
+    title: string
+    risks: Risk[]
+  }
+  section05_behaviourTestConditions: {
+    title: string
+    testConditions: ConditionGroup[]
+  }
+  section06_capabilityTestConditions: {
+    title: string
+    featureId: string
+    testConditions: ConditionGroup[]
+  }
+  section07_traceabilityMatrix: {
+    title: string
+    matrix: TraceRow[]
+  }
+  section08_coverageAnalysis: {
+    title: string
+    featureAcceptanceCriteriaCoverage: ACCoverage[]
+    storyCoverageStatus: StoryCoverage[]
+    riskCoverageStatus: RiskCoverage[]
+    gaps: Gap[]
+  }
+  section10_entryExitCriteria: {
+    title: string
+    entryCriteria: { behaviourTesting: string[]; capabilityTesting: string[] }
+    exitCriteria: { behaviourTesting: string[]; capabilityTesting: string[]; featureQualityGate: string[] }
+  }
+  section13_readinessForTestCaseDesign: {
+    title: string
+    readinessAssessment: {
+      overallReadiness: string
+      readyForTestCaseDesign: ReadinessItem[]
+      blockers: string[]
+    }
+  }
+  section14_clarificationsNeeded: {
+    title: string
+    clarifications: Clarification[]
+  }
+  preGenerationValidation: {
+    title: string
+    validationChecklist: { item: string; status: string }[]
+  }
+}

@@ -23,6 +23,7 @@ export function RepositorySelect({
   const [query, setQuery] = useState('')
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
   const containerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     fetch(`${import.meta.env.VITE_API_URL}/api/hooks/autocomplete/repositories`, {
@@ -36,7 +37,10 @@ export function RepositorySelect({
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const insideContainer = containerRef.current?.contains(target) ?? false
+      const insideDropdown = dropdownRef.current?.contains(target) ?? false
+      if (!insideContainer && !insideDropdown) {
         setIsOpen(false)
         setQuery('')
       }
@@ -129,6 +133,7 @@ export function RepositorySelect({
 
       {isOpen && createPortal(
         <div
+          ref={dropdownRef}
           style={dropdownStyle}
           className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-small)] shadow-lg flex flex-col overflow-hidden"
         >

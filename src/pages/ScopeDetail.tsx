@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -24,6 +24,8 @@ import {
   Wand2,
   Info,
   Download,
+  Sparkles,
+  AlertTriangle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -33,12 +35,31 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { TableCard } from '@/components/ui/TableCard'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
 import type { BreadcrumbItem } from '@/components/ui/Breadcrumb'
-import { ReadinessBadge } from '@/components/scope/ReadinessBadge'
-import { SprintGanttView } from '@/components/scope/SprintGanttView'
-import { ProposalModal } from '@/components/scope/ProposalModal'
+import { ReadinessBadge } from '@/components/shared/ReadinessBadge'
+import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
+import { SprintGanttView } from '@/components/shared/SprintGanttView'
+import { ProposalModal } from '@/components/shared/ProposalModal'
 import api from '@/lib/api'
 import { mcpProfilesApi, type SystemConfig } from '@/lib/mcpProfiles'
 import type { Scope, ScopeTreeItem, ItemOverrideStatus, ScopeProposal, SystemSetting, ReviewTokenStats } from '@/types/api'
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDate(iso?: string): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const now = new Date()
+  const diffMs = now.getTime() - d.getTime()
+  const diffMin = Math.floor(diffMs / 60_000)
+  if (diffMin < 1)  return 'just now'
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffH = Math.floor(diffMin / 60)
+  if (diffH < 24)   return `${diffH}h ago`
+  const diffD = Math.floor(diffH / 24)
+  if (diffD === 1)  return 'yesterday'
+  if (diffD < 7)    return `${diffD}d ago`
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: diffD > 365 ? 'numeric' : undefined })
+}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -372,19 +393,208 @@ function ReviewConfirmDialog({
   )
 }
 
+// ── Review sub-components ──────────────────────────────────────────────────────
+
+const REVIEW_CONFIG: Record<string, { label: string; textColor: string; barColor: string; bgColor: string }> = {
+  poor:                          { label: 'Poor',                          textColor: 'text-red-500 dark:text-red-400',          barColor: 'bg-red-500',     bgColor: 'bg-red-50 dark:bg-red-950/20' },
+  needs_refinement:              { label: 'Needs refinement',              textColor: 'text-amber-500 dark:text-amber-400',       barColor: 'bg-amber-500',   bgColor: 'bg-amber-50 dark:bg-amber-950/20' },
+  ready_with_minor_improvements: { label: 'Ready with minor improvements', textColor: 'text-blue-500 dark:text-blue-400',         barColor: 'bg-blue-500',    bgColor: 'bg-blue-50 dark:bg-blue-950/20' },
+  fully_ready:                   { label: 'Fully ready',                   textColor: 'text-emerald-500 dark:text-emerald-400',   barColor: 'bg-emerald-500', bgColor: 'bg-emerald-50 dark:bg-emerald-950/20' },
+}
+
+function complexityColor(score: number) {
+  if (score >= 70) return { text: 'text-red-500 dark:text-red-400',    bar: 'bg-red-500' }
+  if (score >= 40) return { text: 'text-amber-500 dark:text-amber-400', bar: 'bg-amber-500' }
+  return               { text: 'text-emerald-500 dark:text-emerald-400', bar: 'bg-emerald-500' }
+}
+
+function ReviewResult({ treeItem }: { treeItem: ScopeTreeItem }) {
+  const cfg = REVIEW_CONFIG[treeItem.readinessLabel ?? ''] ?? {
+    label: treeItem.readinessLabel ?? 'Unknown',
+    textColor: 'text-[var(--color-fonts-font-color-support)]',
+    barColor: 'bg-[var(--color-borders-border-primary)]',
+    bgColor: '',
+  }
+  const score = treeItem.readinessScore ?? 0
+  const cx = treeItem.complexityScore != null ? complexityColor(treeItem.complexityScore) : null
+
+  return (
+    <div className="space-y-6 pt-1">
+      {/* Scores */}
+      <div>
+        {/* Readiness hero */}
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            <span className={`text-5xl font-bold tabular-nums leading-none ${cfg.textColor}`}>
+              {score}
+            </span>
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className={`text-sm font-semibold ${cfg.textColor}`}>{cfg.label}</span>
+        </div>
+
+        {/* Readiness bar */}
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${cfg.barColor}`}
+            style={{ width: `${score}%` }}
+          />
+        </div>
+
+        {/* Complexity row */}
+        {cx && treeItem.complexityScore != null && (
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+            <Tooltip text="AI complexity estimate (0–100). Lower = simpler. Higher = more effort, uncertainty, or dependencies.">
+              <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                Complexity
+              </span>
+            </Tooltip>
+            <div className="flex items-center gap-2">
+              <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${cx.bar}`}
+                  style={{ width: `${treeItem.complexityScore}%` }}
+                />
+              </div>
+              <span className={`text-[11px] font-semibold tabular-nums ${cx.text}`}>
+                {treeItem.complexityScore}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Aggregate row */}
+        {treeItem.aggregateScore != null && (() => {
+          const aggCfg = treeItem.aggregateScore >= 70
+            ? { bar: 'bg-emerald-500', text: 'text-emerald-500 dark:text-emerald-400' }
+            : treeItem.aggregateScore >= 40
+              ? { bar: 'bg-amber-500',   text: 'text-amber-500 dark:text-amber-400' }
+              : { bar: 'bg-red-500',     text: 'text-red-500 dark:text-red-400' }
+          return (
+            <div className="flex items-center justify-between mt-3 pt-3 border-t border-[var(--color-borders-border-primary)]/30">
+              <Tooltip text="Overall health: 40% own writing quality + 60% child items average. 0 = not yet decomposed into children.">
+                <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                  Aggregate
+                </span>
+              </Tooltip>
+              <div className="flex items-center gap-2">
+                <div className="w-20 h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/40 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${aggCfg.bar}`}
+                    style={{ width: `${treeItem.aggregateScore}%` }}
+                  />
+                </div>
+                <span className={`text-[11px] font-semibold tabular-nums ${aggCfg.text}`}>
+                  {treeItem.aggregateScore}
+                </span>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Meta row */}
+        <div className="flex items-center gap-2 mt-3">
+          {treeItem.reviewedAt && (
+            <Tooltip text={new Date(treeItem.reviewedAt).toLocaleString()}>
+              <span className="text-[11px] text-[var(--color-fonts-font-color-support)] cursor-default">
+                Reviewed {fmtDate(treeItem.reviewedAt)}
+              </span>
+            </Tooltip>
+          )}
+          {treeItem.isStale && (
+            <Tooltip text="Jira was modified after this review — re-review for an up-to-date score">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 cursor-default">
+                <AlertTriangle size={10} />
+                Stale
+              </span>
+            </Tooltip>
+          )}
+        </div>
+      </div>
+
+      {/* Improvement suggestions */}
+      {treeItem.improvementSummary && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--color-fonts-font-color-support)] mb-2">
+            Suggestions
+          </p>
+          <p className="text-[13px] text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-line">
+            {treeItem.improvementSummary}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReviewLoadingState({
+  prevScore,
+  prevLabel,
+}: {
+  prevScore?: number | null
+  prevLabel?: string | null
+}) {
+  const cfg = REVIEW_CONFIG[prevLabel ?? '']
+  return (
+    <div className="space-y-6 pt-1">
+      <div>
+        <div className="flex items-end justify-between gap-2 mb-3">
+          <div className="flex items-baseline gap-2">
+            {prevScore != null && cfg ? (
+              <span className={`text-5xl font-bold tabular-nums leading-none opacity-30 ${cfg.textColor}`}>
+                {prevScore}
+              </span>
+            ) : (
+              <span className="w-16 h-10 rounded-lg bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+            )}
+            <span className="text-sm text-[var(--color-fonts-font-color-support)] opacity-30 leading-none pb-0.5">
+              / 100
+            </span>
+          </div>
+          <span className="w-28 h-4 rounded bg-[var(--color-borders-border-primary)]/30 animate-pulse inline-block" />
+        </div>
+        <div className="h-1.5 rounded-full bg-[var(--color-borders-border-primary)]/30 animate-pulse" />
+        <div className="flex items-center gap-2 mt-3 text-[11px] text-[var(--color-fonts-font-color-support)]">
+          <Loader2 size={11} className="animate-spin shrink-0" />
+          <span>Running AI readiness review…</span>
+        </div>
+      </div>
+      <div className="space-y-2">
+        <div className="h-2.5 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-16" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-full" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-4/5" />
+        <div className="h-3 rounded bg-[var(--color-borders-border-primary)]/20 animate-pulse w-5/6" />
+      </div>
+    </div>
+  )
+}
+
+function ReviewEmptyState() {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 py-10 text-center">
+      <div className="w-14 h-14 rounded-2xl bg-[var(--color-borders-border-primary)]/10 flex items-center justify-center">
+        <Sparkles size={22} className="text-violet-400 opacity-50" />
+      </div>
+      <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">No review yet</p>
+      <p className="text-[12px] text-[var(--color-fonts-font-color-support)] max-w-[220px] leading-relaxed">
+        Click <span className="font-medium text-[var(--color-fonts-font-color-primary)]">Review</span> in the footer to run an AI readiness review.
+      </p>
+    </div>
+  )
+}
+
 // ── Item Detail Panel ─────────────────────────────────────────────────────────
 
-const TYPE_LABEL: Record<string, string> = { EPIC: 'Epic', FEATURE: 'Feature', USERSTORY: 'Story' }
-const TYPE_BG: Record<string, string> = {
-  EPIC: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-  FEATURE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-  USERSTORY: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
-}
+const SCOPE_PANEL_WIDTH_KEY = 'scope-panel-width'
 
 function ItemDetailPanel({
   node,
   scopeId,
   items,
+  width,
+  onWidthChange,
   onClose,
   onReview,
   onAccept,
@@ -396,6 +606,8 @@ function ItemDetailPanel({
   node: TreeNode
   scopeId: string
   items: ScopeTreeItem[]
+  width: number
+  onWidthChange: (w: number) => void
   onClose: () => void
   onReview: () => void
   onAccept: () => void
@@ -405,9 +617,40 @@ function ItemDetailPanel({
   isRefreshing: boolean
 }) {
   const qc = useQueryClient()
+  const navigate = useNavigate()
   const isOverridden = !!node.overrideStatus
   const isVirtual = !!node.isVirtual
   const [activeProposal, setActiveProposal] = useState<ScopeProposal | null>(null)
+
+  const widthRef = useRef(width)
+  widthRef.current = width
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      const startX = e.clientX
+      const startWidth = widthRef.current
+
+      const onMouseMove = (mv: MouseEvent) => {
+        const newWidth = Math.max(280, Math.min(window.innerWidth - 200, startWidth + (startX - mv.clientX)))
+        onWidthChange(newWidth)
+        localStorage.setItem(SCOPE_PANEL_WIDTH_KEY, String(newWidth))
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [onWidthChange],
+  )
 
   const { data: systemConfig } = useQuery<SystemConfig>({
     queryKey: ['mcp-system-config'],
@@ -417,14 +660,16 @@ function ItemDetailPanel({
   const jiraBaseUrl = systemConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
   const jiraLink = (key: string) => jiraBaseUrl && !key.startsWith('VIRTUAL-') ? `${jiraBaseUrl}/browse/${key}` : undefined
 
-  const improveMutation = useMutation<ScopeProposal, Error>({
-    mutationFn: () => api.post(`/scope/${scopeId}/items/${node.issueKey}/improve`).then((r) => r.data),
-    onSuccess: (proposal) => setActiveProposal(proposal),
-  })
+  const handleImprove = () => {
+    navigate({
+      to: '/metrics/scope/$id/improve/$issueKey',
+      params: { id: scopeId, issueKey: node.issueKey },
+    })
+  }
 
   const { data: proposals } = useQuery<ScopeProposal[]>({
     queryKey: ['scope-proposals', scopeId, node.issueKey],
-    queryFn: () => api.get(`/scope/${scopeId}/items/${node.issueKey}/proposals`).then((r) => r.data),
+    queryFn: () => api.get(`/scope/${scopeId}/improvement/items/${node.issueKey}/proposals`).then((r) => r.data),
     enabled: !isVirtual,
   })
   const draftCount = Array.isArray(proposals) ? proposals.filter((p) => p.status === 'DRAFT').length : 0
@@ -436,7 +681,16 @@ function ItemDetailPanel({
   }, [onClose])
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-50 w-[420px] flex flex-col bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] shadow-2xl overflow-hidden">
+    <aside
+      style={{ width }}
+      className="fixed inset-y-0 right-0 z-50 flex flex-col bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] shadow-2xl overflow-hidden"
+    >
+      {/* Drag handle */}
+      <div
+        onMouseDown={handleDragStart}
+        className="absolute left-0 inset-y-0 w-1.5 cursor-col-resize z-10 hover:bg-[var(--color-buttons-button-primary)]/40 transition-colors"
+        title="Drag to resize"
+      />
       {/* Header */}
       <div className="shrink-0 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)]">
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
@@ -457,9 +711,7 @@ function ItemDetailPanel({
               </span>
             )}
             {isRefreshing && <Loader2 size={11} className="animate-spin text-[var(--color-fonts-font-color-support)] shrink-0" />}
-            <span className={`inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] ${TYPE_BG[node.issueType] ?? ''}`}>
-              {TYPE_LABEL[node.issueType] ?? node.issueType}
-            </span>
+            <IssueTypeIcon issueType={node.issueType} size={14} />
             {isVirtual && (
               <span className="inline-flex items-center text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)] border border-dashed border-current">
                 virtual
@@ -490,19 +742,19 @@ function ItemDetailPanel({
           const crumbs: BreadcrumbItem[] = [
             {
               label:   node.issueKey,
-              badge:   { text: TYPE_LABEL[node.issueType] ?? node.issueType, className: TYPE_BG[node.issueType] ?? '' },
+              badge:   { text: <IssueTypeIcon issueType={node.issueType} size={11} />, className: '' },
               tooltip: node.summary,
               href:    jiraLink(node.issueKey) ?? undefined,
             },
             ...(node.parentKey ? [{
               label:   node.parentKey,
-              badge:   { text: TYPE_LABEL[parentType], className: TYPE_BG[parentType] },
+              badge:   { text: <IssueTypeIcon issueType={parentType} size={11} />, className: '' },
               tooltip: pNode?.summary,
               href:    jiraLink(node.parentKey) ?? undefined,
             }] : []),
             ...(node.grandparentKey ? [{
               label:   node.grandparentKey,
-              badge:   { text: TYPE_LABEL['EPIC'], className: TYPE_BG['EPIC'] },
+              badge:   { text: <IssueTypeIcon issueType="EPIC" size={11} />, className: '' },
               tooltip: gpNode?.summary,
               href:    jiraLink(node.grandparentKey) ?? undefined,
             }] : []),
@@ -560,60 +812,40 @@ function ItemDetailPanel({
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">Reviewed At</p>
-                <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
-                  {node.reviewedAt ? new Date(node.reviewedAt).toLocaleString() : '—'}
-                </span>
+                {node.reviewedAt ? (
+                  <Tooltip text={new Date(node.reviewedAt).toLocaleString()}>
+                    <span className="text-xs text-[var(--color-fonts-font-color-primary)] cursor-default">
+                      {fmtDate(node.reviewedAt)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+                )}
               </div>
               <div className="col-span-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1">Last Jira Update</p>
-                <span className="text-xs text-[var(--color-fonts-font-color-primary)]">
-                  {node.jiraModifiedAt ? new Date(node.jiraModifiedAt).toLocaleString() : '—'}
-                </span>
+                {node.jiraModifiedAt ? (
+                  <Tooltip text={new Date(node.jiraModifiedAt).toLocaleString()}>
+                    <span className="text-xs text-[var(--color-fonts-font-color-primary)] cursor-default">
+                      {fmtDate(node.jiraModifiedAt)}
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <span className="text-xs text-[var(--color-fonts-font-color-support)]">—</span>
+                )}
               </div>
             </section>
 
             <section>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">Scores</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Readiness</p>
-                  <ScoreBar
-                    score={node.readinessScore}
-                    title={[
-                      { poor: 'Poor', needs_refinement: 'Needs Refinement', ready_with_minor_improvements: 'Minor Improvements', fully_ready: 'Fully Ready' }[node.readinessLabel as string],
-                      node.readinessScore != null && `Score: ${node.readinessScore}`,
-                      'Higher is better',
-                    ].filter(Boolean).join('\n')}
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Complexity</p>
-                  <ScoreBar
-                    score={node.complexityScore}
-                    reversed
-                    title={node.complexityScore != null ? `Complexity: ${node.complexityScore}\nHigher means more complex` : undefined}
-                  />
-                </div>
-                <div>
-                  <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mb-1.5">Aggregate</p>
-                  <ScoreBar
-                    score={node.aggregateScore}
-                    title={node.aggregateScore != null ? `Aggregate: ${node.aggregateScore}\nOverall readiness score` : undefined}
-                  />
-                </div>
-              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-2">Review</p>
+              {isReviewing ? (
+                <ReviewLoadingState prevScore={node.readinessScore} prevLabel={node.readinessLabel} />
+              ) : node.readinessScore != null || node.readinessLabel ? (
+                <ReviewResult treeItem={node} />
+              ) : (
+                <ReviewEmptyState />
+              )}
             </section>
-
-            {node.improvementSummary && !isOverridden && (
-              <section>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] mb-1.5">AI Suggestions</p>
-                <div className="p-3 rounded-lg bg-[var(--color-cards-card-background-hover)] border border-[var(--color-borders-border-primary)]">
-                  <p className="text-xs text-[var(--color-fonts-font-color-primary)] leading-relaxed whitespace-pre-wrap">
-                    {node.improvementSummary}
-                  </p>
-                </div>
-              </section>
-            )}
           </>
         )}
 
@@ -660,16 +892,15 @@ function ItemDetailPanel({
                     Undo Override
                   </Button>
                 </Tooltip>
-                <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Tooltip text="Open the Improve with AI screen to refine this issue with the Product Owner AI.">
                   <Button
                     size="xs"
                     variant="ai"
-                    loading={improveMutation.isPending}
                     icon={<Wand2 size={11} />}
-                    onClick={() => improveMutation.mutate()}
-                    disabled={improveMutation.isPending}
+                    onClick={handleImprove}
+                    disabled={isVirtual}
                   >
-                    {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                    Improve with AI
                   </Button>
                 </Tooltip>
               </>
@@ -680,16 +911,15 @@ function ItemDetailPanel({
                     Review
                   </Button>
                 </Tooltip>
-                <Tooltip text="Generate an AI-improved rewrite of this issue.\nUses codebase knowledge & Jira context if products are linked.">
+                <Tooltip text="Open the Improve with AI screen to refine this issue with the Product Owner AI.">
                   <Button
                     size="xs"
                     variant="ai"
-                    loading={improveMutation.isPending}
                     icon={<Wand2 size={11} />}
-                    onClick={() => improveMutation.mutate()}
-                    disabled={improveMutation.isPending}
+                    onClick={handleImprove}
+                    disabled={isVirtual}
                   >
-                    {improveMutation.isPending ? 'Generating…' : 'Improve with AI'}
+                    Improve with AI
                   </Button>
                 </Tooltip>
                 <div className="ml-auto w-px h-4 bg-[var(--color-borders-border-primary)] mx-0.5" />
@@ -721,17 +951,13 @@ function ItemDetailPanel({
               </Tooltip>
             )}
 
-            {improveMutation.isError && (
-              <span className="text-[10px] text-[var(--color-tags-font-critical)] truncate">
-                Generation failed
-              </span>
-            )}
           </div>
         </div>
       )}
 
       {activeProposal && (
         <ProposalModal
+          variant="scope"
           proposal={activeProposal}
           scopeId={scopeId}
           onClose={() => {
@@ -757,6 +983,14 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   const [filters, setFilters] = useState<FilterState>({ issueKey: '', issueType: '', readiness: '', summary: '', assignee: '', reporter: '' })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [reviewConfirm, setReviewConfirm] = useState<{ force: boolean } | null>(null)
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const stored = localStorage.getItem(SCOPE_PANEL_WIDTH_KEY)
+    if (stored) {
+      const parsed = parseInt(stored, 10)
+      if (!isNaN(parsed)) return parsed
+    }
+    return 420
+  })
 
   const { data: scope } = useQuery<Scope>({
     queryKey: ['scope', scopeId],
@@ -790,13 +1024,13 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   const { data: activeReviewCount = 0 } = useQuery<number>({
     queryKey: ['scope-active-reviews', scopeId],
     queryFn: () =>
-      api.get(`/scope/${scopeId}/active-review-count`).then((r) => r.data?.count ?? 0).catch(() => 0),
+      api.get(`/scope/${scopeId}/evaluation/active-review-count`).then((r) => r.data?.count ?? 0).catch(() => 0),
     refetchInterval: (q) => ((q.state.data ?? 0) > 0 ? 5_000 : 30_000),
   })
 
   const { data: treeItems, isLoading } = useQuery<ScopeTreeItem[]>({
     queryKey: ['scope-tree', scopeId],
-    queryFn: () => api.get(`/scope/${scopeId}/tree`).then((r) => r.data).catch(() => []),
+    queryFn: () => api.get(`/scope/${scopeId}/evaluation/tree`).then((r) => r.data).catch(() => []),
     refetchInterval: activeReviewCount > 0 ? 5_000 : 30_000,
   })
 
@@ -914,7 +1148,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
 
   const reviewAllMutation = useMutation<unknown, Error, boolean>({
     mutationFn: (force: boolean) =>
-      api.post(`/scope/${scopeId}/review-all${force ? '?force=true' : ''}`),
+      api.post(`/scope/${scopeId}/evaluation/review-all${force ? '?force=true' : ''}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
       qc.invalidateQueries({ queryKey: ['scope-active-reviews', scopeId] })
@@ -922,7 +1156,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   })
 
   const reviewOneMutation = useMutation({
-    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/review/${issueKey}`),
+    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/evaluation/review/${issueKey}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] })
       qc.invalidateQueries({ queryKey: ['scope-active-reviews', scopeId] })
@@ -931,17 +1165,17 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
 
   const overrideMutation = useMutation({
     mutationFn: ({ issueKey, status }: { issueKey: string; status: ItemOverrideStatus }) =>
-      api.put(`/scope/${scopeId}/items/${issueKey}/override`, { status }),
+      api.put(`/scope/${scopeId}/evaluation/items/${issueKey}/override`, { status }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 
   const clearOverrideMutation = useMutation({
-    mutationFn: (issueKey: string) => api.delete(`/scope/${scopeId}/items/${issueKey}/override`),
+    mutationFn: (issueKey: string) => api.delete(`/scope/${scopeId}/evaluation/items/${issueKey}/override`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 
   const refreshMutation = useMutation({
-    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/items/${issueKey}/refresh`),
+    mutationFn: (issueKey: string) => api.post(`/scope/${scopeId}/evaluation/items/${issueKey}/refresh`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-tree', scopeId] }),
   })
 
@@ -1182,7 +1416,7 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
                     className="bg-[var(--color-cards-card-background)] px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)] cursor-pointer hover:text-[var(--color-fonts-font-color-primary)] select-none whitespace-nowrap"
                     onClick={() => toggleSort('aggregateScore')}
                   >
-                    <Tooltip text={"Weighted rollup of child readiness scores.\nFormula: Σ(child.readiness × child.complexity) / Σ(child.complexity)\nFalls back to simple average when all complexity = 0.\n0 when item has no children."} position="bottom">
+                    <Tooltip text={"Overall health of the item and its children.\nFormula: 40% own readiness + 60% child aggregate average.\nChildren are complexity-weighted when enabled.\n0 = not decomposed (no child features/stories).\nUnknown (—) = children exist but none reviewed yet."} position="bottom">
                       <span className="flex items-center gap-1">
                         Aggregate <SortIcon field="aggregateScore" sortField={sortField} sortDir={sortDir} />
                       </span>
@@ -1255,11 +1489,13 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
         </div>
 
         {selectedKey && selectedNode && (
-          <div className="w-[420px] shrink-0 sticky top-0 self-start h-screen overflow-hidden">
+          <div style={{ width: panelWidth }} className="shrink-0 sticky top-0 self-start h-screen overflow-hidden">
             <ItemDetailPanel
               node={selectedNode}
               scopeId={scopeId}
               items={items}
+              width={panelWidth}
+              onWidthChange={setPanelWidth}
               onClose={() => setSelectedKey(null)}
               onReview={() => reviewOneMutation.mutate(selectedNode.issueKey)}
               onAccept={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'ACCEPTED' })}
@@ -1329,12 +1565,6 @@ function ScopeRow({
     ? `${jiraBaseUrl}/browse/${node.issueKey}`
     : undefined
 
-  const typeBg: Record<string, string> = {
-    EPIC: 'bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300',
-    FEATURE: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    USERSTORY: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
-  }
-
   return (
     <tr
       className={`border-b border-[var(--color-tables-table-cell-stroke)] transition-colors cursor-pointer ${
@@ -1382,9 +1612,7 @@ function ScopeRow({
       </td>
 
       <td className="px-3 py-1.5 whitespace-nowrap">
-        <span className={`inline-flex items-center font-medium px-1.5 py-0 rounded-[var(--border-radius-tag)] ${isVirtual ? 'border border-dashed ' : ''}${typeBg[node.issueType] ?? ''}`}>
-          {TYPE_LABEL[node.issueType] ?? node.issueType}
-        </span>
+        <IssueTypeIcon issueType={node.issueType} size={13} />
       </td>
 
       <td className="px-3 py-1.5 max-w-xs">

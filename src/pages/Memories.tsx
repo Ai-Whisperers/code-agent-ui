@@ -1,9 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Trash2, ToggleLeft, ToggleRight, X, Brain } from 'lucide-react'
+import { Trash2, ToggleLeft, ToggleRight, Brain, X } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { Button } from '@/components/ui/Button'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Toast } from '@/components/ui/Toast'
+import { FilterSelect } from '@/components/ui/FilterSelect'
 import api from '@/lib/api'
 import type { MemoryEntry } from '@/types/api'
 
@@ -51,12 +55,7 @@ function MemoryDetailModal({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-          >
-            <X size={16} className="text-[var(--color-fonts-font-color-support)]" />
-          </button>
+          <Button variant="ghost" size="xs" onClick={onClose} aria-label="Close" icon={<X size={15} />} />
         </div>
 
         {/* Body */}
@@ -86,53 +85,6 @@ function MemoryDetailModal({
   )
 }
 
-// ── Confirm delete dialog ─────────────────────────────────────────────────────
-
-function ConfirmDeleteDialog({
-  onConfirm,
-  onCancel,
-  isPending,
-}: {
-  onConfirm: () => void
-  onCancel: () => void
-  isPending: boolean
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(0,0,0,0.45)' }}
-      onClick={onCancel}
-    >
-      <div
-        className="w-full max-w-sm bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-xl p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="text-base font-semibold text-[var(--color-fonts-font-color-headings)] mb-2">
-          Delete memory?
-        </h3>
-        <p className="text-sm text-[var(--color-fonts-font-color-support)] mb-5">
-          This action cannot be undone. The memory entry will be permanently removed.
-        </p>
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={onCancel}
-            className="px-4 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] text-sm font-medium hover:bg-[var(--color-buttons-button-back-hover)] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={isPending}
-            className="px-4 py-1.5 rounded-[var(--border-radius-button-small)] bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm font-medium hover:opacity-80 disabled:opacity-50 transition-opacity"
-          >
-            {isPending ? 'Deleting…' : 'Delete'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MemoriesPage() {
@@ -141,24 +93,28 @@ export default function MemoriesPage() {
   const [pendingDelete, setPendingDelete] = useState<MemoryEntry | null>(null)
   const [filterWorkspace, setFilterWorkspace] = useState('')
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('all')
+  const [toast, setToast] = useState<{ message: string; variant: 'success' | 'error' } | null>(null)
 
   const { data: memories, isLoading } = useQuery<MemoryEntry[]>({
     queryKey: ['memories'],
-    queryFn: () => api.get('/settings/memories').then((r) => r.data).catch(() => []),
+    queryFn: () => api.get('/memories').then((r) => r.data).catch(() => []),
   })
 
   const toggleMutation = useMutation({
     mutationFn: (entry: MemoryEntry) =>
-      api.patch(`/settings/memories/${entry.id}`, { active: !entry.active }),
+      api.patch(`/memories/${entry.id}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['memories'] }),
+    onError: () => setToast({ message: 'Failed to update memory.', variant: 'error' }),
   })
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/settings/memories/${id}`),
+    mutationFn: (id: string) => api.delete(`/memories/${id}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['memories'] })
       setPendingDelete(null)
+      setToast({ message: 'Memory deleted.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to delete memory.', variant: 'error' }),
   })
 
   const list = Array.isArray(memories) ? memories : []
@@ -181,34 +137,22 @@ export default function MemoriesPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <select
+        <FilterSelect
           value={filterWorkspace}
-          onChange={(e) => setFilterWorkspace(e.target.value)}
-          className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]"
-        >
-          <option value="">All workspaces</option>
-          {workspaces.map((w) => (
-            <option key={w} value={w}>
-              {w}
-            </option>
-          ))}
-        </select>
+          onChange={setFilterWorkspace}
+          placeholder="All workspaces"
+          options={workspaces.map((w) => ({ value: w, label: w }))}
+        />
 
-        <div className="flex rounded-[var(--border-radius-button-small)] overflow-hidden border border-[var(--color-inputs-input-border)]">
-          {(['all', 'active', 'inactive'] as const).map((opt) => (
-            <button
-              key={opt}
-              onClick={() => setFilterActive(opt)}
-              className={`px-3 py-1 text-xs font-medium capitalize transition-colors ${
-                filterActive === opt
-                  ? 'bg-[var(--color-buttons-button-primary)] text-white'
-                  : 'bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-navigation-menu-item-hover-background)]'
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
+        <FilterSelect
+          value={filterActive === 'all' ? '' : filterActive}
+          onChange={(v) => setFilterActive((v || 'all') as 'all' | 'active' | 'inactive')}
+          placeholder="All statuses"
+          options={[
+            { value: 'active', label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
+          ]}
+        />
 
         <span className="ml-auto text-xs text-[var(--color-fonts-font-color-support)]">
           {!isLoading && list.length > 0 && `${filtered.length} of ${list.length}`}
@@ -303,13 +247,15 @@ export default function MemoriesPage() {
                       </button>
                     </td>
                     <td className="px-4 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        title="Delete memory"
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        icon={<Trash2 size={14} />}
                         onClick={() => setPendingDelete(entry)}
-                        className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors"
+                        className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        Delete
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -322,12 +268,19 @@ export default function MemoriesPage() {
       )}
 
       {pendingDelete && (
-        <ConfirmDeleteDialog
+        <ConfirmDialog
+          title="Delete memory?"
+          confirmLabel="Delete"
+          variant="danger"
+          icon={<Trash2 size={16} />}
+          isPending={deleteMutation.isPending}
           onConfirm={() => deleteMutation.mutate(pendingDelete.id)}
           onCancel={() => setPendingDelete(null)}
-          isPending={deleteMutation.isPending}
-        />
+        >
+          This action cannot be undone. The memory entry will be permanently removed.
+        </ConfirmDialog>
       )}
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

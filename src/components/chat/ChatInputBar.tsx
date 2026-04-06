@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2 } from 'lucide-react'
+import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2, Mic } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -8,6 +8,8 @@ import { ProductContextDialog } from './context/ProductContextDialog'
 import { AikidoIssueContextDialog } from './context/AikidoIssueContextDialog'
 import { JiraIssueContextDialog } from './context/JiraIssueContextDialog'
 import { ConfluenceDocContextDialog } from './context/ConfluenceDocContextDialog'
+import { useSpeechDictation } from './useSpeechDictation'
+import { MicWaveform } from './MicWaveform'
 
 export type ChatInputHandle = {
   clear: () => void
@@ -16,7 +18,7 @@ export type ChatInputHandle = {
   clearContext: () => void
 }
 
-type ChatMode = 'ask' | 'plan'
+type ChatMode = 'chat' | 'ask' | 'plan'
 
 type ChatInputBarProps = {
   isStreaming: boolean
@@ -34,9 +36,17 @@ type ChatInputBarProps = {
   onImplementPlan?: (plan: ExecutionPlan) => void
   onDismissPlan?: (planId: string) => void
   canPlan?: boolean
+  /** When true, hides the attachment/context (+) button and the mode-switcher button. */
+  simplified?: boolean
 }
 
 const DEFAULT_MAX_SIZE = 10 * 1024 * 1024 // 10MB
+// Stable reference used as default for existingAttachments and activePlans props.
+// Array literals as default parameter values create a new reference every render,
+// which causes the existingAttachments useEffect to fire infinitely.
+const EMPTY_ATTACHMENTS: ChatAttachment[] = []
+const EMPTY_PLANS: ExecutionPlan[] = []
+
 const DEFAULT_ALLOWED_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'text/plain', 'application/pdf', 'application/msword',
@@ -44,7 +54,7 @@ const DEFAULT_ALLOWED_TYPES = [
 ]
 
 export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(function ChatInputBar(
-  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = [], existingContext, activePlans = [], isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false },
+  { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = EMPTY_ATTACHMENTS, existingContext, activePlans = EMPTY_PLANS, isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false, simplified = false },
   ref,
 ) {
   const [input, setInput] = useState('')
@@ -53,7 +63,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [mode, setMode] = useState<ChatMode>('ask')
+  const [mode, setMode] = useState<ChatMode>('chat')
   const [showModeMenu, setShowModeMenu] = useState(false)
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [conversationContext, setConversationContext] = useState<ConversationContext | null>(existingContext || null)
@@ -68,9 +78,24 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   const secretDebounceRef = useRef<number | null>(null)
   const modeMenuRef = useRef<HTMLDivElement>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
+  const { isListening, isTranscribing, isSupported, toggleListening } = useSpeechDictation(
+    (transcript) => {
+      setInput(prev => (prev ? `${prev} ${transcript}` : transcript))
+      requestAnimationFrame(() => {
+        const el = textareaRef.current
+        if (!el) return
+        el.style.height = 'auto'
+        el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+      })
+    },
+  )
 
-  // Initialize attachments with existing attachments when they change
+  // Initialize attachments with existing attachments when they change.
+  // Skip entirely in simplified mode — no attachments are supported there, and
+  // the prop defaults to a new `[]` reference on every render which would cause
+  // an infinite setState → re-render loop.
   useEffect(() => {
+    if (simplified) return
     setAttachments(existingAttachments)
     // Fetch presigned URLs for existing image attachments
     existingAttachments.forEach(async (attachment) => {
@@ -86,7 +111,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         } catch { /* silent */ }
       }
     })
-  }, [existingAttachments])
+  }, [simplified, existingAttachments])
 
   // Initialize context with existing context when it changes
   useEffect(() => {
@@ -142,7 +167,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     const handleKeydown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === '.') {
         event.preventDefault()
-        if (canPlan) setMode(prevMode => prevMode === 'ask' ? 'plan' : 'ask')
+        setMode(prevMode => {
+          if (prevMode === 'chat') return 'ask'
+          if (prevMode === 'ask') return canPlan ? 'plan' : 'chat'
+          return 'chat'
+        })
       }
     }
 
@@ -151,7 +180,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     return () => {
       document.removeEventListener('keydown', handleKeydown)
     }
-  }, [])
+  }, [canPlan])
 
   const handleSend = (text: string) => {
     if (!text.trim() || isStreaming) return
@@ -165,6 +194,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
     }
     if (trimmedText === '.ask') {
       setMode('ask')
+      setInput('')
+      return
+    }
+    if (trimmedText === '.chat') {
+      setMode('chat')
       setInput('')
       return
     }
@@ -627,14 +661,20 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           onDragLeave={handleDragLeave}
           onDragOver={handleDragOver}
           onDrop={handleDrop}
-          className={`relative flex flex-col transition-colors ${isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''} ${
+          className={`relative flex flex-col transition-colors ${
+            isDragging ? 'ring-2 ring-blue-400 bg-blue-50' : ''
+          } ${!isDragging && isListening ? 'ring-2 ring-red-400/80 ring-offset-2 ring-offset-[var(--color-page-background)]' : ''} ${
           isGeneratingPlan || activePlans.length > 0
             ? mode === 'plan'
               ? 'border border-orange-200 rounded-b-xl bg-orange-50 focus-within:border-orange-400'
-              : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
+              : mode === 'ask'
+                ? 'border border-green-200 rounded-b-xl bg-green-50 focus-within:border-green-400'
+                : 'border border-[var(--color-cards-card-stroke)] rounded-b-xl bg-[var(--color-cards-card-background)]'
             : mode === 'plan'
               ? `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-orange-50 hover:bg-orange-100 border border-orange-200 hover:border-orange-300 focus-within:border-orange-400`
-              : `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
+              : mode === 'ask'
+                ? `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-green-50 hover:bg-green-100 border border-green-200 hover:border-green-300 focus-within:border-green-400`
+                : `${attachments.length > 0 || getContextItemCount() > 0 ? 'rounded-2xl' : 'rounded-full'} bg-gray-100 hover:bg-gray-50 border border-gray-200 hover:border-gray-300 focus-within:border-blue-500`
         }`}>
 
         {/* Inline attachments and context - shown at top of input container */}
@@ -685,8 +725,8 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         )}
 
         <div className="flex items-center gap-2 p-3">        
-        {/* Context and attachment menu */}
-        <div className="relative" ref={contextMenuRef}>
+        {/* Context and attachment menu — hidden in simplified mode */}
+        {!simplified && <div className="relative" ref={contextMenuRef}>
           <button
             onClick={() => setShowContextMenu(!showContextMenu)}
             disabled={isStreaming || uploading}
@@ -778,21 +818,23 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
               </button>
             </div>
           )}
-        </div>
+        </div>}
 
-        {/* Mode switcher button */}
-        <div className="relative" ref={modeMenuRef}>
+        {/* Mode switcher button — hidden in simplified mode */}
+        {!simplified && <div className="relative" ref={modeMenuRef}>
           <button
             onClick={() => setShowModeMenu(!showModeMenu)}
             disabled={isStreaming}
             className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
               mode === 'plan'
                 ? 'hover:bg-orange-200 text-orange-600'
-                : 'hover:bg-gray-200 text-gray-600'
+                : mode === 'ask'
+                  ? 'hover:bg-green-200 text-green-600'
+                  : 'hover:bg-gray-200 text-gray-600'
             }`}
-            title={`Current mode: ${mode === 'ask' ? 'Ask' : 'Plan'}`}
+            title={`Current mode: ${mode === 'plan' ? 'Plan' : mode === 'ask' ? 'Ask' : 'Chat'}`}
           >
-            {mode === 'ask' ? <MessageSquare size={16} /> : <Lightbulb size={16} />}
+            {mode === 'plan' ? <Lightbulb size={16} /> : mode === 'ask' ? <BookOpen size={16} /> : <MessageSquare size={16} />}
           </button>
 
           {/* Mode selection menu */}
@@ -800,14 +842,26 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[100px] z-10">
               <button
                 onClick={() => {
+                  setMode('chat')
+                  setShowModeMenu(false)
+                }}
+                className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
+                  mode === 'chat' ? 'bg-gray-100 text-gray-900' : 'text-gray-700'
+                }`}
+              >
+                <MessageSquare size={14} />
+                Chat
+              </button>
+              <button
+                onClick={() => {
                   setMode('ask')
                   setShowModeMenu(false)
                 }}
                 className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center gap-2 ${
-                  mode === 'ask' ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                  mode === 'ask' ? 'bg-green-50 text-green-700' : 'text-gray-700'
                 }`}
               >
-                <MessageSquare size={14} />
+                <BookOpen size={14} />
                 Ask
               </button>
               {canPlan && (
@@ -826,7 +880,45 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
               )}
             </div>
           )}
-        </div>
+        </div>}
+
+        {isSupported && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                if (isStreaming) return
+                /** Second event of a double-click has detail=2; ignore so we don't stop right after start. */
+                if (e.detail === 2) return
+                toggleListening()
+              }}
+              disabled={isStreaming}
+              title={isListening ? 'Click to stop dictation' : 'Click to dictate — speak naturally, pauses send each chunk'}
+              aria-pressed={isListening}
+              className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+                isListening
+                  ? 'bg-red-100 ring-2 ring-red-500 text-red-600 shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              <Mic size={16} aria-hidden />
+            </button>
+            {(isListening || isTranscribing) && (
+              <div className="flex flex-col gap-0.5">
+                <MicWaveform active={isListening} />
+                <span
+                  className={`text-[10px] leading-none font-medium max-w-[120px] truncate ${
+                    isTranscribing ? 'text-blue-500' : 'text-red-600'
+                  }`}
+                  aria-live="polite"
+                >
+                  {isTranscribing ? 'Transcribing…' : 'Listening…'}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Input field */}
         <textarea
@@ -838,7 +930,11 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           placeholder={
             isStreaming
               ? 'Waiting for response…'
-              : mode === 'ask' ? 'Ask anything… (Enter to send, Shift+Enter for newline)' : 'Describe what you want to plan (Enter to send, Shift+Enter for newline)'
+              : mode === 'plan'
+                ? 'Describe what you want to plan (Enter to send, Shift+Enter for newline)'
+                : mode === 'ask'
+                  ? 'Ask a question (read-only, no changes will be made)… (Enter to send, Shift+Enter for newline)'
+                  : 'Ask anything… (Enter to send, Shift+Enter for newline)'
           }
           disabled={isStreaming}
           rows={1}
@@ -886,10 +982,6 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         </div>
       )}
       
-      <p className="text-xs text-gray-500 mt-2 text-center">
-        Responses may include Markdown, Mermaid diagrams, Chart.js charts, and
-        syntax-highlighted code.
-      </p>
 
 
       {/* Context Selection Dialogs */}

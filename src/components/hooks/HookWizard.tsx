@@ -17,7 +17,7 @@ interface Props {
 }
 
 export function HookWizard({ hook, initialCategory, onSave, onCancel, isSaving }: Props) {
-  const REVIEW_ACTIONS = ['review_epic', 'review_feature', 'review_userstory']
+  const REVIEW_ACTIONS = ['review_epic', 'review_feature', 'review_userstory', 'service_desk_triage']
 
   const [step, setStep] = useState<WizardStep>(1)
 

@@ -1,4 +1,6 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useCallback } from 'react'
+import { Link } from '@tanstack/react-router'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -37,6 +39,8 @@ const BAR_OPTIONS = {
   },
 }
 
+const PAGE_SIZE = 50
+
 type RawSummaryItem = {
   callCount: number
   estimatedCostUsd: number
@@ -64,7 +68,89 @@ type RawCallRecord = {
   createdAt: string
 }
 
+// ─── Pagination bar ───────────────────────────────────────────────────────────
+
+interface PaginatorProps {
+  page: number
+  hasPrev: boolean
+  hasNext: boolean
+  fetching: boolean
+  onPrev: () => void
+  onNext: () => void
+}
+
+function Paginator({ page, hasPrev, hasNext, fetching, onPrev, onNext }: PaginatorProps) {
+  const btnBase =
+    'px-3 py-1 text-xs rounded border border-[var(--color-cards-card-stroke)] ' +
+    'bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-headings)] ' +
+    'disabled:opacity-40 hover:bg-[var(--color-tables-table-hover)] transition-colors'
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-[10px] text-[var(--color-fonts-font-color-support)] mr-1">
+        {fetching ? 'Loading…' : `Page ${page + 1}`}
+      </span>
+      <button onClick={onPrev} disabled={!hasPrev || fetching} className={btnBase}>
+        ← Prev
+      </button>
+      <button onClick={onNext} disabled={!hasNext || fetching} className={btnBase}>
+        Next →
+      </button>
+    </div>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function AiStatsPage() {
+  const [page, setPage] = useState(0)
+  const queryClient = useQueryClient()
+
+  const fetchPage = useCallback(
+    (p: number) =>
+      api
+        // Fetch one extra row to detect whether a next page exists (no COUNT(*) needed).
+        .get(`/stats/ai-calls?limit=${PAGE_SIZE + 1}&offset=${p * PAGE_SIZE}`)
+        .then((r) => {
+          const raw: RawCallRecord[] = Array.isArray(r.data) ? r.data : (r.data?.items ?? [])
+          const hasNext = raw.length > PAGE_SIZE
+          return {
+            items: raw.slice(0, PAGE_SIZE).map((rec) => {
+              const input = rec.inputTokens ?? 0
+              const output = rec.outputTokens ?? 0
+              const cacheWrite = rec.cacheCreationInputTokens ?? 0
+              const cacheRead = rec.cacheReadInputTokens ?? 0
+              return {
+                id: String(rec.id),
+                jobId: rec.jobId,
+                jobType: '',
+                model: rec.model,
+                iteration: 0,
+                inputTokens: input,
+                outputTokens: output,
+                cacheCreationInputTokens: cacheWrite,
+                cacheReadInputTokens: cacheRead,
+                cacheReadTokens: cacheRead,
+                cacheWriteTokens: cacheWrite,
+                costUsd: calcCost(rec.model, input, output, cacheWrite, cacheRead),
+                stopReason: null,
+                toolNames: null,
+                durationMs: 0,
+                isError: false,
+                errorMessage: null,
+                createdAt: rec.createdAt,
+                calledAt: rec.createdAt,
+                promptText: null,
+                responseText: null,
+              } satisfies AiCallRecord
+            }),
+            hasNext,
+          }
+        })
+        .catch(() => ({ items: [] as AiCallRecord[], hasNext: false })),
+    [],
+  )
+
   const { data: summary } = useQuery<AiCallSummary>({
     queryKey: ['ai-calls-summary'],
     queryFn: () =>
@@ -102,39 +188,44 @@ export default function AiStatsPage() {
         .catch(() => []),
   })
 
-  const { data: records } = useQuery<{ items: AiCallRecord[]; total: number }>({
-    queryKey: ['ai-calls-records'],
-    queryFn: () =>
-      api
-        .get('/stats/ai-calls?page=0&size=20')
-        .then((r) => {
-          const raw: RawCallRecord[] = Array.isArray(r.data) ? r.data : (r.data?.items ?? [])
-          return {
-            items: raw.map((rec) => {
-              const input = rec.inputTokens ?? 0
-              const output = rec.outputTokens ?? 0
-              const cacheWrite = rec.cacheCreationInputTokens ?? 0
-              const cacheRead = rec.cacheReadInputTokens ?? 0
-              return {
-                id: String(rec.id),
-                jobId: rec.jobId,
-                model: rec.model,
-                inputTokens: input,
-                outputTokens: output,
-                cacheReadTokens: cacheRead,
-                cacheWriteTokens: cacheWrite,
-                costUsd: calcCost(rec.model, input, output, cacheWrite, cacheRead),
-                calledAt: rec.createdAt,
-              }
-            }),
-            total: raw.length,
-          }
-        })
-        .catch(() => ({ items: [], total: 0 })),
+  const { data: records, isFetching: recordsFetching } = useQuery({
+    queryKey: ['ai-calls-records', page],
+    queryFn: () => fetchPage(page),
+    // Keep previous page data visible while the next page loads.
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   })
 
+  // Prefetch the next page in the background so navigation feels instant.
+  useEffect(() => {
+    if (records?.hasNext) {
+      void queryClient.prefetchQuery({
+        queryKey: ['ai-calls-records', page + 1],
+        queryFn: () => fetchPage(page + 1),
+        staleTime: 30_000,
+      })
+    }
+  }, [page, records?.hasNext, queryClient, fetchPage])
+
+  const hasPrev = page > 0
+  const hasNext = records?.hasNext ?? false
+  const recordList = records?.items ?? []
+
+  const goNext = () => setPage((p) => p + 1)
+  const goPrev = () => setPage((p) => Math.max(0, p - 1))
+
+  const paginator = (
+    <Paginator
+      page={page}
+      hasPrev={hasPrev}
+      hasNext={hasNext}
+      fetching={recordsFetching}
+      onPrev={goPrev}
+      onNext={goNext}
+    />
+  )
+
   const dailyList = Array.isArray(daily) ? daily : []
-  const recordList = Array.isArray(records?.items) ? records.items : []
 
   const tokenChartData = {
     labels: dailyList.map((d) => d.date),
@@ -166,6 +257,16 @@ export default function AiStatsPage() {
   return (
     <main>
       <PageHeader title="AI Stats" subtitle="Track AI API usage and costs." />
+
+      {/* Cross-link to AI Effectiveness */}
+      <div className="flex justify-end mb-4">
+        <Link
+          to="/metrics/ai-effectiveness"
+          className="text-xs text-[var(--color-fonts-font-color-brand)] hover:underline"
+        >
+          View AI Effectiveness (acceptance rate) →
+        </Link>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -206,62 +307,70 @@ export default function AiStatsPage() {
         </div>
       )}
 
-      {/* Records table */}
+      {/* Records table — paginator lives in both the header toolbar and the footer */}
       <TableCard
         title="Recent Calls"
-        subtitle={`${recordList.length} record${recordList.length !== 1 ? 's' : ''}`}
+        subtitle={`Page ${page + 1}`}
+        toolbar={paginator}
       >
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
-              {([
-                { label: 'Job ID',    tip: 'Agent job that triggered this AI call' },
-                { label: 'Model',     tip: 'AI model used for this call' },
-                { label: 'Input',     tip: 'Number of input tokens consumed' },
-                { label: 'Output',    tip: 'Number of output tokens generated' },
-                { label: 'Cost',      tip: 'Estimated cost in USD' },
-                { label: 'Called At', tip: 'When the AI call was made' },
-              ] as const).map(({ label, tip }) => (
-                <th
-                  key={label}
-                  className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
-                >
-                  <Tooltip text={tip} position="bottom">{label}</Tooltip>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {recordList.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]"
-                >
-                  No AI call records found.
-                </td>
+        <div className={recordsFetching ? 'opacity-60 pointer-events-none transition-opacity' : 'transition-opacity'}>
+          <table className="w-full text-xs">
+            <thead className="sticky top-0 z-10">
+              <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
+                {([
+                  { label: 'Job ID',    tip: 'Agent job that triggered this AI call' },
+                  { label: 'Model',     tip: 'AI model used for this call' },
+                  { label: 'Input',     tip: 'Number of input tokens consumed' },
+                  { label: 'Output',    tip: 'Number of output tokens generated' },
+                  { label: 'Cost',      tip: 'Estimated cost in USD' },
+                  { label: 'Called At', tip: 'When the AI call was made' },
+                ] as const).map(({ label, tip }) => (
+                  <th
+                    key={label}
+                    className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
+                  >
+                    <Tooltip text={tip} position="bottom">{label}</Tooltip>
+                  </th>
+                ))}
               </tr>
-            ) : (
-              recordList.map((rec) => (
-                <tr
-                  key={rec.id}
-                  className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
-                >
-                  <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)]">
-                    {rec.jobId?.slice(0, 8) ?? '—'}…
-                  </td>
-                  <td className="px-4 py-1.5">{rec.model}</td>
-                  <td className="px-4 py-1.5">{rec.inputTokens.toLocaleString()}</td>
-                  <td className="px-4 py-1.5">{rec.outputTokens.toLocaleString()}</td>
-                  <td className="px-4 py-1.5">${rec.costUsd.toFixed(4)}</td>
-                  <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                    {new Date(rec.calledAt).toLocaleString()}
+            </thead>
+            <tbody>
+              {recordList.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]"
+                  >
+                    No AI call records found.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                recordList.map((rec) => (
+                  <tr
+                    key={rec.id}
+                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] transition-colors"
+                  >
+                    <td className="px-4 py-1.5 font-mono text-[var(--color-fonts-font-color-support)]">
+                      {rec.jobId?.slice(0, 8) ?? '—'}…
+                    </td>
+                    <td className="px-4 py-1.5">{rec.model}</td>
+                    <td className="px-4 py-1.5">{rec.inputTokens.toLocaleString()}</td>
+                    <td className="px-4 py-1.5">{rec.outputTokens.toLocaleString()}</td>
+                    <td className="px-4 py-1.5">${rec.costUsd.toFixed(4)}</td>
+                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                      {new Date(rec.calledAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Bottom paginator */}
+        <div className="flex justify-end px-4 py-3 border-t border-[var(--color-tables-table-cell-stroke)]">
+          {paginator}
+        </div>
       </TableCard>
     </main>
   )

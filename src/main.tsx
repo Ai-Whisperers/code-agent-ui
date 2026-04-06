@@ -28,6 +28,7 @@ import QualityReportsPage from '@/pages/QualityReports'
 import CoverageDetail from '@/pages/CoverageDetail'
 import ReviewMetricsPage from '@/pages/ReviewMetrics'
 import DeveloperScorecardPage from '@/pages/DeveloperScorecard'
+import KnowledgeGraphPage from '@/pages/KnowledgeGraph'
 import AiStatsPage from '@/pages/AiStats'
 import MemoriesPage from '@/pages/Memories'
 import SystemSettingsPage from '@/pages/SystemSettings'
@@ -36,13 +37,29 @@ import CustomerRegistryPage from '@/pages/CustomerRegistry'
 import ChatPage from '@/pages/Chat'
 import WebhookAuditLogPage from '@/pages/WebhookAuditLog'
 import AuditLogPage from '@/pages/AuditLog'
-import RoadmapsPage from '@/pages/Roadmaps'
-import RoadmapDetail from '@/pages/RoadmapDetail'
+import AdminUsersPage from '@/pages/AdminUsers'
+import TeamsPage from '@/pages/Teams'
 import ScopesPage from '@/pages/Scopes'
 import ScopeDetail from '@/pages/ScopeDetail'
+import ScopeImprove from '@/pages/ScopeImprove'
+import QAScopesPage from '@/pages/QAScopes'
+import QAScopeDetail from '@/pages/QAScopeDetail'
+import TestPlanDetail from '@/pages/TestPlanDetail'
+import TestPlansPage from '@/pages/TestPlansPage'
+import TestCasesPage from '@/pages/TestCasesPage'
 import Soc2AuditPage from '@/pages/Soc2AuditPage'
+import SecurityIssuesPage from '@/pages/SecurityIssuesPage'
+import PullRequestsPage from '@/pages/PullRequests'
+import PRDetail from '@/pages/PRDetail'
+import OAuthCallbackPage from '@/pages/OAuthCallbackPage'
 import AccessDenied from '@/pages/AccessDenied'
 import Unauthenticated from '@/pages/Unauthenticated'
+import IntegrationSettingsPage from '@/pages/IntegrationSettings'
+import ArchitecturePage from '@/pages/Architecture'
+import LogAnalysisPage from '@/pages/LogAnalysis'
+import PrCycleTimePage from '@/pages/PrCycleTime'
+import AiEffectivenessPage from '@/pages/AiEffectiveness'
+import CoverageTrendPage from '@/pages/CoverageTrend'
 
 import './styles/index.css'
 
@@ -127,6 +144,23 @@ const jobDetailRoute = createRoute({
   },
 })
 
+const pullRequestsRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/pull-requests',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_developer', 'app_admin'] }),
+  component: PullRequestsPage,
+})
+
+const prDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/pull-requests/$workspace/$repoSlug/$prId',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_developer', 'app_admin'] }),
+  component: function PRDetailRoute() {
+    const { workspace, repoSlug, prId } = prDetailRoute.useParams()
+    return <PRDetail workspace={workspace} repoSlug={repoSlug} prId={prId} />
+  },
+})
+
 const reposRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/repos',
@@ -196,6 +230,12 @@ const developerScorecardRoute = createRoute({
   component: DeveloperScorecardPage,
 })
 
+const knowledgeGraphRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/knowledge-graph',
+  component: KnowledgeGraphPage,
+})
+
 const aiStatsRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/stats',
@@ -242,6 +282,27 @@ const chatConvRoute = createRoute({
   component: ChatPage,
 })
 
+const integrationFiltersRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/integrations',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: IntegrationSettingsPage,
+})
+
+const architectureRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/architecture',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: ArchitecturePage,
+})
+
+const logAnalysisRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/log-analysis',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin', 'app_developer'] }),
+  component: LogAnalysisPage,
+})
+
 const webhookAuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/settings/webhook-audit',
@@ -256,19 +317,18 @@ const auditLogRoute = createRoute({
   component: AuditLogPage,
 })
 
-const roadmapsRoute = createRoute({
+const adminUsersRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/metrics/roadmap',
-  component: RoadmapsPage,
+  path: '/settings/users',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: AdminUsersPage,
 })
 
-const roadmapDetailRoute = createRoute({
+const teamsRoute = createRoute({
   getParentRoute: () => layoutRoute,
-  path: '/metrics/roadmap/$id',
-  component: function RoadmapDetailRoute() {
-    const { id } = roadmapDetailRoute.useParams()
-    return <RoadmapDetail roadmapId={id} />
-  },
+  path: '/settings/teams',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: TeamsPage,
 })
 
 const scopesRoute = createRoute({
@@ -288,10 +348,88 @@ const scopeDetailRoute = createRoute({
   },
 })
 
+const scopeImproveRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/scope/$id/improve/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function ScopeImproveRoute() {
+    const { id, issueKey } = scopeImproveRoute.useParams()
+    return <ScopeImprove scopeId={id} issueKey={issueKey} />
+  },
+})
+
+const qaScopesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/scope',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: QAScopesPage,
+})
+
+const qaScopeDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/scope/$id',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QAScopeDetailRoute() {
+    const { id } = qaScopeDetailRoute.useParams()
+    return <QAScopeDetail scopeId={id} />
+  },
+})
+
+const qaTestPlanDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/scope/$id/test-plan/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestPlanDetailRoute() {
+    const { id, issueKey } = qaTestPlanDetailRoute.useParams()
+    return <TestPlanDetail scopeId={id} issueKey={issueKey} />
+  },
+})
+
+const qaTestPlansRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-plans',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: TestPlansPage,
+})
+
+const qaTestPlanGlobalDetailRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-plans/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestPlanGlobalDetailRoute() {
+    const { issueKey } = qaTestPlanGlobalDetailRoute.useParams()
+    // scopeId is not needed for display-only — pass empty string; the page only reads planJson
+    return <TestPlanDetail scopeId="" issueKey={issueKey} />
+  },
+})
+
+const qaTestCasesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/qa/test-cases/$issueKey',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: function QATestCasesRoute() {
+    const { issueKey } = qaTestCasesRoute.useParams()
+    return <TestCasesPage issueKey={issueKey} />
+  },
+})
+
 const soc2AuditRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/compliance/soc2',
   component: Soc2AuditPage,
+})
+
+const securityIssuesRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/security/issues',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_staff', 'app_developer', 'app_admin'] }),
+  component: SecurityIssuesPage,
+})
+
+const oauthCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/callback',
+  component: OAuthCallbackPage,
 })
 
 const accessDeniedRoute = createRoute({
@@ -306,12 +444,32 @@ const unauthenticatedRoute = createRoute({
   component: Unauthenticated,
 })
 
+const prCycleTimeRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/pr-cycle-time',
+  component: PrCycleTimePage,
+})
+
+const aiEffectivenessRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/ai-effectiveness',
+  component: AiEffectivenessPage,
+})
+
+const coverageTrendRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/metrics/coverage-trend',
+  component: CoverageTrendPage,
+})
+
 const routeTree = rootRoute.addChildren([
   layoutRoute.addChildren([
     indexRoute,
     jobsRoute,
     newJobRoute,
     jobDetailRoute,
+    pullRequestsRoute,
+    prDetailRoute,
     reposRoute,
     hooksRoute,
     promptsRoute,
@@ -322,21 +480,37 @@ const routeTree = rootRoute.addChildren([
     coverageDetailRoute,
     reviewMetricsRoute,
     developerScorecardRoute,
+    knowledgeGraphRoute,
+    prCycleTimeRoute,
+    aiEffectivenessRoute,
+    coverageTrendRoute,
     aiStatsRoute,
     memoriesRoute,
     systemSettingsRoute,
     knowledgeIndexRoute,
+    integrationFiltersRoute,
     customersRoute,
     chatRoute,
     chatConvRoute,
     webhookAuditRoute,
     auditLogRoute,
-    roadmapsRoute,
-    roadmapDetailRoute,
+    adminUsersRoute,
+    teamsRoute,
     scopesRoute,
     scopeDetailRoute,
+    scopeImproveRoute,
+    qaScopesRoute,
+    qaScopeDetailRoute,
+    qaTestPlanDetailRoute,
+    qaTestPlansRoute,
+    qaTestPlanGlobalDetailRoute,
+    qaTestCasesRoute,
     soc2AuditRoute,
+    securityIssuesRoute,
+    architectureRoute,
+    logAnalysisRoute,
   ]),
+  oauthCallbackRoute,
   accessDeniedRoute,
   unauthenticatedRoute,
 ])

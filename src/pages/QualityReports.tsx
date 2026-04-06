@@ -1,6 +1,7 @@
 import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { useStore } from '@tanstack/react-store'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -13,15 +14,41 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { ArrowUpCircle, BarChart2, ExternalLink, ShieldCheck, X } from 'lucide-react'
+import {
+  ArrowUpCircle,
+  BarChart2,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
+  Flame,
+  Loader2,
+  Play,
+  PlayCircle,
+  ShieldCheck,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select } from '@/components/ui/Select'
+import { Toast } from '@/components/ui/Toast'
+import type { ToastConfig } from '@/components/ui/Toast'
 import { VersionBadge } from '@/components/VersionBadge'
 import { isVersionOutdated } from '@/lib/version'
+import { authStore } from '@/store/auth-store'
+import { hasPermission } from '@/lib/permissions'
 import api from '@/lib/api'
-import type { QualityReport, RepoSettings, LatestVersionsResponse, ExecutionPlan } from '@/types/api'
+import type {
+  QualityReport,
+  RepoSettings,
+  LatestVersionsResponse,
+  ExecutionPlan,
+  TechDebtSnapshot,
+  TechDebtFileRow,
+} from '@/types/api'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, ChartTooltip, Legend, Filler)
 
@@ -44,22 +71,38 @@ const CHART_OPTIONS = {
 }
 
 const BADGE_BASE = 'text-xs font-semibold px-2 py-0.5 rounded-[var(--border-radius-tag)]'
-const GREEN = `${BADGE_BASE} bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]`
+const GREEN  = `${BADGE_BASE} bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]`
 const ORANGE = `${BADGE_BASE} bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]`
-const RED = `${BADGE_BASE} bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]`
+const RED    = `${BADGE_BASE} bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)]`
 const YELLOW = `${BADGE_BASE} bg-yellow-100 text-yellow-700`
-const BLUE = `${BADGE_BASE} bg-blue-100 text-blue-600`
-const NONE = 'text-[var(--color-fonts-font-color-support)]'
+const BLUE   = `${BADGE_BASE} bg-blue-100 text-blue-600`
+const NONE   = 'text-[var(--color-fonts-font-color-support)]'
 
 type RowData = {
   repo: RepoSettings
-  report: QualityReport | undefined
+  mainReport: QualityReport | null | undefined
+  developReport: QualityReport | null | undefined
   isLoading: boolean
 }
 
 export default function QualityReportsPage() {
   const navigate = useNavigate()
+  const userPermissions = useStore(authStore, (s) => s.user?.permissions ?? [])
+  const isAdmin = hasPermission(userPermissions, 'MANAGE_SETTINGS')
+
   const [selected, setSelected] = useState<RowData | null>(null)
+  const [fixTarget, setFixTarget] = useState<RowData | null>(null)
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [activeTab, setActiveTab] = useState<'reports' | 'tech-debt'>('reports')
+  const [runAllToast, setRunAllToast] = useState<ToastConfig | null>(null)
+
+  // ── Tech Debt state ──────────────────────────────────────────────────────
+  const [tdRepoFilter, setTdRepoFilter] = useState<string>('')
+  const [tdThreshold, setTdThreshold] = useState<number>(0.3)
+  const [tdSelectedSnapshot, setTdSelectedSnapshot] = useState<number | null>(null)
+  const [tdJobId, setTdJobId] = useState<string | null>(null)
+  const [tdToast, setTdToast] = useState<ToastConfig | null>(null)
+  const queryClient = useQueryClient()
 
   const { data: repos, isLoading: reposLoading } = useQuery<RepoSettings[]>({
     queryKey: ['repos'],
@@ -75,32 +118,221 @@ export default function QualityReportsPage() {
   const qualityRepos = (Array.isArray(repos) ? repos : []).filter((r) => r.qualityReportEnabled)
 
   const reportQueries = useQueries({
-    queries: qualityRepos.map((repo) => ({
-      queryKey: ['quality-report', repo.workspace, repo.repoSlug, 'main'],
-      queryFn: () =>
-        api
-          .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`)
-          .then((r) => r.data as QualityReport)
-          .catch(() => undefined),
-      enabled: qualityRepos.length > 0,
-    })),
+    queries: qualityRepos.flatMap((repo) => [
+      {
+        queryKey: ['quality-report', repo.workspace, repo.repoSlug, 'main'],
+        queryFn: () =>
+          api
+            .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`)
+            .then((r) => r.data as QualityReport)
+            .catch(() => null),
+        enabled: qualityRepos.length > 0,
+      },
+      {
+        queryKey: ['quality-report', repo.workspace, repo.repoSlug, 'develop'],
+        queryFn: () =>
+          api
+            .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/develop`)
+            .then((r) => r.data as QualityReport)
+            .catch(() => null),
+        enabled: qualityRepos.length > 0,
+      },
+    ]),
   })
 
   const rows: RowData[] = qualityRepos.map((repo, i) => ({
     repo,
-    report: reportQueries[i]?.data,
-    isLoading: reportQueries[i]?.isLoading ?? false,
+    mainReport: reportQueries[i * 2]?.data,
+    developReport: reportQueries[i * 2 + 1]?.data,
+    isLoading: (reportQueries[i * 2]?.isLoading ?? false) || (reportQueries[i * 2 + 1]?.isLoading ?? false),
   }))
 
   const isLoading = reposLoading || reportQueries.some((q) => q.isLoading)
+
+  // ── Run all reports ──────────────────────────────────────────────────────
+  const runAllMutation = useMutation({
+    mutationFn: async () => {
+      const jobs: { branch: string; repoSlug: string }[] = []
+      for (const repo of qualityRepos) {
+        const repoUrl = `${(repo.gitPlatformUrl ?? import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org').replace(/\/$/, '')}/${repo.workspace}/${repo.repoSlug}.git`
+        for (const branch of ['develop', 'main']) {
+          await api.post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/${branch}`, { repoUrl })
+          jobs.push({ branch, repoSlug: repo.repoSlug })
+        }
+      }
+      return jobs
+    },
+    onSuccess: (jobs) => {
+      setRunAllToast({
+        variant: 'success',
+        message: `Queued ${jobs.length} quality report job${jobs.length !== 1 ? 's' : ''} across ${qualityRepos.length} repo${qualityRepos.length !== 1 ? 's' : ''}.`,
+      })
+    },
+    onError: () => {
+      setRunAllToast({ variant: 'error', message: 'Failed to queue one or more quality report jobs.' })
+    },
+  })
+
+  // ── Tech Debt queries ────────────────────────────────────────────────────
+  const { data: tdSnapshots, isLoading: tdSnapshotsLoading } = useQuery<TechDebtSnapshot[]>({
+    queryKey: ['tech-debt-snapshots'],
+    queryFn: () => api.get('/tech-debt/snapshots').then((r) => r.data).catch(() => []),
+    enabled: activeTab === 'tech-debt',
+  })
+
+  const resolvedSnapshotId = tdSelectedSnapshot ?? (tdSnapshots?.[0]?.id ?? null)
+
+  const { data: tdFiles, isLoading: tdFilesLoading } = useQuery<TechDebtFileRow[]>({
+    queryKey: ['tech-debt-heatmap', resolvedSnapshotId, tdRepoFilter],
+    queryFn: () =>
+      api
+        .get('/tech-debt/heatmap', {
+          params: {
+            ...(resolvedSnapshotId != null ? { snapshotId: resolvedSnapshotId } : {}),
+            ...(tdRepoFilter ? { repo: tdRepoFilter } : {}),
+          },
+        })
+        .then((r) => r.data)
+        .catch(() => []),
+    enabled: activeTab === 'tech-debt',
+  })
+
+  // Poll job status while a tech-debt generation job is running.
+  const { data: tdJobStatusData } = useQuery<{ status: string }>({
+    queryKey: ['job-status', tdJobId],
+    queryFn: () =>
+      api.get(`/jobs/status/${tdJobId}`).then((r) => r.data as { status: string }),
+    enabled: tdJobId != null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      if (status === 'SUCCESS' || status === 'FAILED') return false
+      return 3000
+    },
+    gcTime: 0,
+  })
+
+  const tdJobStatus = tdJobStatusData?.status
+
+  // Trigger effect when job status reaches a terminal state.
+  const [prevTdJobStatus, setPrevTdJobStatus] = useState<string | undefined>(undefined)
+  if (tdJobStatus !== prevTdJobStatus) {
+    setPrevTdJobStatus(tdJobStatus)
+    if (tdJobStatus === 'SUCCESS') {
+      setTdToast({ message: 'Tech debt analysis complete.', variant: 'success' })
+      queryClient.invalidateQueries({ queryKey: ['tech-debt-snapshots'] })
+      queryClient.invalidateQueries({ queryKey: ['tech-debt-heatmap'] })
+      setTdJobId(null)
+    } else if (tdJobStatus === 'FAILED') {
+      setTdToast({ message: 'Tech debt analysis failed.', variant: 'error' })
+      setTdJobId(null)
+    }
+  }
+
+  const tdGenerateMutation = useMutation({
+    mutationFn: () =>
+      api.post('/tech-debt/generate').then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      setTdJobId(data.jobId)
+      setTdToast({ message: 'Tech debt analysis queued.', variant: 'success' })
+    },
+    onError: () => {
+      setTdToast({ message: 'Failed to queue tech debt analysis.', variant: 'error' })
+    },
+  })
+
+  const tdIsRunning = tdJobId != null && tdJobStatus !== 'SUCCESS' && tdJobStatus !== 'FAILED'
+
+  const tdFilteredFiles = (tdFiles ?? []).filter((f) => f.debtScore >= tdThreshold)
+
+  const repoOptions = [
+    { value: '', label: 'All repos' },
+    ...Array.from(new Set((repos ?? []).map((r) => r.repoSlug))).map((s) => ({
+      value: s,
+      label: s,
+    })),
+  ]
+
+  function toggleExpand(key: string) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   return (
     <main className="flex flex-col flex-1 min-h-0">
       <PageHeader
         title="Quality Reports"
-        subtitle="Code quality metrics per repository."
+        subtitle="Code quality metrics per repository — main and develop branches."
+        actions={
+          isAdmin ? (
+            <Tooltip text="Queue quality report jobs for all repos (develop + main)" position="bottom">
+              <Button
+                variant="primary"
+                size="sm"
+                icon={runAllMutation.isPending
+                  ? <Loader2 size={14} className="animate-spin" />
+                  : <PlayCircle size={14} />
+                }
+                disabled={runAllMutation.isPending || qualityRepos.length === 0}
+                onClick={() => runAllMutation.mutate()}
+              >
+                {runAllMutation.isPending ? 'Queuing…' : 'Run All Reports'}
+              </Button>
+            </Tooltip>
+          ) : undefined
+        }
       />
+      {runAllToast && <Toast {...runAllToast} onClose={() => setRunAllToast(null)} />}
 
+      {/* ── Tab bar ── */}
+      <div className="flex gap-1 px-4 pt-3 pb-0 border-b border-[var(--color-tables-table-header-stroke)]">
+        {(['reports', 'tech-debt'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={[
+              'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-t transition-colors',
+              activeTab === tab
+                ? 'bg-[var(--color-cards-card-background)] border border-b-0 border-[var(--color-tables-table-header-stroke)] text-[var(--color-fonts-font-color-primary)]'
+                : 'text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)]',
+            ].join(' ')}
+          >
+            {tab === 'reports' ? <ShieldCheck size={13} /> : <Flame size={13} />}
+            {tab === 'reports' ? 'Reports' : 'Tech Debt'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tech Debt tab ── */}
+      {activeTab === 'tech-debt' && (
+        <TechDebtTab
+          snapshots={tdSnapshots ?? []}
+          snapshotsLoading={tdSnapshotsLoading}
+          files={tdFilteredFiles}
+          allFiles={tdFiles ?? []}
+          filesLoading={tdFilesLoading}
+          selectedSnapshotId={resolvedSnapshotId}
+          onSelectSnapshot={(id) => setTdSelectedSnapshot(id)}
+          repoFilter={tdRepoFilter}
+          onRepoFilter={setTdRepoFilter}
+          repoOptions={repoOptions}
+          threshold={tdThreshold}
+          onThreshold={setTdThreshold}
+          isRunning={tdIsRunning}
+          onGenerate={() => tdGenerateMutation.mutate()}
+        />
+      )}
+
+      {tdToast && (
+        <Toast {...tdToast} onClose={() => setTdToast(null)} />
+      )}
+
+      {/* ── Reports tab ── */}
+      {activeTab === 'reports' && (
+      <>
       <TableCard
         className="flex-1 min-h-0"
         title="Repositories"
@@ -110,19 +342,20 @@ export default function QualityReportsPage() {
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-[var(--color-tables-table-header-stroke)] bg-[var(--color-cards-card-background)]">
               {([
-                { label: 'Workspace',        tip: 'Git workspace slug' },
-                { label: 'Repo',             tip: 'Repository slug' },
-                { label: 'Archetype',        tip: 'Repository language / framework archetype' },
-                { label: 'Version',          tip: 'Current primary dependency version' },
-                { label: 'Score',            tip: 'Composite quality score (0–100)' },
-                { label: 'Linter Errors',    tip: 'Total linter violations in the last report' },
-                { label: 'Security Issues',  tip: 'Total security vulnerabilities detected' },
-                { label: 'Avg Complexity',   tip: 'Average cyclomatic complexity per function' },
-                { label: 'Last Measured',    tip: 'When the last quality report was collected' },
-                { label: 'Actions',          tip: '' },
-              ] as const).map(({ label, tip }) => (
+                { label: '',                tip: '' },
+                { label: 'Workspace',       tip: 'Git workspace slug' },
+                { label: 'Repo',            tip: 'Repository slug' },
+                { label: 'Archetype',       tip: 'Repository language / framework archetype' },
+                { label: 'Version',         tip: 'Current primary dependency version' },
+                { label: 'Score',           tip: 'Composite quality score (0–100) — main branch' },
+                { label: 'Linter Errors',   tip: 'Total linter violations — main branch' },
+                { label: 'Security Issues', tip: 'Total security vulnerabilities — main branch' },
+                { label: 'Avg Complexity',  tip: 'Average cyclomatic complexity — main branch' },
+                { label: 'Last Measured',   tip: 'When the last quality report was collected' },
+                { label: 'Actions',         tip: '' },
+              ] as const).map(({ label, tip }, idx) => (
                 <th
-                  key={label || 'actions'}
+                  key={label || idx}
                   className="px-4 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]"
                 >
                   {tip ? <Tooltip text={tip} position="bottom">{label}</Tooltip> : null}
@@ -134,7 +367,7 @@ export default function QualityReportsPage() {
             {isLoading
               ? Array.from({ length: 4 }).map((_, i) => (
                   <tr key={i} className="border-b border-[var(--color-tables-table-cell-stroke)]">
-                    <td colSpan={10} className="px-4 py-2">
+                    <td colSpan={11} className="px-4 py-2">
                       <div className="h-4 skeleton-shimmer rounded" />
                     </td>
                   </tr>
@@ -142,88 +375,130 @@ export default function QualityReportsPage() {
               : rows.length === 0
               ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
+                  <td colSpan={11} className="px-4 py-10 text-center text-[var(--color-fonts-font-color-support)]">
                     No repositories have quality reports enabled.
                   </td>
                 </tr>
               )
-              : rows.map((row) => (
-                  <tr
-                    key={`${row.repo.workspace}/${row.repo.repoSlug}`}
-                    className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
-                    onClick={() => setSelected(row)}
-                  >
-                    <td className="px-4 py-1.5 font-medium">{row.repo.workspace}</td>
-                    <td className="px-4 py-1.5">{row.repo.repoSlug}</td>
-                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                      {row.repo.archetype ?? '—'}
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <VersionBadge
-                        version={row.repo.archetypeVersion}
-                        archetype={row.repo.archetype}
-                        latestVersions={latestVersions}
-                      />
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <ScoreBadge score={row.report?.score} />
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <LinterErrorsBadge count={row.report?.linter?.errorCount} />
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <SecurityBadge
-                        issueCount={row.report?.aikido?.totalIssues ?? row.report?.aikido?.issueCount}
-                        criticalCount={row.report?.aikido?.criticalCount}
-                      />
-                    </td>
-                    <td className="px-4 py-1.5">
-                      <ComplexityBadge value={row.report?.complexity?.avgComplexity} />
-                    </td>
-                    <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
-                      {row.report ? new Date(row.report.measuredAt).toLocaleString() : '—'}
-                    </td>
-                    <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-1.5">
-                        <Tooltip text="View quality report summary" position="top">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<ExternalLink size={12} />}
-                            onClick={() => setSelected(row)}
-                          >
-                            View
-                          </Button>
-                        </Tooltip>
-                        <Tooltip
-                          text={
-                            row.report?.coverage
-                              ? `Line: ${row.report.coverage.lineRate?.toFixed(1)}%  Branch: ${row.report.coverage.branchRate?.toFixed(1)}%  Method: ${row.report.coverage.methodRate?.toFixed(1)}%\nOpen coverage detail`
-                              : 'Open coverage detail'
-                          }
-                          position="top"
-                        >
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon={<ShieldCheck size={12} />}
-                            onClick={() =>
-                              navigate({
-                                to: '/metrics/quality/$workspace/$repoSlug',
-                                params: {
-                                  workspace: row.repo.workspace,
-                                  repoSlug: row.repo.repoSlug,
-                                },
-                              })
+              : rows.map((row) => {
+                  const key = `${row.repo.workspace}/${row.repo.repoSlug}`
+                  const isExpanded = expandedRows.has(key)
+                  return [
+                    /* ── Parent row ── */
+                    <tr
+                      key={key}
+                      className="border-b border-[var(--color-tables-table-cell-stroke)] hover:bg-[var(--color-tables-table-hover)] cursor-pointer transition-colors"
+                      onClick={() => toggleExpand(key)}
+                    >
+                      {/* Expand chevron */}
+                      <td className="px-2 py-1.5 w-6 text-[var(--color-fonts-font-color-support)]">
+                        {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      </td>
+                      <td className="px-4 py-1.5 font-medium">{row.repo.workspace}</td>
+                      <td className="px-4 py-1.5">{row.repo.repoSlug}</td>
+                      <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                        {row.repo.archetype ?? '—'}
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <VersionBadge
+                          version={row.repo.archetypeVersion}
+                          archetype={row.repo.archetype}
+                          latestVersions={latestVersions}
+                        />
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <ScoreBadge score={row.mainReport?.score} />
+                      </td>
+                      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <LinterErrorsBadge count={row.mainReport?.linter?.errorCount} />
+                          {(row.mainReport?.linter?.errorCount ?? 0) > 0 && (
+                            <Tooltip text="Queue a Fix job to resolve linter errors" position="top">
+                              <button
+                                onClick={() => setFixTarget(row)}
+                                className="p-0.5 rounded text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-buttons-button-primary)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+                              >
+                                <Wrench size={12} />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <SecurityBadge
+                          issueCount={row.mainReport?.aikido?.totalIssues ?? row.mainReport?.aikido?.issueCount}
+                          criticalCount={row.mainReport?.aikido?.criticalCount}
+                        />
+                      </td>
+                      <td className="px-4 py-1.5">
+                        <ComplexityBadge value={row.mainReport?.complexity?.avgComplexity} />
+                      </td>
+                      <td className="px-4 py-1.5 text-[var(--color-fonts-font-color-support)]">
+                        {row.mainReport ? new Date(row.mainReport.measuredAt).toLocaleString() : '—'}
+                      </td>
+                      <td className="px-4 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-1.5">
+                          <Tooltip text="View quality report summary" position="top">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<ExternalLink size={12} />}
+                              onClick={() => setSelected(row)}
+                            >
+                              View
+                            </Button>
+                          </Tooltip>
+                          <Tooltip
+                            text={
+                              row.mainReport?.coverage
+                                ? `Line: ${row.mainReport.coverage.lineRate?.toFixed(1)}%  Branch: ${row.mainReport.coverage.branchRate?.toFixed(1)}%\nOpen coverage detail`
+                                : 'Open coverage detail'
                             }
+                            position="top"
                           >
-                            Coverage
-                          </Button>
-                        </Tooltip>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              icon={<ShieldCheck size={12} />}
+                              onClick={() =>
+                                navigate({
+                                  to: '/metrics/quality/$workspace/$repoSlug',
+                                  params: {
+                                    workspace: row.repo.workspace,
+                                    repoSlug: row.repo.repoSlug,
+                                  },
+                                })
+                              }
+                            >
+                              Coverage
+                            </Button>
+                          </Tooltip>
+                        </div>
+                      </td>
+                    </tr>,
+
+                    /* ── Branch subrows (visible when expanded) ── */
+                    ...(isExpanded
+                      ? [
+                          <BranchSubRow
+                            key={`${key}/main`}
+                            branch="main"
+                            report={row.mainReport ?? undefined}
+                            compareReport={row.developReport ?? undefined}
+                            isReference
+                            latestVersions={latestVersions}
+                          />,
+                          <BranchSubRow
+                            key={`${key}/develop`}
+                            branch="develop"
+                            report={row.developReport ?? undefined}
+                            compareReport={row.mainReport ?? undefined}
+                            latestVersions={latestVersions}
+                          />,
+                        ]
+                      : []),
+                  ]
+                })}
           </tbody>
         </table>
       </TableCard>
@@ -235,20 +510,404 @@ export default function QualityReportsPage() {
           onClose={() => setSelected(null)}
         />
       )}
+
+      {fixTarget && (
+        <FixLinterDialog
+          row={fixTarget}
+          onClose={() => setFixTarget(null)}
+        />
+      )}
+      </>
+      )}
     </main>
   )
 }
 
+// ── Tech Debt Tab ─────────────────────────────────────────────────────────────
+
+function debtColor(score: number): string {
+  if (score >= 0.7) return 'bg-red-500'
+  if (score >= 0.5) return 'bg-orange-400'
+  if (score >= 0.3) return 'bg-yellow-400'
+  return 'bg-green-400'
+}
+
+function debtTextColor(score: number): string {
+  if (score >= 0.7) return 'text-white'
+  if (score >= 0.5) return 'text-white'
+  return 'text-gray-800'
+}
+
+interface TechDebtTabProps {
+  snapshots: TechDebtSnapshot[]
+  snapshotsLoading: boolean
+  files: TechDebtFileRow[]
+  allFiles: TechDebtFileRow[]
+  filesLoading: boolean
+  selectedSnapshotId: number | null
+  onSelectSnapshot: (id: number) => void
+  repoFilter: string
+  onRepoFilter: (v: string) => void
+  repoOptions: { value: string; label: string }[]
+  threshold: number
+  onThreshold: (v: number) => void
+  isRunning: boolean
+  onGenerate: () => void
+}
+
+function TechDebtTab({
+  snapshots,
+  snapshotsLoading,
+  files,
+  allFiles,
+  filesLoading,
+  selectedSnapshotId,
+  onSelectSnapshot,
+  repoFilter,
+  onRepoFilter,
+  repoOptions,
+  threshold,
+  onThreshold,
+  isRunning,
+  onGenerate,
+}: TechDebtTabProps) {
+  const snapshotOptions = snapshots.map((s) => ({
+    value: String(s.id),
+    label: `${new Date(s.computedAt).toLocaleString()} — ${s.totalFiles} files`,
+  }))
+
+  const highDebt = allFiles.filter((f) => f.debtScore >= 0.6).length
+  const worstRepo = allFiles.length > 0
+    ? allFiles.reduce((a, b) => (a.debtScore > b.debtScore ? a : b)).repoSlug
+    : null
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 p-4 gap-4 overflow-auto">
+      {/* Controls */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col gap-1 min-w-[220px]">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Snapshot
+          </label>
+          {snapshotsLoading ? (
+            <div className="h-7 w-48 skeleton-shimmer rounded" />
+          ) : snapshotOptions.length > 0 ? (
+            <Select
+              value={selectedSnapshotId != null ? String(selectedSnapshotId) : ''}
+              onChange={(v) => onSelectSnapshot(Number(v))}
+              options={snapshotOptions}
+            />
+          ) : (
+            <span className="text-xs text-[var(--color-fonts-font-color-support)]">No snapshots yet</span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-1 min-w-[160px]">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Repository
+          </label>
+          <Select
+            value={repoFilter}
+            onChange={onRepoFilter}
+            options={repoOptions}
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+            Min debt score: {threshold.toFixed(2)}
+          </label>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            value={threshold}
+            onChange={(e) => onThreshold(Number(e.target.value))}
+            className="w-40 accent-[var(--color-buttons-button-primary)]"
+          />
+        </div>
+
+        <Button
+          variant="primary"
+          size="sm"
+          icon={isRunning ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+          onClick={onGenerate}
+          disabled={isRunning}
+        >
+          {isRunning ? 'Running…' : 'Run Analysis'}
+        </Button>
+      </div>
+
+      {/* Summary bar */}
+      {allFiles.length > 0 && (
+        <div className="flex flex-wrap gap-4 text-xs text-[var(--color-fonts-font-color-support)]">
+          <span>
+            <strong className="text-[var(--color-fonts-font-color-primary)]">{allFiles.length}</strong> files analysed
+          </span>
+          <span>
+            <strong className="text-red-500">{highDebt}</strong> with debt &gt; 0.6
+          </span>
+          {worstRepo && (
+            <span>
+              Worst repo: <strong className="text-[var(--color-fonts-font-color-primary)]">{worstRepo}</strong>
+            </span>
+          )}
+          <span>
+            Showing <strong className="text-[var(--color-fonts-font-color-primary)]">{files.length}</strong> files above threshold
+          </span>
+        </div>
+      )}
+
+      {/* Heatmap grid */}
+      {filesLoading ? (
+        <div className="flex items-center justify-center py-16 text-[var(--color-fonts-font-color-support)] text-xs gap-2">
+          <Loader2 size={16} className="animate-spin" />
+          Loading heatmap…
+        </div>
+      ) : files.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-2 text-[var(--color-fonts-font-color-support)] text-xs">
+          <Flame size={28} className="opacity-30" />
+          {allFiles.length === 0
+            ? 'No data yet — run an analysis to generate the heatmap.'
+            : 'No files above the current threshold.'}
+        </div>
+      ) : (
+        <div
+          className="grid gap-1"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}
+        >
+          {files.map((f) => (
+            <Tooltip
+              key={`${f.repoSlug}/${f.filePath}`}
+              position="top"
+              text={[
+                f.filePath,
+                `Repo: ${f.repoSlug}`,
+                `Debt: ${f.debtScore.toFixed(3)}`,
+                `Complexity: ${f.complexityScore.toFixed(3)}`,
+                `Coverage gap: ${f.coverageGap.toFixed(3)}`,
+                `Churn: ${f.churnScore.toFixed(3)}`,
+                `Staleness: ${f.stalenessScore.toFixed(3)}`,
+                f.lastCommitAt ? `Last commit: ${f.lastCommitAt}` : '',
+              ]
+                .filter(Boolean)
+                .join('\n')}
+            >
+              <div
+                className={[
+                  'rounded p-2 cursor-default overflow-hidden',
+                  debtColor(f.debtScore),
+                  debtTextColor(f.debtScore),
+                ].join(' ')}
+              >
+                <div className="text-[10px] font-bold leading-none mb-1">
+                  {f.debtScore.toFixed(2)}
+                </div>
+                <div
+                  className="text-[9px] leading-tight opacity-90 truncate"
+                  title={f.filePath}
+                >
+                  {f.filePath.split('/').slice(-2).join('/')}
+                </div>
+                <div className="text-[9px] opacity-70 truncate">{f.repoSlug}</div>
+              </div>
+            </Tooltip>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Branch sub-row ────────────────────────────────────────────────────────────
+
+function BranchSubRow({
+  branch,
+  report,
+  compareReport,
+  isReference = false,
+  latestVersions = {},
+}: {
+  branch: string
+  report: QualityReport | undefined
+  compareReport: QualityReport | undefined
+  isReference?: boolean
+  latestVersions?: Record<string, string>
+}) {
+  const branchBadgeCls =
+    branch === 'main'
+      ? 'bg-blue-100 text-blue-700'
+      : 'bg-purple-100 text-purple-700'
+
+  return (
+    <tr className="border-b border-[var(--color-tables-table-cell-stroke)] bg-[var(--color-cards-small-section-background)]">
+      {/* Indent spacer (chevron col) */}
+      <td className="px-2 py-1" />
+      {/* Branch badge spanning workspace + repo cols */}
+      <td colSpan={2} className="px-4 py-1">
+        <span
+          className={`text-[10px] font-semibold px-2 py-0.5 rounded-[var(--border-radius-tag)] ${branchBadgeCls}`}
+        >
+          {branch}
+        </span>
+      </td>
+      {/* Archetype / Version: from the report snapshot for this branch */}
+      <td className="px-4 py-1 text-[var(--color-fonts-font-color-support)] text-xs">
+        {report?.archetype ?? ''}
+      </td>
+      <td className="px-4 py-1">
+        {report?.archetypeVersion ? (
+          <VersionBadge
+            version={report.archetypeVersion}
+            archetype={report.archetype}
+            latestVersions={latestVersions}
+          />
+        ) : null}
+      </td>
+      {/* Score */}
+      <td className="px-4 py-1">
+        <DiffScoreBadge
+          value={report?.score}
+          compareValue={compareReport?.score}
+          higherIsBetter
+          format={(v) => `${(v * 100).toFixed(0)}%`}
+          isReference={isReference}
+        />
+      </td>
+      {/* Linter errors */}
+      <td className="px-4 py-1">
+        <DiffNumericBadge
+          value={report?.linter?.errorCount}
+          compareValue={compareReport?.linter?.errorCount}
+          higherIsBetter={false}
+          isReference={isReference}
+        />
+      </td>
+      {/* Security issues */}
+      <td className="px-4 py-1">
+        <DiffNumericBadge
+          value={report?.aikido?.totalIssues ?? report?.aikido?.issueCount}
+          compareValue={compareReport?.aikido?.totalIssues ?? compareReport?.aikido?.issueCount}
+          higherIsBetter={false}
+          isReference={isReference}
+        />
+      </td>
+      {/* Avg complexity */}
+      <td className="px-4 py-1">
+        <DiffScoreBadge
+          value={report?.complexity?.avgComplexity}
+          compareValue={compareReport?.complexity?.avgComplexity}
+          higherIsBetter={false}
+          format={(v) => v.toFixed(1)}
+          isReference={isReference}
+        />
+      </td>
+      {/* Last measured */}
+      <td className="px-4 py-1 text-[var(--color-fonts-font-color-support)]">
+        {report ? new Date(report.measuredAt).toLocaleString() : '—'}
+      </td>
+      {/* Actions: empty */}
+      <td className="px-4 py-1" />
+    </tr>
+  )
+}
+
+// ── Diff-aware sub-row badges ─────────────────────────────────────────────────
+
+function DiffScoreBadge({
+  value,
+  compareValue,
+  higherIsBetter,
+  format,
+  isReference,
+}: {
+  value: number | undefined
+  compareValue: number | undefined
+  higherIsBetter: boolean
+  format: (v: number) => string
+  isReference: boolean
+}) {
+  if (value === undefined || value === null) return <span className={NONE}>—</span>
+
+  let cls = NONE
+  let delta: string | null = null
+
+  if (!isReference && compareValue !== undefined && compareValue !== null) {
+    const diff = value - compareValue
+    const isBetter = higherIsBetter ? diff > 0 : diff < 0
+    const isWorse  = higherIsBetter ? diff < 0 : diff > 0
+    if (isBetter) cls = GREEN
+    else if (isWorse) cls = RED
+    else cls = NONE
+
+    if (Math.abs(diff) >= 0.001) {
+      const sign = diff > 0 ? '+' : ''
+      delta = `${sign}${format(diff)}`
+    }
+  } else {
+    // Reference branch: standard coloring
+    if (typeof value === 'number') {
+      cls = value >= 0.8 ? GREEN : value >= 0.5 ? ORANGE : RED
+    }
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={cls}>{format(value)}</span>
+      {delta && (
+        <span className={`text-[10px] ${cls}`}>{delta}</span>
+      )}
+    </span>
+  )
+}
+
+function DiffNumericBadge({
+  value,
+  compareValue,
+  higherIsBetter,
+  isReference,
+}: {
+  value: number | undefined
+  compareValue: number | undefined
+  higherIsBetter: boolean
+  isReference: boolean
+}) {
+  if (value === undefined || value === null) return <span className={NONE}>—</span>
+
+  let cls = NONE
+  let delta: string | null = null
+
+  if (!isReference && compareValue !== undefined && compareValue !== null) {
+    const diff = value - compareValue
+    const isBetter = higherIsBetter ? diff > 0 : diff < 0
+    const isWorse  = higherIsBetter ? diff < 0 : diff > 0
+    if (isBetter) cls = GREEN
+    else if (isWorse) cls = RED
+    else cls = NONE
+
+    if (diff !== 0) {
+      delta = diff > 0 ? `+${diff}` : `${diff}`
+    }
+  } else {
+    cls = value === 0 ? GREEN : value < 10 ? ORANGE : RED
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={cls}>{value}</span>
+      {delta && <span className={`text-[10px] ${cls}`}>{delta}</span>}
+    </span>
+  )
+}
+
+// ── Standard badge helpers ────────────────────────────────────────────────────
+
 function ScoreBadge({ score }: { score?: number }) {
   if (score === undefined) return <span className={NONE}>—</span>
   const pct = score * 100
-  const color =
-    score >= 0.8 ? GREEN : score >= 0.5 ? ORANGE : RED
-  return (
-    <span className={color}>
-      {pct.toFixed(0)}%
-    </span>
-  )
+  const color = score >= 0.8 ? GREEN : score >= 0.5 ? ORANGE : RED
+  return <span className={color}>{pct.toFixed(0)}%</span>
 }
 
 function LinterErrorsBadge({ count }: { count?: number }) {
@@ -257,12 +916,11 @@ function LinterErrorsBadge({ count }: { count?: number }) {
   return <span className={cls}>{count}</span>
 }
 
-
 function SecurityBadge({ issueCount, criticalCount }: { issueCount?: number; criticalCount?: number }) {
   const total = issueCount
   if (total === undefined || total === null) return <span className={NONE}>—</span>
   const hasCritical = !!criticalCount
-  const cls = total === 0 ? GREEN : (total < 5 && !hasCritical) ? ORANGE : RED
+  const cls = total === 0 ? GREEN : total < 5 && !hasCritical ? ORANGE : RED
   const label = total + (hasCritical ? ` (${criticalCount} critical)` : '')
   return <span className={cls}>{label}</span>
 }
@@ -337,7 +995,7 @@ function LinterBadge({ linter }: { linter?: import('@/types/api').LinterSection 
   )
 }
 
-function ScoreGauge({ score }: { score?: number }) {
+function ScoreGauge({ score, label }: { score?: number; label?: string }) {
   const pct = score ?? 0
   const color =
     pct >= 0.8
@@ -346,8 +1004,8 @@ function ScoreGauge({ score }: { score?: number }) {
       ? 'var(--color-status-border-attention)'
       : 'var(--color-status-border-critical)'
   return (
-    <div className="flex flex-col items-center justify-center p-6">
-      <svg width="120" height="120" viewBox="0 0 120 120">
+    <div className="flex flex-col items-center justify-center">
+      <svg width="96" height="96" viewBox="0 0 120 120">
         <circle cx="60" cy="60" r="50" fill="none" stroke="var(--color-neutral-200)" strokeWidth="10" />
         <circle
           cx="60"
@@ -360,13 +1018,18 @@ function ScoreGauge({ score }: { score?: number }) {
           strokeLinecap="round"
           transform="rotate(-90 60 60)"
         />
-        <text x="60" y="60" textAnchor="middle" fontSize="20" fontWeight="bold" fill={color}>
+        <text x="60" y="58" textAnchor="middle" fontSize="20" fontWeight="bold" fill={color}>
           {(pct * 100).toFixed(0)}%
         </text>
-        <text x="60" y="78" textAnchor="middle" fontSize="10" fill="var(--color-fonts-font-color-support)">
+        <text x="60" y="74" textAnchor="middle" fontSize="9" fill="var(--color-fonts-font-color-support)">
           score
         </text>
       </svg>
+      {label && (
+        <span className="text-[10px] font-semibold mt-1 text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
+          {label}
+        </span>
+      )}
     </div>
   )
 }
@@ -380,6 +1043,8 @@ function MetricCard({ label, value }: { label: string; value: React.ReactNode })
   )
 }
 
+// ── Report dialog ─────────────────────────────────────────────────────────────
+
 function ReportDialog({
   row,
   latestVersions,
@@ -391,16 +1056,28 @@ function ReportDialog({
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { repo, report } = row
+  const { repo, mainReport, developReport } = row
 
-  const bitbucketBase = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+  const [toast, setToast] = useState<ToastConfig | null>(null)
+  const dismissToast = useCallback(() => setToast(null), [])
+
+  const bitbucketBase = (repo.gitPlatformUrl ?? import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org').replace(/\/$/, '')
   const repoUrl = `${bitbucketBase}/${repo.workspace}/${repo.repoSlug}.git`
 
-  const { data: history } = useQuery<QualityReport[]>({
+  const { data: mainHistory } = useQuery<QualityReport[]>({
     queryKey: ['quality-history', repo.workspace, repo.repoSlug, 'main'],
     queryFn: () =>
       api
         .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main/history`)
+        .then((r) => r.data)
+        .catch(() => []),
+  })
+
+  const { data: developHistory } = useQuery<QualityReport[]>({
+    queryKey: ['quality-history', repo.workspace, repo.repoSlug, 'develop'],
+    queryFn: () =>
+      api
+        .get(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/develop/history`)
         .then((r) => r.data)
         .catch(() => []),
   })
@@ -416,17 +1093,34 @@ function ReportDialog({
       p.repoUrl === repoUrl,
   )
 
-  const qualityJobMutation = useMutation({
-    mutationFn: () =>
-      api
-        .post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/main`, { repoUrl })
-        .then((r) => r.data as { jobId: string }),
-    onSuccess: (data) => {
-      if (data?.jobId) {
-        navigate({ to: '/jobs/$id', params: { id: data.jobId } })
-      }
-    },
-  })
+  function makeMutation(branch: string) {
+    return {
+      mutationFn: () =>
+        api
+          .post(`/metrics/quality-reports/${repo.workspace}/${repo.repoSlug}/${branch}`, { repoUrl })
+          .then((r) => r.data as { jobId: string }),
+      onSuccess: (data: { jobId: string }) => {
+        setToast({
+          variant: 'success',
+          message: `Quality report job started for ${branch}.`,
+          ...(data?.jobId
+            ? {
+                action: {
+                  label: 'View Job',
+                  onClick: () => navigate({ to: '/jobs/$id', params: { id: data.jobId } }),
+                },
+              }
+            : {}),
+        })
+      },
+      onError: () => {
+        setToast({ variant: 'error', message: `Failed to start quality report job for ${branch}.` })
+      },
+    }
+  }
+
+  const mainJobMutation    = useMutation(makeMutation('main'))
+  const developJobMutation = useMutation(makeMutation('develop'))
 
   const upgradeJobMutation = useMutation({
     mutationFn: () =>
@@ -447,27 +1141,59 @@ function ReportDialog({
 
   const versionOutdated = isVersionOutdated(repo.archetypeVersion, repo.archetype, latestVersions)
 
-  const historyList = [...(Array.isArray(history) ? history : [])].sort(
+  const mainHistoryList = [...(Array.isArray(mainHistory) ? mainHistory : [])].sort(
+    (a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime(),
+  )
+  const developHistoryList = [...(Array.isArray(developHistory) ? developHistory : [])].sort(
     (a, b) => new Date(a.measuredAt).getTime() - new Date(b.measuredAt).getTime(),
   )
 
+  const showChart = mainHistoryList.length > 1 || developHistoryList.length > 1
+
   const chartData = {
-    labels: historyList.map((r) => new Date(r.measuredAt).toLocaleString()),
     datasets: [
       {
-        label: 'Score %',
-        data: historyList.map((r) => +((r.score ?? 0) * 100).toFixed(1)),
+        label: 'main — Score %',
+        data: mainHistoryList.map((r) => ({
+          x: new Date(r.measuredAt).toLocaleString(),
+          y: +((r.score ?? 0) * 100).toFixed(1),
+        })),
         borderColor: '#00B4FF',
         backgroundColor: 'rgba(0,180,255,0.08)',
-        fill: true,
+        fill: false,
         tension: 0.4,
       },
       {
-        label: 'Coverage %',
-        data: historyList.map((r) => r.coverage?.lineRate ?? 0),
+        label: 'develop — Score %',
+        data: developHistoryList.map((r) => ({
+          x: new Date(r.measuredAt).toLocaleString(),
+          y: +((r.score ?? 0) * 100).toFixed(1),
+        })),
+        borderColor: '#A855F7',
+        backgroundColor: 'rgba(168,85,247,0.08)',
+        fill: false,
+        tension: 0.4,
+      },
+      {
+        label: 'main — Coverage %',
+        data: mainHistoryList.map((r) => ({
+          x: new Date(r.measuredAt).toLocaleString(),
+          y: r.coverage?.lineRate ?? 0,
+        })),
         borderColor: '#16DB93',
         backgroundColor: 'rgba(22,219,147,0.08)',
-        fill: true,
+        fill: false,
+        tension: 0.4,
+      },
+      {
+        label: 'develop — Coverage %',
+        data: developHistoryList.map((r) => ({
+          x: new Date(r.measuredAt).toLocaleString(),
+          y: r.coverage?.lineRate ?? 0,
+        })),
+        borderColor: '#F59E0B',
+        backgroundColor: 'rgba(245,158,11,0.08)',
+        fill: false,
         tension: 0.4,
       },
     ],
@@ -505,11 +1231,6 @@ function ReportDialog({
                   />
                 </span>
               )}
-              {report && (
-                <span className="text-xs text-[var(--color-fonts-font-color-support)]">
-                  {new Date(report.measuredAt).toLocaleString()}
-                </span>
-              )}
             </div>
           </div>
           <Button variant="ghost" size="xs" icon={<X size={14} />} onClick={onClose} aria-label="Close" />
@@ -517,52 +1238,33 @@ function ReportDialog({
 
         {/* Body */}
         <div className="p-5 space-y-5">
-          {report ? (
-            <>
-              {/* Score + metrics */}
-              <div className="flex flex-wrap">
-                <ScoreGauge score={report.score} />
-                <div className="flex-1 min-w-0 grid grid-cols-2 gap-3 py-4 pr-2">
-                  <MetricCard label="Coverage" value={<CoverageBadge coverage={report.coverage} />} />
-                  <MetricCard label="Linter" value={<LinterBadge linter={report.linter} />} />
-                  <MetricCard label="Security (Aikido)" value={<AikidoBadge aikido={report.aikido} />} />
-                  <MetricCard label="Avg Complexity" value={<ComplexityBadge value={report.complexity?.avgComplexity} />} />
-                  <MetricCard label="Max Complexity" value={<MaxComplexityBadge value={report.complexity?.maxComplexity} />} />
-                  <MetricCard
-                    label="Methods Above Threshold"
-                    value={
-                      report.complexity?.methodsAboveThreshold !== undefined
-                        ? `${report.complexity.methodsAboveThreshold} / ${report.complexity.totalMethods ?? '?'}`
-                        : '—'
-                    }
-                  />
-                </div>
-              </div>
 
-              {/* Trend chart */}
-              {historyList.length > 1 && (
-                <div>
-                  <h4 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">Trend</h4>
-                  <div style={{ height: 220 }}>
-                    <Line data={chartData} options={CHART_OPTIONS} />
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="py-6 text-center text-sm text-[var(--color-fonts-font-color-support)]">
-              No report available yet. Run a quality report to get started.
-            </p>
+          {/* Two-column branch comparison */}
+          <div className="grid grid-cols-2 gap-4">
+            <BranchPanel branch="main" report={mainReport ?? undefined} branchColor="blue" />
+            <BranchPanel branch="develop" report={developReport ?? undefined} branchColor="purple" />
+          </div>
+
+          {/* Trend chart */}
+          {showChart && (
+            <div>
+              <h4 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)] mb-3">Trend</h4>
+              <div style={{ height: 220 }}>
+                <Line data={chartData} options={CHART_OPTIONS} />
+              </div>
+            </div>
           )}
+
+          {toast && <Toast {...toast} onClose={dismissToast} />}
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--color-cards-card-stroke)]">
-            {(qualityJobMutation.isError || upgradeJobMutation.isError) && (
+            {upgradeJobMutation.isError && (
               <p className="mr-auto text-xs text-[var(--color-status-border-critical)]">
-                Failed to start job. Please try again.
+                Failed to start upgrade job. Please try again.
               </p>
             )}
-            {!qualityJobMutation.isError && !upgradeJobMutation.isError && hasActivePlan && (
+            {!upgradeJobMutation.isError && hasActivePlan && (
               <p className="mr-auto text-xs text-[var(--color-tags-font-attention)]">
                 An upgrade plan is already running for this repository.
               </p>
@@ -584,16 +1286,217 @@ function ReportDialog({
               </Button>
             )}
             <Button
+              variant="secondary"
+              size="md"
+              icon={<BarChart2 size={14} />}
+              loading={developJobMutation.isPending}
+              disabled={developJobMutation.isPending || developJobMutation.isSuccess}
+              onClick={() => { if (!developJobMutation.isPending && !developJobMutation.isSuccess) developJobMutation.mutate() }}
+            >
+              {developJobMutation.isPending ? 'Starting…' : developJobMutation.isSuccess ? 'Queued' : 'Run Develop Report'}
+            </Button>
+            <Button
               variant="primary"
               size="md"
               icon={<BarChart2 size={14} />}
-              loading={qualityJobMutation.isPending}
-              disabled={qualityJobMutation.isPending}
-              onClick={() => { if (!qualityJobMutation.isPending) qualityJobMutation.mutate() }}
+              loading={mainJobMutation.isPending}
+              disabled={mainJobMutation.isPending || mainJobMutation.isSuccess}
+              onClick={() => { if (!mainJobMutation.isPending && !mainJobMutation.isSuccess) mainJobMutation.mutate() }}
             >
-              {qualityJobMutation.isPending ? 'Starting…' : 'Run Quality Report'}
+              {mainJobMutation.isPending ? 'Starting…' : mainJobMutation.isSuccess ? 'Queued' : 'Run Main Report'}
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Branch panel inside dialog ────────────────────────────────────────────────
+
+function BranchPanel({
+  branch,
+  report,
+  branchColor,
+}: {
+  branch: string
+  report: QualityReport | undefined
+  branchColor: 'blue' | 'purple'
+}) {
+  const headerCls =
+    branchColor === 'blue'
+      ? 'bg-blue-50 border-blue-200 text-blue-700'
+      : 'bg-purple-50 border-purple-200 text-purple-700'
+
+  return (
+    <div className="border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden">
+      <div className={`px-3 py-2 border-b text-xs font-semibold uppercase tracking-wide ${headerCls}`}>
+        {branch}
+        {report && (
+          <span className="ml-2 font-normal normal-case opacity-70">
+            {new Date(report.measuredAt).toLocaleString()}
+          </span>
+        )}
+      </div>
+      {report ? (
+        <div className="p-3 flex flex-col items-center gap-3">
+          <ScoreGauge score={report.score} />
+          <div className="w-full grid grid-cols-2 gap-2">
+            <MetricCard label="Coverage" value={<CoverageBadge coverage={report.coverage} />} />
+            <MetricCard label="Linter" value={<LinterBadge linter={report.linter} />} />
+            <MetricCard label="Security" value={<AikidoBadge aikido={report.aikido} />} />
+            <MetricCard label="Avg CC" value={<ComplexityBadge value={report.complexity?.avgComplexity} />} />
+            <MetricCard label="Max CC" value={<MaxComplexityBadge value={report.complexity?.maxComplexity} />} />
+            <MetricCard
+              label="Above Threshold"
+              value={
+                report.complexity?.methodsAboveThreshold !== undefined
+                  ? `${report.complexity.methodsAboveThreshold} / ${report.complexity.totalMethods ?? '?'}`
+                  : '—'
+              }
+            />
+          </div>
+        </div>
+      ) : (
+        <p className="p-4 text-center text-xs text-[var(--color-fonts-font-color-support)]">
+          No report available.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ── Fix Linter Dialog ─────────────────────────────────────────────────────────
+
+const BITBUCKET_BASE_URL = import.meta.env.VITE_BITBUCKET_URL ?? 'https://bitbucket.org'
+
+function FixLinterDialog({ row, onClose }: { row: RowData; onClose: () => void }) {
+  const navigate = useNavigate()
+
+  const errorCount   = row.mainReport?.linter?.errorCount   ?? 0
+  const warningCount = row.mainReport?.linter?.warningCount ?? 0
+  const repoSlug     = row.repo.repoSlug
+  const date         = new Date().toISOString().slice(0, 10)
+
+  const [branchName, setBranchName]     = useState(`agent/fix-linter-${repoSlug}-${date}`)
+  const [targetBranch, setTargetBranch] = useState('develop')
+  const [prompt, setPrompt]             = useState(
+    `Fix all linter errors in this repository. The latest quality report found ${errorCount} linter error(s)` +
+    (warningCount > 0 ? ` and ${warningCount} warning(s)` : '') +
+    `. Focus on fixing all errors so the linter passes cleanly. Do not change any business logic.`,
+  )
+  const [error, setError] = useState<string | null>(null)
+
+  const repoUrl = `${(row.repo.gitPlatformUrl ?? BITBUCKET_BASE_URL).replace(/\/$/, '')}/${row.repo.workspace}/${repoSlug}.git`
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      api
+        .post('/run-fix', {
+          repoUrl,
+          branchName: branchName.trim() || `agent/fix-linter-${repoSlug}-${date}`,
+          prompt,
+          targetBranch,
+        })
+        .then((r) => r.data as { jobId: string }),
+    onSuccess: (data) => {
+      onClose()
+      if (data?.jobId) navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(msg ?? 'Failed to queue the fix job. Please try again.')
+    },
+  })
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)' }}
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] shadow-[0_8px_32px_rgba(0,0,0,0.24)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between px-5 py-4 border-b border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-small-section-background)]">
+          <div className="flex items-center gap-2">
+            <Wrench size={16} className="text-[var(--color-buttons-button-primary)]" />
+            <div>
+              <h3 className="font-semibold text-sm">Fix Linter Errors</h3>
+              <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
+                {row.repo.workspace} / {repoSlug} &mdash; {errorCount} error{errorCount !== 1 ? 's' : ''}
+                {warningCount > 0 ? `, ${warningCount} warning${warningCount !== 1 ? 's' : ''}` : ''}
+              </p>
+            </div>
+          </div>
+          <Button variant="ghost" size="xs" icon={<X size={14} />} onClick={onClose} aria-label="Close" />
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 space-y-4">
+          {/* Branch name */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Branch name
+            </label>
+            <Input
+              type="text"
+              value={branchName}
+              onChange={(e) => setBranchName(e.target.value)}
+              className="w-full"
+            />
+          </div>
+
+          {/* Target branch */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Target branch
+            </label>
+            <Select
+              value={targetBranch}
+              onChange={setTargetBranch}
+              options={[
+                { value: 'develop', label: 'develop' },
+                { value: 'main', label: 'main' },
+              ]}
+            />
+          </div>
+
+          {/* Prompt */}
+          <div>
+            <label className="block text-xs font-semibold text-[var(--color-fonts-font-color-primary)] mb-1">
+              Prompt
+            </label>
+            <textarea
+              rows={4}
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full text-xs border border-[var(--color-cards-card-stroke)] rounded px-2 py-1 bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] resize-y hover:border-[var(--color-buttons-button-primary)] focus:border-[var(--color-buttons-button-primary)] focus:outline-none transition-all"
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-[var(--color-status-border-critical)]">{error}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex justify-end gap-2 px-5 py-4 border-t border-[var(--color-cards-card-stroke)]">
+          <Button variant="secondary" size="md" onClick={onClose} disabled={mutation.isPending}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            icon={mutation.isPending ? undefined : <Wrench size={13} />}
+            loading={mutation.isPending}
+            disabled={mutation.isPending}
+            onClick={() => { setError(null); mutation.mutate() }}
+          >
+            {mutation.isPending ? 'Queueing…' : 'Queue Fix Job'}
+          </Button>
         </div>
       </div>
     </div>

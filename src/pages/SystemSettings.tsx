@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import {
   Pencil,
   Trash2,
@@ -14,6 +14,9 @@ import {
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Input } from '@/components/ui/Input'
+import { Select, type SelectOption } from '@/components/ui/Select'
+import { Toast } from '@/components/ui/Toast'
 import api from '@/lib/api'
 import type { SystemSetting, UpsertSettingRequest, CloudAccount, CloudAccountType } from '@/types/api'
 
@@ -68,13 +71,35 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
-    id: 'voyage',
-    label: 'Voyage AI (Embeddings)',
+    id: 'bedrock',
+    label: 'AWS Bedrock (Embeddings)',
     settings: [
-      { key: 'voyage.api.key', label: 'API Key', description: 'API key for Voyage AI embedding service', isSecret: true },
-      { key: 'voyage.model', label: 'Model', description: 'Voyage AI embedding model', defaultValue: 'voyage-code-3', inputType: 'select', options: ['voyage-code-3', 'voyage-3', 'voyage-3-lite'] },
-      { key: 'voyage.batch-size', label: 'Batch Size', description: 'Number of documents per embedding request', defaultValue: '128', inputType: 'number', min: 1 },
-      { key: 'embedding.max-source-chars', label: 'Max Source Chars per Embedding', description: 'Maximum characters per source document sent to embedding', defaultValue: '16000', inputType: 'number', min: 1000, step: 1000 },
+      { key: 'bedrock.region', label: 'Region', description: 'AWS region for Bedrock API calls. All data stays within this region.', defaultValue: 'eu-central-1' },
+      {
+        key: 'bedrock.code.embedding.model',
+        label: 'Code Embedding Model',
+        description: 'Embedding model for code indexing and semantic code search (→ code_embeddings table). Query and document embeddings must use the same model.',
+        defaultValue: 'cohere.embed-multilingual-v3',
+        inputType: 'select',
+        options: ['cohere.embed-multilingual-v3', 'cohere.embed-english-v3', 'amazon.titan-embed-text-v2:0'],
+      },
+      {
+        key: 'bedrock.text.embedding.model',
+        label: 'Text Embedding Model',
+        description: 'Embedding model for knowledge base indexing and search — Jira, Confluence, web docs (→ knowledge_embeddings table).',
+        defaultValue: 'amazon.titan-embed-text-v2:0',
+        inputType: 'select',
+        options: ['amazon.titan-embed-text-v2:0', 'cohere.embed-multilingual-v3', 'cohere.embed-english-v3'],
+      },
+      {
+        key: 'bedrock.rerank.model',
+        label: 'Rerank Model',
+        description: 'Rerank model used in the two-stage semantic code search pipeline.',
+        defaultValue: 'amazon.rerank-v1:0',
+        inputType: 'select',
+        options: ['amazon.rerank-v1:0', 'cohere.rerank-v3-5:0'],
+      },
+      { key: 'embedding.max-source-chars', label: 'Max Source Chars per Embedding', description: 'Maximum characters per source document sent to the embedding model', defaultValue: '16000', inputType: 'number', min: 1000, step: 1000 },
     ],
   },
 
@@ -96,8 +121,20 @@ const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'bitbucket.base.url', label: 'Base URL', description: 'Bitbucket Cloud API base URL', defaultValue: 'https://api.bitbucket.org/2.0' },
       { key: 'bitbucket.workspace', label: 'Workspace', description: 'Bitbucket workspace slug' },
-      { key: 'bitbucket.user', label: 'Username', description: 'Bitbucket username' },
-      { key: 'bitbucket.app.password', label: 'App Password', description: 'Bitbucket app password for API access', isSecret: true },
+      {
+        key: 'bitbucket.oauth.client-id',
+        label: 'OAuth Consumer Key',
+        description: 'Recommended — OAuth 2.0 Client Credentials (Workspace Settings → OAuth Consumers). Enables /user identity resolution and automatic token refresh. Takes priority over App Password when set.',
+      },
+      {
+        key: 'bitbucket.oauth.client-secret',
+        label: 'OAuth Consumer Secret',
+        description: 'Secret for the OAuth Consumer above.',
+        isSecret: true,
+      },
+      { key: 'bitbucket.user', label: 'App Password Username', description: 'Fallback — Bitbucket username for App Password auth (leave blank when using OAuth).' },
+      { key: 'bitbucket.app.password', label: 'App Password', description: 'Fallback — Bitbucket App Password (leave blank when using OAuth).', isSecret: true },
+      { key: 'bitbucket.webhook.sync.enabled', label: 'Webhook Sync', description: 'Automatically register agent webhooks on Bitbucket repositories during sync', defaultValue: 'true', inputType: 'boolean' },
     ],
   },
   {
@@ -134,8 +171,26 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'JIRA',
     settings: [
       { key: 'jira.base.url', label: 'Base URL', description: 'Jira Cloud or Server base URL', defaultValue: 'https://yourorg.atlassian.net' },
-      { key: 'jira.user', label: 'Username', description: 'Jira username or email address' },
-      { key: 'jira.api.token', label: 'API Token', description: 'Jira API token (personal access token)', isSecret: true },
+      {
+        key: 'atlassian.oauth.client-id',
+        label: 'OAuth Client ID',
+        description: 'Recommended — Atlassian OAuth 2.0 app Client ID (developer.atlassian.com). Enables per-user "Connect with Atlassian" linking in the Profile dialog. Takes priority over username/API token when set.',
+      },
+      {
+        key: 'atlassian.oauth.client-secret',
+        label: 'OAuth Client Secret',
+        description: 'Secret for the Atlassian OAuth 2.0 app above.',
+        isSecret: true,
+      },
+      {
+        key: 'atlassian.oauth.redirect-uri',
+        label: 'OAuth Redirect URI',
+        description: 'Required when the backend sits behind a TLS-terminating proxy. Set to the exact https:// callback URL registered in your Atlassian OAuth app, e.g. https://code-agent.example.com/api/mcp/oauth/callback. Overrides the browser-derived URL.',
+        defaultValue: '',
+      },
+      { key: 'jira.user', label: 'Service Account Username', description: 'Fallback — Jira username or email for server-side bot operations (leave blank when using OAuth for all access).' },
+      { key: 'jira.api.token', label: 'Service Account API Token', description: 'Fallback — Jira API token for the service account above.', isSecret: true },
+      { key: 'jira.transition.in-progress', label: 'Transition: In Progress', description: 'Jira transition ID to move ticket to "In Progress"' },
       { key: 'jira.transition.in-review', label: 'Transition: In Review', description: 'Jira transition ID to move ticket to "In Review"' },
       { key: 'jira.transition.done', label: 'Transition: Done', description: 'Jira transition ID to move ticket to "Done"' },
       { key: 'jira.transition.rejected', label: 'Transition: Rejected', description: 'Jira transition ID to move ticket to "Rejected"' },
@@ -163,6 +218,17 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'xray.base-url', label: 'Base URL', description: 'Xray Cloud API base URL — US: https://xray.cloud.getxray.app, EU: https://eu.xray.cloud.getxray.app', defaultValue: 'https://xray.cloud.getxray.app' },
       { key: 'xray.client-id', label: 'Client ID', description: 'Xray Cloud OAuth2 client ID (from Xray → API Keys)' },
       { key: 'xray.client-secret', label: 'Client Secret', description: 'Xray Cloud OAuth2 client secret — used by schedulers and background jobs that run without a user context', isSecret: true },
+      { key: 'xray.test-project-key', label: 'Test Project Key', description: 'Jira project key where test case issues are created (e.g. ETR). Used by "Upload to Jira" on test case pages.' },
+      { key: 'xray.test-issue-type', label: 'Test Issue Type', description: 'Jira issue type used when creating test case tickets (e.g. Test, Story, Task). Defaults to "Test".', defaultValue: 'Test' },
+    ],
+  },
+  {
+    id: 'web-search',
+    label: 'Web Search (Tavily)',
+    settings: [
+      { key: 'tools.web-search.enabled', label: 'Web Search Enabled', description: 'Allow the AI to search the web via Tavily. Requires an API key below.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'tools.web-search.tavily-api-key', label: 'Tavily API Key', description: 'API key from app.tavily.com. Stored encrypted. Set TAVILY_API_KEY env var or enter here.', isSecret: true },
+      { key: 'tools.web-search.max-results', label: 'Max Results per Query', description: 'Number of search results returned per query (default: 5, max: 10)', defaultValue: '5', inputType: 'number', min: 1, max: 10 },
     ],
   },
   {
@@ -177,6 +243,13 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'Knowledge Indexer',
     settings: [
       { key: 'knowledge.indexer.jira-max-results', label: 'Jira Max Results', description: 'Maximum number of Jira issues fetched per project in a single full indexing pass', defaultValue: '200', inputType: 'number', min: 1 },
+      { key: 'knowledge.indexer.jira-jql-extra', label: 'Jira JQL Extra Conditions', description: 'Additional JQL conditions AND-ed to the base project query before issues are fetched. Useful to pre-filter stubs. Leave blank to disable. Default: description is not EMPTY', defaultValue: 'description is not EMPTY' },
+      { key: 'knowledge.indexer.jira-min-chars', label: 'Jira Min Text Length', description: 'Minimum combined character count (summary + description + comments) required to index an issue. Issues shorter than this are silently skipped without an embedding call.', defaultValue: '100', inputType: 'number', min: 0 },
+      { key: 'knowledge.indexer.jira-quality-filter', label: 'Jira Claude Quality Filter', description: 'When enabled, a Claude Haiku call classifies each ticket as useful or not before embedding. Adds latency and API cost — enable only when the JQL and length filters are not sufficient.', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'knowledge.indexer.jira-quality-model', label: 'Jira Quality Filter Model', description: 'Claude model used for ticket quality scoring (only relevant when quality filter is enabled).', defaultValue: 'claude-haiku-4-5', inputType: 'select', options: ['claude-haiku-4-5', 'claude-haiku-3-5', ...CLAUDE_MODELS] },
+      { key: 'knowledge.indexer.confluence-min-chars', label: 'Confluence Min Text Length', description: 'Minimum character count required to index a Confluence page. Pages shorter than this are silently skipped without an embedding call.', defaultValue: '200', inputType: 'number', min: 0 },
+      { key: 'knowledge.indexer.confluence-quality-filter', label: 'Confluence Claude Quality Filter', description: 'When enabled, a Claude Haiku call classifies each Confluence page as useful or not before embedding. Adds latency and API cost — enable only when the length filter is not sufficient.', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'knowledge.indexer.confluence-quality-model', label: 'Confluence Quality Filter Model', description: 'Claude model used for Confluence page quality scoring (only relevant when quality filter is enabled).', defaultValue: 'claude-haiku-4-5', inputType: 'select', options: ['claude-haiku-4-5', 'claude-haiku-3-5', ...CLAUDE_MODELS] },
       { key: 'knowledge.indexer.max-attachment-bytes', label: 'Max Attachment Size (bytes)', description: 'Maximum attachment size in bytes that will be downloaded and indexed', defaultValue: '5242880', inputType: 'number', min: 1 },
       { key: 'knowledge.reindex.max-parallel', label: 'Webhook Reindex: Max Parallel', description: 'Number of concurrent threads for webhook-triggered reindexing of Jira issues and Confluence pages', defaultValue: '2', inputType: 'number', min: 1, max: 20 },
       { key: 'knowledge.reindex.max-queue-size', label: 'Webhook Reindex: Queue Size', description: 'Maximum pending webhook-triggered reindex tasks. Excess events are silently dropped — the next webhook or scheduled full reindex will catch them up', defaultValue: '50', inputType: 'number', min: 1 },
@@ -199,15 +272,23 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'teams.webhook.url', label: 'MS Teams Webhook URL', description: 'Incoming webhook URL for Microsoft Teams notifications' },
       { key: 'n8n.webhook.url', label: 'n8n Webhook URL', description: 'n8n automation webhook URL for custom notification workflows' },
       { key: 'agent.base.url', label: 'Agent Base URL', description: 'Externally reachable URL of the agent; used for automatic webhook registration' },
+      { key: 'review.email.recipient', label: 'Review Email: Recipient', description: 'Email address that receives the PR review digest after each completed review. Leave blank to disable email notifications.' },
+      { key: 'review.email.cc', label: 'Review Email: CC', description: 'Comma-separated list of additional email addresses to CC on every review digest (e.g. lead@example.com, qa@example.com). Leave blank for no CC.' },
+      { key: 'review.email.from', label: 'Review Email: From Address', description: 'SES-verified sender address for review digest emails (e.g. code-agent@example.com). Must be verified in AWS SES.' },
+      { key: 'review.email.aws.region', label: 'Review Email: AWS Region', description: 'AWS region for SES email sending. Must be a region where SES is available (e.g. eu-west-1, us-east-1).', defaultValue: 'eu-west-1' },
     ],
   },
 
   // ── AWS ───────────────────────────────────────────────────────────────────────
   {
     id: 'aws',
-    label: 'AWS Tools',
+    label: 'AWS / Attachments',
     settings: [
       { key: 'tools.aws.enabled', label: 'AWS Tools Enabled', description: 'Enable AWS CloudWatch, ECS, and Metrics tools for the agent', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'attachment.s3.bucket', label: 'S3 Bucket', description: 'S3 bucket name used for storing file attachments (e.g. knowledge documents, PR diagrams)' },
+      { key: 'attachment.s3.region', label: 'S3 Region', description: 'AWS region where the attachments bucket is located', defaultValue: 'us-east-1' },
+      { key: 'attachment.max-file-size', label: 'Max File Size (bytes)', description: 'Maximum upload size per attachment in bytes', defaultValue: '10485760', inputType: 'number', min: 1024 },
+      { key: 'attachment.allowed-types', label: 'Allowed MIME Types', description: 'Comma-separated list of permitted attachment MIME types', defaultValue: 'image/jpeg,image/png,image/gif,image/webp,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document', inputType: 'textarea' },
     ],
   },
 
@@ -218,7 +299,7 @@ const SETTING_GROUPS: SettingGroup[] = [
     settings: [
       { key: 'run-fix.max-queue-size', label: 'Max Queue Size', description: 'Maximum non-review jobs that can wait in the in-memory queue before being failed. Review jobs are always backed by the DB.', defaultValue: '20', inputType: 'number', min: 1 },
       { key: 'run-fix.blocked-paths', label: 'Blocked Paths', description: 'Comma-separated paths the agent is not allowed to modify', defaultValue: 'src/main/security,src/main/billing,.github,.env', inputType: 'textarea' },
-      { key: 'run-fix.allowed-commands', label: 'Allowed Commands', description: 'Comma-separated shell commands the agent is permitted to run', inputType: 'textarea' },
+      { key: 'run-fix.allowed-commands', label: 'Allowed Commands', description: 'Comma-separated shell commands the agent is permitted to run', defaultValue: 'mvn,./mvnw,git diff,git status,git log,git add,git commit,ls,find,cat,grep,dotnet,npm,npx', inputType: 'textarea' },
       { key: 'run-fix.max-files-changed', label: 'Max Files Changed', description: 'Maximum number of files the agent may modify per job', defaultValue: '10', inputType: 'number', min: 1 },
       { key: 'run-fix.max-lines-changed', label: 'Max Lines Changed', description: 'Maximum lines the agent may change per job', defaultValue: '500', inputType: 'number', min: 1 },
       { key: 'run-fix.max-loop-iterations', label: 'Max Loop Iterations', description: 'Maximum agent loop cycles before the job is aborted', defaultValue: '150', inputType: 'number', min: 1 },
@@ -229,12 +310,38 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'generate-tests.job-timeout-minutes', label: 'Generate Tests: Timeout (minutes)', description: 'Total wall-clock timeout for a test-generation job', defaultValue: '60', inputType: 'number', min: 1 },
       { key: 'generate-docs.max-loop-iterations', label: 'Generate Docs: Max Iterations', description: 'Maximum agent loop cycles for a documentation-generation job', defaultValue: '200', inputType: 'number', min: 1 },
       { key: 'build.java-home', label: 'Java Home', description: 'Path to the JDK installation used for building, linting (PMD/SpotBugs), and validation. Leave blank to use the JVM that runs the agent.' },
+      {
+        key: 'run-fix.shell-static-analysis-enabled',
+        label: 'Shell Static Analysis',
+        description: 'Block dangerous shell patterns (eval, curl|bash, rm -rf /, IFS injection, process substitution, backtick substitution, etc.) even when the command prefix is on the allowlist. Disable only in fully sandboxed environments where the allowlist alone is sufficient.',
+        defaultValue: 'true',
+        inputType: 'boolean',
+      },
       { key: 'run-fix.self-review.enabled', label: 'Self-Review', description: 'Agent self-reviews its own changes before submitting', defaultValue: 'true', inputType: 'boolean' },
       { key: 'run-fix.self-review.max-iterations', label: 'Self-Review Max Iterations', description: 'Maximum self-review loop cycles', defaultValue: '15', inputType: 'number', min: 1 },
       { key: 'run-fix.self-review.max-diff-chars', label: 'Self-Review Max Diff Chars', description: 'Maximum diff size sent to self-review (characters)', defaultValue: '30000', inputType: 'number', min: 1000, step: 1000 },
       { key: 'tools.fetch-url.enabled', label: 'Fetch URL Tool', description: 'Allow the agent to fetch external documentation URLs', defaultValue: 'true', inputType: 'boolean' },
       { key: 'tools.fetch-url.timeout-seconds', label: 'Fetch URL Timeout (seconds)', description: 'Timeout for external URL fetches', defaultValue: '15', inputType: 'number', min: 1 },
-      { key: 'tools.fetch-url.allowed-domains', label: 'Fetch URL Allowed Domains', description: 'Comma-separated domain allowlist for URL fetches. Blank = all public HTTPS.', defaultValue: 'quarkus.io,search.maven.org', inputType: 'textarea' },
+      { key: 'tools.fetch-url.allowed-domains', label: 'Fetch URL Allowed Domains', description: 'Optional strict allowlist. Blank (default) = allow all public HTTPS. Reserved internal TLDs (.local, .internal, .corp, etc.) and private IPs are always blocked regardless of this setting.', defaultValue: '', inputType: 'textarea' },
+      { key: 'agent.context.window-size', label: 'Context Window Size (tokens)', description: 'Total token capacity of the model context window. Used with the threshold percentage to decide when to trigger context compaction.', defaultValue: '200000', inputType: 'number', min: 10000, step: 10000 },
+      { key: 'agent.context.compaction-threshold-pct', label: 'Compaction Threshold (%)', description: 'Fraction of the context window at which compaction is triggered (e.g. 0.75 = 75%). Compaction fires when input tokens ≥ floor(window-size × pct) − max-tokens.', defaultValue: '0.75', inputType: 'number', min: 0.1, max: 1.0, step: 0.05 },
+      { key: 'agent.tool-summary.enabled', label: 'Tool-Result Summarization', description: 'Replace large, old tool-result blocks with compact one-liners to reduce input-token counts on subsequent API calls. Results within the grace window are always kept verbatim.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'agent.tool-summary.grace-turns', label: 'Tool-Result Grace Turns', description: 'Number of recent turns whose tool results are never summarized. Older results are eligible for summarization.', defaultValue: '3', inputType: 'number', min: 1 },
+      { key: 'agent.tool-summary.threshold-chars', label: 'Tool-Result Summary Threshold (chars)', description: 'Minimum character length a tool result must exceed before it is eligible for summarization. Results shorter than this are always kept verbatim.', defaultValue: '2000', inputType: 'number', min: 100, step: 100 },
+    ],
+  },
+  {
+    id: 'self-analysis',
+    label: 'Self-Analysis',
+    settings: [
+      { key: 'self-analysis.enabled', label: 'Enabled', description: 'Automatically trigger a self-analysis job when a monitored job fails', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'self-analysis.trigger-job-types', label: 'Trigger Job Types', description: 'Comma-separated JobType values that trigger self-analysis on failure (e.g. FIX,GENERATE_TESTS)', defaultValue: 'FIX', inputType: 'textarea' },
+      { key: 'self-analysis.product-id', label: 'Product ID', description: 'ProductConfig ID for the code-agent product (used to resolve repo URL and Jira project key)', defaultValue: '' },
+      { key: 'self-analysis.environment-name', label: 'Environment Name', description: 'CloudWatch environment name to fetch logs from — must match an EnvironmentConfig.name on the customer record (e.g. "production")', defaultValue: '' },
+      { key: 'self-analysis.log-group-name', label: 'Log Group Name', description: 'CloudWatch log group to query for code-agent logs (e.g. /ecs/code-agent)', defaultValue: '' },
+      { key: 'self-analysis.job-timeout-minutes', label: 'Job Timeout (minutes)', description: 'Wall-clock timeout for a self-analysis job', defaultValue: '45', inputType: 'number', min: 5 },
+      { key: 'self-analysis.max-loop-iterations', label: 'Max Loop Iterations', description: 'Maximum agent loop cycles for a self-analysis job', defaultValue: '150', inputType: 'number', min: 1 },
+      { key: 'self-analysis.cooldown-hours', label: 'Cooldown (hours)', description: 'Do not re-trigger self-analysis for the same failed job if a successful analysis was produced within this many hours', defaultValue: '24', inputType: 'number', min: 0 },
     ],
   },
   {
@@ -256,6 +363,10 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'code-graph.cross-repo.critical-threshold', label: 'Cross-Repo Critical Threshold', description: 'Number of repos using a symbol before it is labelled CRITICAL in impact analysis', defaultValue: '3', inputType: 'number', min: 1 },
       { key: 'hook.scheduler.enabled', label: 'Hook Scheduler', description: 'Enable cron-based automation hook evaluation', defaultValue: 'true', inputType: 'boolean' },
       { key: 'hook.scheduler.timezone', label: 'Hook Scheduler Timezone', description: 'Timezone for evaluating cron hook expressions (e.g. UTC, Europe/Berlin)', defaultValue: 'UTC' },
+      { key: 'knowledge-graph.scheduler.enabled', label: 'Knowledge Graph Scheduler', description: 'Enable weekly knowledge graph computation across all repos', defaultValue: 'false', inputType: 'boolean' },
+      { key: 'knowledge-graph.lookback-days', label: 'Knowledge Graph Lookback (days)', description: 'How far back in git history to analyse (default 365)', defaultValue: '365', inputType: 'number', min: 30 },
+      { key: 'knowledge-graph.default-branch', label: 'Knowledge Graph Default Branch', description: 'Branch to clone for knowledge graph analysis', defaultValue: 'main' },
+      { key: 'knowledge-graph.author-aliases', label: 'Author Identity Aliases', description: 'JSON map of email → canonical email for merging the same person\'s multiple git identities. Example: {"old@company.com":"canonical@company.com"}', defaultValue: '{}', inputType: 'textarea' },
     ],
   },
   {
@@ -300,17 +411,17 @@ const SETTING_GROUPS: SettingGroup[] = [
     id: 'roadmap',
     label: 'Scope Reviews',
     settings: [
-      { key: 'roadmap.review.model', label: 'Review Model', description: 'Claude model for Jira readiness reviews (leave blank to use primary model)', inputType: 'select', options: ['', ...CLAUDE_MODELS] },
-      { key: 'roadmap.review.max-tokens', label: 'Max Tokens', description: 'Max output tokens for review responses', defaultValue: '4096', inputType: 'number', min: 512 },
-      { key: 'roadmap.jira.epic-issuetype', label: 'Epic Issue Type', description: 'Jira issue type name for Epics', defaultValue: 'Epic' },
-      { key: 'roadmap.jira.feature-issuetype', label: 'Feature Issue Type', description: 'Jira issue type name for Features', defaultValue: 'Story' },
-      { key: 'roadmap.jira.userstory-issuetype', label: 'User Story Issue Type', description: 'Jira issue type name for User Stories', defaultValue: 'Sub-task' },
-      { key: 'roadmap.jira.status-map.new', label: 'Status Map: New', description: 'Comma-separated Jira statuses mapped to "New"', defaultValue: 'To Do,Open,New', inputType: 'textarea' },
-      { key: 'roadmap.jira.status-map.in-progress', label: 'Status Map: In Progress', description: 'Comma-separated Jira statuses mapped to "In Progress"', defaultValue: 'In Progress', inputType: 'textarea' },
-      { key: 'roadmap.jira.status-map.qa', label: 'Status Map: QA', description: 'Comma-separated Jira statuses mapped to "QA"', defaultValue: 'In Review,QA,Testing', inputType: 'textarea' },
-      { key: 'roadmap.jira.status-map.closed', label: 'Status Map: Closed', description: 'Comma-separated Jira statuses mapped to "Closed"', defaultValue: 'Done,Closed,Resolved', inputType: 'textarea' },
-      { key: 'roadmap.delivery.readiness-threshold', label: 'Delivery Readiness Threshold', description: 'Minimum aggregate score (0–100) for an item to be marked "Ready for Delivery Team"', defaultValue: '70', inputType: 'number', min: 0, max: 100 },
-      { key: 'roadmap.delivery.complexity-weight-enabled', label: 'Complexity-Weighted Aggregation', description: 'When enabled, child scores are weighted by their complexity score when rolling up to parent. Disable to use a simple average.', defaultValue: 'true', inputType: 'boolean' },
+      { key: 'scope.review.model', label: 'Review Model', description: 'Claude model for Jira readiness reviews (leave blank to use primary model)', inputType: 'select', options: ['', ...CLAUDE_MODELS] },
+      { key: 'scope.review.max-tokens', label: 'Max Tokens', description: 'Max output tokens for review responses', defaultValue: '4096', inputType: 'number', min: 512 },
+      { key: 'scope.jira.epic-issuetype', label: 'Epic Issue Type', description: 'Jira issue type name for Epics', defaultValue: 'Epic' },
+      { key: 'scope.jira.feature-issuetype', label: 'Feature Issue Type', description: 'Jira issue type name for Features', defaultValue: 'Story' },
+      { key: 'scope.jira.userstory-issuetype', label: 'User Story Issue Type', description: 'Jira issue type name for User Stories', defaultValue: 'Sub-task' },
+      { key: 'scope.jira.status-map.new', label: 'Status Map: New', description: 'Comma-separated Jira statuses mapped to "New"', defaultValue: 'To Do,Open,New', inputType: 'textarea' },
+      { key: 'scope.jira.status-map.in-progress', label: 'Status Map: In Progress', description: 'Comma-separated Jira statuses mapped to "In Progress"', defaultValue: 'In Progress', inputType: 'textarea' },
+      { key: 'scope.jira.status-map.qa', label: 'Status Map: QA', description: 'Comma-separated Jira statuses mapped to "QA"', defaultValue: 'In Review,QA,Testing', inputType: 'textarea' },
+      { key: 'scope.jira.status-map.closed', label: 'Status Map: Closed', description: 'Comma-separated Jira statuses mapped to "Closed"', defaultValue: 'Done,Closed,Resolved', inputType: 'textarea' },
+      { key: 'scope.delivery.readiness-threshold', label: 'Delivery Readiness Threshold', description: 'Minimum aggregate score (0–100) for an item to be marked "Ready for Delivery Team"', defaultValue: '70', inputType: 'number', min: 0, max: 100 },
+      { key: 'scope.delivery.complexity-weight-enabled', label: 'Complexity-Weighted Aggregation', description: 'When enabled, child scores are weighted by their complexity score when rolling up to parent. Disable to use a simple average.', defaultValue: 'true', inputType: 'boolean' },
     ],
   },
 
@@ -342,7 +453,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'job.priority.review_feature',  label: 'Priority: REVIEW_FEATURE',  defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch scope review — low urgency background work.' },
       { key: 'job.priority.review_userstory',label: 'Priority: REVIEW_USERSTORY',defaultValue: '15',  inputType: 'number', min: 1, max: 100, description: 'Batch scope review — low urgency background work.' },
       // Scope review queue refill
-      { key: 'roadmap.review.refill-batch-size', label: 'Scope Review: Refill Batch Size', defaultValue: '10', inputType: 'number', min: 1, description: 'Jobs submitted to in-memory queue per scheduler tick (10 s).' },
+      { key: 'scope.review.refill-batch-size', label: 'Scope Review: Refill Batch Size', defaultValue: '10', inputType: 'number', min: 1, description: 'Jobs submitted to in-memory queue per scheduler tick (10 s).' },
     ],
   },
 
@@ -406,6 +517,63 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
 
+  // ── Aikido ────────────────────────────────────────────────────────────────────
+  {
+    id: 'aikido',
+    label: 'Aikido Security',
+    settings: [
+      { key: 'aikido.base.url', label: 'Base URL', description: 'Aikido API base URL', defaultValue: 'https://app.aikido.dev' },
+      { key: 'aikido.client.id', label: 'Client ID', description: 'Aikido OAuth 2.0 client ID for API access' },
+      { key: 'aikido.client.secret', label: 'Client Secret', description: 'Aikido OAuth 2.0 client secret for API access', isSecret: true },
+      { key: 'aikido.jira.default-project', label: 'Default Jira Project', description: 'Fallback Jira project key used when creating Bug tickets for Aikido issues (e.g. PROJ). Only used if the repo-settings do not specify a project.' },
+    ],
+  },
+
+  // ── Speech / Amazon Transcribe ────────────────────────────────────────────────────
+  {
+    id: 'transcribe',
+    label: 'Speech Dictation (Amazon Transcribe)',
+    settings: [
+      {
+        key: 'transcribe.region',
+        label: 'AWS Region',
+        description: 'AWS region for Amazon Transcribe Streaming. Must be a region where the service is available (e.g. eu-west-1, us-east-1). Uses the ECS task role — no extra credentials needed.',
+        defaultValue: 'eu-west-1',
+      },
+      {
+        key: 'transcribe.sample-rate',
+        label: 'PCM Sample Rate (Hz)',
+        description: 'Sample rate in Hz for raw PCM audio. OGG/Opus chunks from the browser are passed through as-is; this value is still required by the Transcribe API.',
+        defaultValue: '16000',
+        inputType: 'number' as const,
+        min: 8000,
+        max: 48000,
+        step: 8000,
+      },
+    ],
+  },
+
+  // ── Keycloak Admin ──────────────────────────────────────────────────────────────
+  {
+    id: 'keycloak-admin',
+    label: 'Keycloak Admin Client',
+    settings: [
+      { key: 'keycloak.admin.server-url', label: 'Server URL', description: 'Keycloak base URL (e.g. https://auth.example.com). Used to build the Admin REST API endpoint.' },
+      { key: 'keycloak.admin.realm', label: 'Realm', description: 'Realm that both hosts the service account and contains the users to manage.', defaultValue: 'master' },
+      { key: 'keycloak.admin.client-id', label: 'Client ID', description: 'Service account client ID with realm-management > view-users and manage-users roles.' },
+      { key: 'keycloak.admin.client-secret', label: 'Client Secret', description: 'Client secret for the service account above. Stored encrypted.', isSecret: true },
+    ],
+  },
+
+  // ── Log Analysis ──────────────────────────────────────────────────────────────
+  {
+    id: 'log-analysis',
+    label: 'Log Analysis',
+    settings: [
+      { key: 'log-analysis.monitoring-days', label: 'Monitoring Window (days)', description: 'Number of days a finding stays in MONITORING status after its fix is merged. If the issue does not reoccur within this window it is automatically closed.', defaultValue: '7', inputType: 'number', min: 1, max: 365 },
+    ],
+  },
+
   // ── Security ──────────────────────────────────────────────────────────────────
   {
     id: 'security',
@@ -433,25 +601,20 @@ interface TabDef {
 }
 
 const TABS: TabDef[] = [
-  { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'voyage'] },
+  { id: 'ai-models',       label: 'AI & Models',      groupIds: ['ai', 'bedrock'] },
   { id: 'source-ctrl',     label: 'Source Control',   groupIds: ['git', 'bitbucket', 'azuredevops', 'gitlab', 'github'] },
-  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'knowledge', 'knowledge-crawler', 'notifications'] },
-  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'job-queue', 'aws', 'schedulers', 'linter', 'review'] },
+  { id: 'integrations',    label: 'Integrations',     groupIds: ['jira', 'confluence', 'xray', 'mcp', 'web-search', 'knowledge', 'knowledge-crawler', 'notifications', 'aikido', 'transcribe'] },
+  { id: 'agent',           label: 'Agent',            groupIds: ['agent', 'self-analysis', 'job-queue', 'aws', 'schedulers', 'linter', 'review', 'log-analysis'] },
   { id: 'roadmap',         label: 'Scope',             groupIds: ['roadmap'] },
   { id: 'cloud-accounts',  label: 'Cloud Accounts',   groupIds: [], custom: true },
   { id: 'compliance',      label: 'Compliance',       groupIds: ['soc2'] },
-  { id: 'security',        label: 'Security',         groupIds: ['security'] },
+  { id: 'security',        label: 'Security',         groupIds: ['keycloak-admin', 'security'] },
 ]
-
-const GROUP_BY_ID = new Map(SETTING_GROUPS.map((g) => [g.id, g]))
 
 // ── Shared input styles ────────────────────────────────────────────────────────
 
 const inputCls =
   'w-full h-8 px-3 text-sm font-mono rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)]'
-
-const selectCls =
-  'w-full h-8 px-3 text-sm rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] cursor-pointer'
 
 const textareaCls =
   'w-full px-3 py-2 text-sm font-mono rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] resize-none'
@@ -560,14 +723,16 @@ function BooleanSettingRow({
           dimmed={!isOverridden}
         />
         {isOverridden && (
-          <button
-            title="Reset to default"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onDelete(meta.key)}
             disabled={isDeleting}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+            icon={<Trash2 size={13} />}
+            className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
           >
-            <Trash2 size={13} />
-          </button>
+            Reset
+          </Button>
         )}
       </div>
     </div>
@@ -651,24 +816,27 @@ function EditableSettingRow({
             </span>
           )}
 
-          <button
-            title="Edit"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={startEdit}
             disabled={editing || isSaving}
-            className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors disabled:opacity-40"
+            icon={<Pencil size={13} />}
           >
-            <Pencil size={13} />
-          </button>
+            Edit
+          </Button>
 
           {isOverridden && (
-            <button
-              title="Reset to default"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => onDelete(meta.key)}
               disabled={isDeleting || editing}
-              className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+              icon={<Trash2 size={13} />}
+              className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
             >
-              <Trash2 size={13} />
-            </button>
+              Reset
+            </Button>
           )}
         </div>
       </div>
@@ -680,18 +848,15 @@ function EditableSettingRow({
             {/* Input element */}
             <div className="relative flex-1">
               {inputType === 'select' ? (
-                <select
+                <Select
                   value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  autoFocus
-                  className={selectCls}
-                >
-                  {(meta.options ?? []).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {opt}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setInputValue}
+                  options={(meta.options ?? []).map((opt): SelectOption => ({
+                    value: opt,
+                    label: opt === '' ? '— none (use primary) —' : opt,
+                  }))}
+                  placeholder="Select a value…"
+                />
               ) : inputType === 'textarea' ? (
                 <textarea
                   value={inputValue}
@@ -722,32 +887,37 @@ function EditableSettingRow({
                 />
               )}
               {isSecret && inputType !== 'textarea' && (
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setShowSecret((v) => !v)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                >
-                  {showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
-                </button>
+                  icon={showSecret ? <EyeOff size={13} /> : <Eye size={13} />}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-1"
+                />
               )}
             </div>
 
             {/* Save / Cancel */}
-            <button
+            <Button
+              variant="primary"
+              size="sm"
               onClick={handleSave}
               disabled={!inputValue.trim() || isSaving}
-              title="Save"
-              className="p-1.5 rounded-[var(--border-radius-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity shrink-0"
+              icon={<Check size={13} />}
+              className="shrink-0"
             >
-              <Check size={14} />
-            </button>
-            <button
+              Save
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={cancelEdit}
-              title="Cancel"
-              className="p-1.5 rounded-[var(--border-radius-small)] bg-[var(--color-buttons-button-back)] text-[var(--color-fonts-font-color-buttons)] hover:bg-[var(--color-buttons-button-back-hover)] transition-colors shrink-0"
+              icon={<X size={13} />}
+              className="shrink-0"
             >
-              <X size={14} />
-            </button>
+              Cancel
+            </Button>
           </div>
 
           {isSecret && (
@@ -845,28 +1015,6 @@ function SettingSection({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Toast list ─────────────────────────────────────────────────────────────────
-
-function ToastList({ toasts }: { toasts: ToastMsg[] }) {
-  if (toasts.length === 0) return null
-  return (
-    <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          className={`px-4 py-2.5 rounded-[var(--border-radius-card)] shadow-lg text-sm font-medium ${
-            t.type === 'success'
-              ? 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)] border border-[var(--color-tags-font-success)]'
-              : 'bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] border border-[var(--color-tags-font-critical)]'
-          }`}
-        >
-          {t.text}
-        </div>
-      ))}
     </div>
   )
 }
@@ -985,9 +1133,7 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <Cloud size={15} />
             {isEdit ? `Edit — ${initial.name}` : 'Add Cloud Account'}
           </h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)]">
-            <X size={16} />
-          </button>
+          <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={16} />} />
         </div>
 
         <div className="overflow-y-auto flex-1 px-5 py-4 space-y-4">
@@ -996,8 +1142,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               ID *
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={id}
               onChange={(e) => setId(e.target.value)}
               disabled={isEdit}
@@ -1016,8 +1162,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Name *
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Engie AWS Production"
@@ -1030,8 +1176,8 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Description
             </label>
-            <input
-              className={inputCls}
+            <Input
+              className="w-full text-sm h-8"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Optional description"
@@ -1043,15 +1189,11 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
             <label className="block text-xs font-medium text-[var(--color-fonts-font-color-support)] mb-1">
               Type *
             </label>
-            <select
-              className={selectCls}
+            <Select
               value={type}
-              onChange={(e) => handleTypeChange(e.target.value as CloudAccountType)}
-            >
-              {CLOUD_ACCOUNT_TYPES.map((t) => (
-                <option key={t} value={t}>{TYPE_LABELS[t]}</option>
-              ))}
-            </select>
+              onChange={(v) => handleTypeChange(v as CloudAccountType)}
+              options={CLOUD_ACCOUNT_TYPES.map((t) => ({ value: t, label: TYPE_LABELS[t] }))}
+            />
           </div>
 
           {/* Provider-specific credentials */}
@@ -1084,21 +1226,22 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
                       />
                     ) : (
                       <div className="relative">
-                        <input
+                        <Input
                           type={f.isSecret && !show ? 'password' : 'text'}
-                          className={`${inputCls} ${f.isSecret ? 'pr-8' : ''}`}
+                          className={`w-full text-sm h-8 ${f.isSecret ? 'pr-8' : ''}`}
                           value={masked ? '' : val}
                           onChange={(e) => updateCred(f.key, e.target.value)}
                           placeholder={masked ? '(stored — enter new value to replace)' : f.placeholder}
                         />
                         {f.isSecret && (
-                          <button
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => toggleShow(f.key)}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
-                          >
-                            {show ? <EyeOff size={13} /> : <Eye size={13} />}
-                          </button>
+                            icon={show ? <EyeOff size={13} /> : <Eye size={13} />}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 p-1"
+                          />
                         )}
                       </div>
                     )}
@@ -1115,19 +1258,18 @@ function CloudAccountModal({ initial, onSave, onClose, isSaving }: CloudAccountM
         </div>
 
         <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-[var(--color-cards-card-stroke)] shrink-0">
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] transition-colors"
-            onClick={onClose}
-          >
+          <Button variant="secondary" size="md" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-[var(--border-radius-button-small)] bg-[var(--color-buttons-button-primary)] text-white hover:opacity-90 transition-opacity disabled:opacity-40"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            loading={isSaving}
             onClick={handleSubmit}
             disabled={!id.trim() || !name.trim() || isSaving}
           >
-            {isSaving ? 'Saving…' : 'Save'}
-          </button>
+            Save
+          </Button>
         </div>
       </div>
     </div>
@@ -1143,7 +1285,6 @@ function CloudAccountsSection() {
   function addToast(text: string, type: 'success' | 'error') {
     const id = ++toastId
     setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }
 
   const { data: accounts, isLoading } = useQuery<CloudAccount[]>({
@@ -1242,21 +1383,24 @@ function CloudAccountsSection() {
                   )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    title="Edit"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => setEditAccount(account)}
-                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-navigation-menu-item-hover-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
+                    icon={<Pencil size={13} />}
                   >
-                    <Pencil size={13} />
-                  </button>
-                  <button
-                    title="Delete"
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => deleteMutation.mutate(account.id)}
                     disabled={deleteMutation.isPending}
-                    className="p-1.5 rounded-[var(--border-radius-small)] hover:bg-[var(--color-tags-critical-background)] text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-tags-font-critical)] transition-colors disabled:opacity-40"
+                    icon={<Trash2 size={13} />}
+                    className="hover:bg-[var(--color-tags-critical-background)] hover:text-[var(--color-tags-font-critical)]"
                   >
-                    <Trash2 size={13} />
-                  </button>
+                    Delete
+                  </Button>
                 </div>
               </div>
             )
@@ -1273,7 +1417,15 @@ function CloudAccountsSection() {
         />
       )}
 
-      <ToastList toasts={toasts} />
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.text}
+          variant={t.type}
+          duration={3500}
+          onClose={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+        />
+      ))}
     </div>
   )
 }
@@ -1291,13 +1443,38 @@ export default function SystemSettingsPage() {
   function addToast(text: string, type: 'success' | 'error') {
     const id = ++toastId
     setToasts((prev) => [...prev, { id, text, type }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }
 
   const { data: settingsList, isLoading } = useQuery<SystemSetting[]>({
     queryKey: ['system-settings'],
     queryFn: () => api.get('/settings').then((r) => r.data).catch(() => []),
   })
+
+  const { data: claudeModelsData } = useQuery<{ id: string; displayName: string }[]>({
+    queryKey: ['claude-models'],
+    queryFn: () => api.get('/models/claude').then((r) => r.data).catch(() => []),
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const claudeModelOptions: string[] = useMemo(
+    () => (claudeModelsData && claudeModelsData.length > 0 ? claudeModelsData.map((m) => m.id) : CLAUDE_MODELS),
+    [claudeModelsData],
+  )
+
+  const effectiveGroups: SettingGroup[] = useMemo(
+    () =>
+      SETTING_GROUPS.map((group) => ({
+        ...group,
+        settings: group.settings.map((s) =>
+          s.options === CLAUDE_MODELS
+            ? { ...s, options: claudeModelOptions }
+            : s.options && s.options.length > 1 && s.options[0] === '' && s.options.slice(1).join() === CLAUDE_MODELS.join()
+              ? { ...s, options: ['', ...claudeModelOptions] }
+              : s,
+        ),
+      })),
+    [claudeModelOptions],
+  )
 
   const overrides = new Map<string, SystemSetting>(
     (Array.isArray(settingsList) ? settingsList : []).map((s) => [s.key, s]),
@@ -1331,10 +1508,15 @@ export default function SystemSettingsPage() {
 
   const handleDelete = (key: string) => deleteMutation.mutate(key)
 
+  const effectiveGroupById = useMemo(
+    () => new Map(effectiveGroups.map((g) => [g.id, g])),
+    [effectiveGroups],
+  )
+
   const lowerSearch = search.toLowerCase().trim()
   const isSearching = lowerSearch.length > 0
 
-  const searchGroups = SETTING_GROUPS.map((group) => ({
+  const searchGroups = effectiveGroups.map((group) => ({
     ...group,
     settings: group.settings.filter(
       (s) =>
@@ -1346,15 +1528,15 @@ export default function SystemSettingsPage() {
 
   const currentTab = TABS.find((t) => t.id === activeTab) ?? TABS[0]
   const tabGroups = currentTab.groupIds
-    .map((id) => GROUP_BY_ID.get(id))
+    .map((id) => effectiveGroupById.get(id))
     .filter((g): g is SettingGroup => !!g)
 
   const totalOverridden = overrides.size
-  const totalSettings = SETTING_GROUPS.reduce((n, g) => n + g.settings.length, 0)
+  const totalSettings = effectiveGroups.reduce((n, g) => n + g.settings.length, 0)
 
   function tabOverrideCount(tab: TabDef) {
     return tab.groupIds
-      .flatMap((id) => GROUP_BY_ID.get(id)?.settings ?? [])
+      .flatMap((id) => effectiveGroupById.get(id)?.settings ?? [])
       .filter((s) => overrides.has(s.key)).length
   }
 
@@ -1375,12 +1557,12 @@ export default function SystemSettingsPage() {
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <input
+        <Input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search all settings…"
-          className="h-8 px-3 rounded-[var(--border-radius-button-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-primary)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] placeholder:text-[var(--color-fonts-font-color-support)] w-64"
+          className="h-8 w-64 text-sm"
         />
         <span className="ml-auto text-xs text-[var(--color-fonts-font-color-support)]">
           {isLoading ? '…' : `${totalOverridden} of ${totalSettings} settings overridden`}
@@ -1458,7 +1640,15 @@ export default function SystemSettingsPage() {
         </>
       )}
 
-      <ToastList toasts={toasts} />
+      {toasts.map((t) => (
+        <Toast
+          key={t.id}
+          message={t.text}
+          variant={t.type}
+          duration={3500}
+          onClose={() => setToasts((prev) => prev.filter((x) => x.id !== t.id))}
+        />
+      ))}
     </main>
   )
 }

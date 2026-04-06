@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { Sparkles, MessageCircle, Check } from 'lucide-react'
+import { Sparkles, MessageCircle } from 'lucide-react'
 import type { Dispatch, SetStateAction } from 'react'
 import type { AutomationHook } from '@/types/api'
 import { ACTION_TYPES } from './hookConstants'
 import { AiPromptAssistant } from './AiPromptAssistant'
+import { RadioGroup } from '@/components/ui/RadioGroup'
+import type { RadioOption } from '@/components/ui/RadioGroup'
 
 const inputCls = 'w-full px-3 py-2 rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]'
 const labelCls = 'block text-xs font-semibold text-[var(--color-fonts-font-color-input-label)] mb-1.5 uppercase tracking-wide'
@@ -36,58 +38,47 @@ function SegmentedControl({
 
 // ── Job types ─────────────────────────────────────────────────────────────────
 
-interface JobTypeDef {
-  id: string
-  label: string
-  description: string
-  /** When set, saving uses this as actionType instead of 'execute_job'. */
-  reviewAction?: string
-  separator?: never
-}
-
-interface SeparatorDef { separator: true; id: string; label?: never; description?: never; reviewAction?: never }
-
-type JobTypeEntry = JobTypeDef | SeparatorDef
-
-const JOB_TYPES: JobTypeEntry[] = [
+const JOB_TYPES: RadioOption[] = [
   {
-    id: 'QUALITY_REPORT',
+    value: 'QUALITY_REPORT',
     label: 'Quality Report',
     description: 'Clone, run quality measurements (coverage, linting, security, complexity) and persist a score',
   },
   {
-    id: 'GENERATE_TESTS',
+    value: 'GENERATE_TESTS',
     label: 'Generate Tests',
     description: 'Scan the codebase for uncovered classes and generate unit tests automatically',
   },
   {
-    id: 'METRICS',
+    value: 'METRICS',
     label: 'Complexity Metrics',
     description: 'Calculate cyclomatic complexity and flag methods exceeding the threshold',
   },
   {
-    id: 'FIX',
+    value: 'FIX',
     label: 'Code Fix',
     description: 'Apply a code fix driven by a Jira issue or custom prompt, then open a PR',
   },
-  { id: 'sep-review', separator: true },
   {
-    id: 'review_epic',
+    value: 'service_desk_triage',
+    label: 'Service Desk Triage',
+    description: 'Classify and deep-analyse service desk tickets — bugs and outages get AI root-cause analysis posted as an internal comment',
+  },
+  { separator: true, label: 'Roadmap Reviews' },
+  {
+    value: 'review_epic',
     label: 'Review Epic',
     description: 'AI readiness review for a Jira Epic — triggered by a Jira issue event',
-    reviewAction: 'review_epic',
   },
   {
-    id: 'review_feature',
+    value: 'review_feature',
     label: 'Review Feature',
     description: 'AI readiness review for a Jira Feature — triggered by a Jira issue event',
-    reviewAction: 'review_feature',
   },
   {
-    id: 'review_userstory',
+    value: 'review_userstory',
     label: 'Review User Story',
     description: 'AI readiness review for a Jira User Story — triggered by a Jira issue event',
-    reviewAction: 'review_userstory',
   },
 ]
 
@@ -191,51 +182,11 @@ export function WizardStep3Actions({ form, setForm, selectedActions, toggleActio
           <h5 className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)] uppercase tracking-wide">
             Job Type
           </h5>
-          <div className="space-y-1.5">
-            {JOB_TYPES.map(entry => {
-              if ('separator' in entry) {
-                return (
-                  <div key={entry.id} className="flex items-center gap-2 py-1">
-                    <div className="flex-1 h-px bg-[var(--color-inputs-input-border)]" />
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
-                      Roadmap Reviews
-                    </span>
-                    <div className="flex-1 h-px bg-[var(--color-inputs-input-border)]" />
-                  </div>
-                )
-              }
-              const job = entry
-              const isSelected = form.jobName === job.id
-              return (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => setForm(p => ({ ...p, jobName: job.id }))}
-                  className={`w-full flex items-start gap-3 px-3 py-2.5 rounded-[var(--border-radius-small)] border text-left transition-colors ${
-                    isSelected
-                      ? 'border-[var(--color-buttons-button-primary)] bg-blue-50 dark:bg-blue-900/10'
-                      : 'border-[var(--color-inputs-input-border)] hover:border-[var(--color-buttons-button-primary)] hover:bg-[var(--color-navigation-menu-item-hover-background)] bg-[var(--color-cards-card-background)]'
-                  }`}
-                >
-                  <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                    isSelected
-                      ? 'border-[var(--color-buttons-button-primary)] bg-[var(--color-buttons-button-primary)]'
-                      : 'border-[var(--color-inputs-input-border)]'
-                  }`}>
-                    {isSelected && <Check size={9} className="text-white" />}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-[var(--color-fonts-font-color-primary)]">
-                      {job.label}
-                    </div>
-                    <div className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5">
-                      {job.description}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+          <RadioGroup
+            options={JOB_TYPES}
+            value={form.jobName ?? ''}
+            onChange={(v) => setForm(p => ({ ...p, jobName: v }))}
+          />
         </div>
       )}
 

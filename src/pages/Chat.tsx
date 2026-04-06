@@ -11,13 +11,15 @@ import {
 import { refreshToken, getToken } from '@/lib/keycloak'
 import { useStore } from '@tanstack/react-store'
 import { authStore } from '@/store/auth-store'
-import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext } from '@/types/api'
+import { chatStreamStore, chatStreamActions } from '@/store/chat-stream-store'
+import type { ChatEvent, ChatMessage, ThinkingStep, ExecutionPlan, PlanStatus, ChatAttachment, ConversationContext, ClarificationQuestion } from '@/types/api'
 import {
   ChatInputBar,
   MessageBubble,
   ThinkingPanel,
   ConversationSidebar,
-  MarkdownMessage,
+  StreamingMarkdownMessage,
+  extractWebSources,
   redactSecrets,
   loadMessagesFromStorage,
   saveMessagesToStorage,
@@ -33,12 +35,11 @@ export default function Chat() {
   const canPlan = userPermissions.includes('EXECUTE_PLAN_JOBS')
 
   const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [streamingContent, setStreamingContent] = useState('')
-  const [streamingThinkingSteps, setStreamingThinkingSteps] = useState<ThinkingStep[]>([])
-  const [isStreaming, setIsStreaming] = useState(false)
+  const { isStreaming, content: streamingContent, thinkingSteps: streamingThinkingSteps, conversationId: streamingConversationId } = useStore(chatStreamStore, (s) => s)
   const [activeConversationId, setActiveConversationId] = useState<string | null>(
     params.conversationId ?? null,
   )
+  const isViewingStream = isStreaming && streamingConversationId === activeConversationId
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const [secretWarning, setSecretWarning] = useState<{
@@ -54,16 +55,23 @@ export default function Chat() {
   const [existingContext, setExistingContext] = useState<ConversationContext | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
   const chatInputRef = useRef<ChatInputHandle>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const pendingClarificationQuestionsRef = useRef<ClarificationQuestion[]>([])
 
-  // Abort any in-flight stream when the component unmounts
+  // Track whether the user is scrolled to (or near) the bottom of the messages container
   useEffect(() => {
-    return () => {
-      abortControllerRef.current?.abort()
+    const el = scrollContainerRef.current
+    if (!el) return
+    const onScroll = () => {
+      isAtBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
     }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
   }, [])
 
   // Function to load existing attachments
@@ -119,14 +127,13 @@ export default function Chat() {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
       
-      // Reset other state when switching conversations
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
-      setIsStreaming(false)
-      setSecretWarning(null)
-      setActivePlans([])
-      
-      chatInputRef.current?.clear()
+      // Reset other state when switching conversations (skip if resuming an active stream)
+      const isResumingStream = chatStreamStore.state.isStreaming && chatStreamStore.state.conversationId === id
+      if (!isResumingStream) {
+        setSecretWarning(null)
+        setActivePlans([])
+        chatInputRef.current?.clear()
+      }
       
       loadExistingAttachments(id)
       loadExistingContext(id)
@@ -169,24 +176,41 @@ export default function Chat() {
     fetchLinkedPlans()
   }, [params.conversationId])
 
-  // Scroll handling
+  // Scroll handling — only scroll when the user is already at (or near) the bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
 
+  // When streaming starts the user just hit Send — smoothly scroll to bottom once
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
-  }, [isStreaming])
+    if (isViewingStream) {
+      isAtBottomRef.current = true
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [isViewingStream])
+
+  // Follow streaming tokens as they arrive — use direct scrollTop instead of
+  // scrollIntoView({ behavior: 'smooth' }) to avoid competing scroll animations
+  // that fight each other at token-arrival frequency and cause choppy movement.
+  useEffect(() => {
+    if (isViewingStream && isAtBottomRef.current) {
+      const el = scrollContainerRef.current
+      if (el) el.scrollTop = el.scrollHeight
+    }
+  }, [streamingContent, isViewingStream])
 
   // Scroll when new tool logs are added
   useEffect(() => {
-    if (streamingThinkingSteps.length > 0 && isStreaming) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (streamingThinkingSteps.length > 0 && isViewingStream && isAtBottomRef.current) {
+      const el = scrollContainerRef.current
+      if (el) el.scrollTop = el.scrollHeight
     }
-  }, [streamingThinkingSteps, isStreaming])
+  }, [streamingThinkingSteps, isViewingStream])
 
   const sendMessage = useCallback(
-    async (text: string, attachmentIds?: string[], mode?: 'ask' | 'plan', conversationContext?: ConversationContext) => {
+    async (text: string, attachmentIds?: string[], mode?: 'chat' | 'ask' | 'plan', conversationContext?: ConversationContext) => {
       if (!text.trim() || isStreaming) return
 
       const userMsg: ChatMessage = {
@@ -194,15 +218,18 @@ export default function Chat() {
         role: 'user',
         content: text.trim(),
       }
-      setMessages((prev) => [...prev, userMsg])
-      setIsStreaming(true)
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
+      setMessages((prev) => {
+        const next = [...prev, userMsg]
+        if (activeConversationId) saveMessagesToStorage(activeConversationId, next)
+        return next
+      })
+      chatStreamActions.start(activeConversationId)
       setMobileSidebarOpen(false)
 
       let accumulatedContent = ''
       const accumulatedThinkingSteps: ThinkingStep[] = []
       streamingContentRef.current = ''
+      pendingClarificationQuestionsRef.current = []
 
       const controller = new AbortController()
       abortControllerRef.current = controller
@@ -266,7 +293,7 @@ export default function Chat() {
                 } else {
                   accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
                 }
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               }
               case 'text':
@@ -274,7 +301,7 @@ export default function Chat() {
                 streamingContentRef.current = accumulatedContent
                 if (!streamingRafRef.current) {
                   streamingRafRef.current = requestAnimationFrame(() => {
-                    setStreamingContent(streamingContentRef.current)
+                    chatStreamActions.setContent(streamingContentRef.current)
                     streamingRafRef.current = null
                   })
                 }
@@ -287,7 +314,7 @@ export default function Chat() {
                   status: 'running',
                   startTime: event.timestamp ?? Date.now()
                 })
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
                 break
               case 'tool_end': {
                 const lastTool = [...accumulatedThinkingSteps].reverse().find(s => s.kind === 'tool' && s.name === event.tool && s.status === 'running')
@@ -296,7 +323,13 @@ export default function Chat() {
                   lastTool.result = event.result
                   lastTool.endTime = event.timestamp ?? Date.now()
                 }
-                setStreamingThinkingSteps([...accumulatedThinkingSteps])
+                chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
+                break
+              }
+              case 'clarification_request': {
+                if (event.questions && event.questions.length > 0) {
+                  pendingClarificationQuestionsRef.current = event.questions
+                }
                 break
               }
               case 'plan_start': {
@@ -361,11 +394,23 @@ export default function Chat() {
                 break
               }
               case 'done': {
+                // Cancel any pending RAF and flush the final accumulated content
+                // synchronously so the last tokens are never silently dropped.
+                if (streamingRafRef.current) {
+                  cancelAnimationFrame(streamingRafRef.current)
+                  streamingRafRef.current = null
+                }
+                chatStreamActions.setContent(accumulatedContent)
+
+                const webSources = extractWebSources(accumulatedThinkingSteps)
+                const pendingQuestions = pendingClarificationQuestionsRef.current
                 const assistantMsg: ChatMessage = {
                   id: crypto.randomUUID(),
                   role: 'assistant',
                   content: accumulatedContent,
                   thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                  webSources: webSources.length > 0 ? webSources : undefined,
+                  clarificationQuestions: pendingQuestions.length > 0 ? [...pendingQuestions] : undefined,
                 }
                 setMessages((prev) => {
                   const next = [...prev, assistantMsg]
@@ -373,13 +418,7 @@ export default function Chat() {
                   if (convId) saveMessagesToStorage(convId, next)
                   return next
                 })
-                if (streamingRafRef.current) {
-                  cancelAnimationFrame(streamingRafRef.current)
-                  streamingRafRef.current = null
-                }
-                setStreamingContent('')
-                setStreamingThinkingSteps([])
-                setIsStreaming(false)
+                chatStreamActions.finish()
                 if (event.conversationId && event.conversationId !== activeConversationId) {
                   setActiveConversationId(event.conversationId)
                   navigate({ to: '/chat/$conversationId', params: { conversationId: event.conversationId } })
@@ -400,9 +439,7 @@ export default function Chat() {
                   cancelAnimationFrame(streamingRafRef.current)
                   streamingRafRef.current = null
                 }
-                setStreamingContent('')
-                setStreamingThinkingSteps([])
-                setIsStreaming(false)
+                chatStreamActions.finish()
                 return
             }
           }
@@ -453,9 +490,7 @@ export default function Chat() {
           cancelAnimationFrame(streamingRafRef.current)
           streamingRafRef.current = null
         }
-        setIsStreaming(false)
-        setStreamingContent('')
-        setStreamingThinkingSteps([])
+        chatStreamActions.finish()
       }
     },
     [isStreaming, activeConversationId, navigate, queryClient],
@@ -465,7 +500,6 @@ export default function Chat() {
     (id: string) => {
       setActiveConversationId(id)
       setMessages(loadMessagesFromStorage(id))
-      setStreamingContent('')
       setMobileSidebarOpen(false)
       navigate({ to: '/chat/$conversationId', params: { conversationId: id } })
     },
@@ -475,7 +509,6 @@ export default function Chat() {
   const handleNewChat = useCallback(() => {
     setActiveConversationId(null)
     setMessages([])
-    setStreamingContent('')
     chatInputRef.current?.clear()
     setMobileSidebarOpen(false)
     navigate({ to: '/chat' })
@@ -530,9 +563,7 @@ export default function Chat() {
 
   const handleImplementPlan = useCallback(async (planId: string) => {
     if (isStreaming || !canPlan) return
-    setIsStreaming(true)
-    setStreamingContent('')
-    setStreamingThinkingSteps([])
+    chatStreamActions.start(activeConversationId)
 
     // Mark plan as executing in local state
     setActivePlans(prev => prev.map(p =>
@@ -587,7 +618,7 @@ export default function Chat() {
               streamingContentRef.current = accumulatedContent
               if (!streamingRafRef.current) {
                 streamingRafRef.current = requestAnimationFrame(() => {
-                  setStreamingContent(streamingContentRef.current)
+                  chatStreamActions.setContent(streamingContentRef.current)
                   streamingRafRef.current = null
                 })
               }
@@ -599,7 +630,7 @@ export default function Chat() {
               } else {
                 accumulatedThinkingSteps.push({ kind: 'thought', text: event.text ?? '' })
               }
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             }
             case 'tool_start':
@@ -610,7 +641,7 @@ export default function Chat() {
                 status: 'running',
                 startTime: event.timestamp ?? Date.now(),
               })
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             case 'tool_end': {
               const lastTool = [...accumulatedThinkingSteps].reverse().find(
@@ -621,10 +652,11 @@ export default function Chat() {
                 lastTool.result = event.result
                 lastTool.endTime = event.timestamp ?? Date.now()
               }
-              setStreamingThinkingSteps([...accumulatedThinkingSteps])
+              chatStreamActions.setThinkingSteps([...accumulatedThinkingSteps])
               break
             }
-            case 'done':
+            case 'done': {
+              const planWebSources = extractWebSources(accumulatedThinkingSteps)
               setActivePlans(prev => prev.map(p =>
                 p.planId === planId ? { ...p, status: 'COMPLETED' as PlanStatus } : p
               ))
@@ -635,13 +667,13 @@ export default function Chat() {
                   role: 'assistant' as const,
                   content: accumulatedContent || `Plan **${planId}** implemented successfully.`,
                   thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+                  webSources: planWebSources.length > 0 ? planWebSources : undefined,
                 },
               ])
               if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-              setStreamingContent('')
-              setStreamingThinkingSteps([])
-              setIsStreaming(false)
+              chatStreamActions.finish()
               return
+            }
             case 'error':
               setActivePlans(prev => prev.map(p =>
                 p.planId === planId ? { ...p, status: 'FAILED' as PlanStatus } : p
@@ -655,15 +687,14 @@ export default function Chat() {
                 },
               ])
               if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-              setStreamingContent('')
-              setStreamingThinkingSteps([])
-              setIsStreaming(false)
+              chatStreamActions.finish()
               return
           }
         }
       }
 
       if (accumulatedContent) {
+        const fallbackSources = extractWebSources(accumulatedThinkingSteps)
         setMessages(prev => [
           ...prev,
           {
@@ -671,6 +702,7 @@ export default function Chat() {
             role: 'assistant' as const,
             content: accumulatedContent,
             thinkingSteps: accumulatedThinkingSteps.length > 0 ? [...accumulatedThinkingSteps] : undefined,
+            webSources: fallbackSources.length > 0 ? fallbackSources : undefined,
           },
         ])
       }
@@ -701,11 +733,34 @@ export default function Chat() {
       }
     } finally {
       if (streamingRafRef.current) { cancelAnimationFrame(streamingRafRef.current); streamingRafRef.current = null }
-      setIsStreaming(false)
-      setStreamingContent('')
-      setStreamingThinkingSteps([])
+      chatStreamActions.finish()
     }
-  }, [isStreaming])
+  }, [isStreaming, activeConversationId, canPlan])
+
+  const handleEditMessage = useCallback(async (messageId: string, newText: string) => {
+    if (isStreaming) return
+    const msgIndex = messages.findIndex((m) => m.id === messageId)
+    if (msgIndex === -1) return
+
+    if (activeConversationId) {
+      try {
+        await refreshToken()
+        const token = getToken()
+        await fetch(
+          `${import.meta.env.VITE_API_URL}/conversations/${activeConversationId}/messages?fromSequence=${msgIndex}`,
+          { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } }
+        )
+      } catch {
+        // ignore — local truncation proceeds regardless
+      }
+    }
+
+    const truncated = messages.slice(0, msgIndex)
+    setMessages(truncated)
+    if (activeConversationId) saveMessagesToStorage(activeConversationId, truncated)
+
+    sendMessage(newText)
+  }, [isStreaming, messages, activeConversationId, sendMessage])
 
   const handleDismissPlan = useCallback(async (planId: string) => {
     try {
@@ -734,6 +789,19 @@ export default function Chat() {
   const handleStop = useCallback(() => {
     abortControllerRef.current?.abort()
   }, [])
+
+  const handleClarificationSubmit = useCallback((messageId: string, formattedAnswers: string) => {
+    // Lock the clarification form on the originating message
+    setMessages((prev) => {
+      const next = prev.map((m) =>
+        m.id === messageId ? { ...m, clarificationAnswered: true } : m
+      )
+      if (activeConversationId) saveMessagesToStorage(activeConversationId, next)
+      return next
+    })
+    // Send the answers as a new user message so Claude can continue
+    sendMessage(formattedAnswers)
+  }, [activeConversationId, sendMessage])
 
   const handleConversationCreate = useCallback((conversationId: string) => {
     // Navigate to the new conversation
@@ -865,8 +933,8 @@ export default function Chat() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 sm:px-8 py-6 space-y-6">
-          {messages.length === 0 && !isStreaming && (
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 sm:px-8 py-6 space-y-6">
+          {messages.length === 0 && !isViewingStream && (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
               <div className="w-14 h-14 rounded-2xl bg-[var(--color-buttons-button-primary)] flex items-center justify-center shadow-lg">
                 <Bot size={28} className="text-white" />
@@ -883,12 +951,21 @@ export default function Chat() {
           )}
 
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} />
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              onEdit={msg.role === 'user' && !isStreaming ? (newText) => handleEditMessage(msg.id, newText) : undefined}
+              onClarificationSubmit={
+                msg.role === 'assistant' && msg.clarificationQuestions && !msg.clarificationAnswered && !isStreaming
+                  ? (answers) => handleClarificationSubmit(msg.id, answers)
+                  : undefined
+              }
+            />
           ))}
 
 
           {/* In-flight assistant message */}
-          {isStreaming && (
+          {isViewingStream && (
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-full bg-[var(--color-buttons-button-primary)] flex items-center justify-center shrink-0 mt-0.5">
                 <Bot size={15} className="text-white" />
@@ -899,23 +976,26 @@ export default function Chat() {
                     <ThinkingPanel steps={streamingThinkingSteps} isLive={true} />
                   )}
                   {streamingContent ? (
-                    <MarkdownMessage content={streamingContent} />
-                  ) : (
-                    <div className="flex items-center gap-1.5 py-1">
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '0ms' }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '150ms' }}
-                      />
-                      <span
-                        className="w-1.5 h-1.5 rounded-full bg-[var(--color-fonts-font-color-support)] animate-bounce"
-                        style={{ animationDelay: '300ms' }}
-                      />
+                    <StreamingMarkdownMessage content={streamingContent} />
+                  ) : streamingThinkingSteps.length === 0 ? (
+                    <div className="flex items-center gap-1.5 py-1 text-[var(--color-fonts-font-color-support)] opacity-60">
+                      <span className="text-sm">Thinking</span>
+                      <span className="flex items-center gap-0.5">
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '0ms' }}
+                        />
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '180ms' }}
+                        />
+                        <span
+                          className="w-1 h-1 rounded-full bg-current animate-bounce"
+                          style={{ animationDelay: '360ms' }}
+                        />
+                      </span>
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </div>
             </div>

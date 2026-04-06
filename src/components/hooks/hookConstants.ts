@@ -1,5 +1,5 @@
 import type { FC } from 'react'
-import { Sparkles, Play, Database, BookOpen, Zap, Users, Share2 } from 'lucide-react'
+import { Sparkles, Play, Database, BookOpen, Share2 } from 'lucide-react'
 import type { AutomationHook } from '@/types/api'
 
 // ── Trigger category ───────────────────────────────────────────────────────
@@ -18,9 +18,10 @@ export const TRIGGER_OPTIONS = [
     { value: 'pr_event',       label: 'PR Event (Legacy)', description: 'Legacy PR event trigger' },
   ]},
   { category: 'Jira', triggers: [
-    { value: 'jira.issue_created',  label: 'Issue Created',  description: 'When a Jira issue is created' },
-    { value: 'jira.issue_updated',  label: 'Issue Updated',  description: 'When a Jira issue is updated' },
-    { value: 'jira.issue_assigned', label: 'Issue Assigned', description: 'When a Jira issue is assigned' },
+    { value: 'jira.issue_created',       label: 'Issue Created',       description: 'When a Jira issue is created' },
+    { value: 'jira.issue_updated',       label: 'Issue Updated',       description: 'When a Jira issue is updated' },
+    { value: 'jira.issue_assigned',      label: 'Issue Assigned',      description: 'When a Jira issue is assigned' },
+    { value: 'jira.service_desk_ticket', label: 'Service Desk Ticket', description: 'When a new Jira Service Desk ticket is created' },
   ]},
   { category: 'Confluence', triggers: [
     { value: 'confluence.page_created', label: 'Page Created', description: 'When a Confluence page is created' },
@@ -62,13 +63,11 @@ export type ActionTypeDef = {
 }
 
 export const ACTION_TYPES: ActionTypeDef[] = [
-  { id: 'ai_prompt',        label: 'AI Prompt',              description: 'Run AI with a custom prompt',                    icon: Sparkles },
-  { id: 'execute_job',      label: 'Execute Job',            description: 'Trigger a CI/CD job or pipeline',               icon: Play },
-  { id: 'code_embeddings',  label: 'Code Embeddings',        description: 'Update code embeddings index',                  icon: Database },
-  { id: 'codegraph',        label: 'Code Graph',             description: 'Refresh the code knowledge graph',              icon: Share2 },
-  { id: 'generate_docs',    label: 'Generate Documentation', description: 'Auto-generate repository documentation',        icon: BookOpen },
-  { id: 'n8n_event',        label: 'n8n Event',              description: 'Trigger an n8n workflow event',                 icon: Zap },
-  { id: 'teams_event',      label: 'Teams Event',            description: 'Send a Microsoft Teams notification',           icon: Users },
+  { id: 'ai_prompt',        label: 'AI Prompt',              description: 'Run AI with a custom prompt',             icon: Sparkles },
+  { id: 'execute_job',      label: 'Execute Job',            description: 'Trigger a CI/CD job or pipeline',         icon: Play },
+  { id: 'code_embeddings',  label: 'Code Embeddings',        description: 'Update code embeddings index',            icon: Database },
+  { id: 'codegraph',        label: 'Code Graph',             description: 'Refresh the code knowledge graph',        icon: Share2 },
+  { id: 'generate_docs',    label: 'Generate Documentation', description: 'Auto-generate repository documentation',  icon: BookOpen },
 ]
 
 // ── Prompt templates ───────────────────────────────────────────────────────

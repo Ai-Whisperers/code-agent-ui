@@ -49,7 +49,6 @@ describe('ReadinessBadge', () => {
 
   it('renders score-only badge with neutral class when no label provided but score is set', () => {
     render(<ReadinessBadge score={50} showScore />)
-    // Since no label is provided, config is null; score should still render
     expect(screen.getByText('(50)')).toBeInTheDocument()
   })
 

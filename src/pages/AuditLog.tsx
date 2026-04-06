@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { ChevronDown, ChevronRight, RefreshCw } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { FilterSelect } from '@/components/ui/FilterSelect'
+import { Input } from '@/components/ui/Input'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
@@ -173,9 +175,9 @@ function AuditRow({ entry }: { entry: AuditEntry }) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AuditLogPage() {
-  const [categoryFilter, setCategoryFilter] = useState<string>('all')
-  const [actionFilter, setActionFilter]     = useState<string>('all')
-  const [actorFilter, setActorFilter]       = useState<string>('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [actionFilter, setActionFilter]     = useState('')
+  const [actorFilter, setActorFilter]       = useState('')
 
   const { data, isLoading, refetch, isFetching } = useQuery<AuditEntry[]>({
     queryKey: ['audit-log'],
@@ -186,17 +188,14 @@ export default function AuditLogPage() {
   const entries = Array.isArray(data) ? data : []
 
   const filtered = entries.filter((e) => {
-    if (categoryFilter !== 'all' && e.category !== categoryFilter) return false
-    if (actionFilter !== 'all' && e.action !== actionFilter) return false
+    if (categoryFilter && e.category !== categoryFilter) return false
+    if (actionFilter && e.action !== actionFilter) return false
     if (actorFilter && !e.actor.toLowerCase().includes(actorFilter.toLowerCase())) return false
     return true
   })
 
   const categories = [...new Set(entries.map((e) => e.category))].sort()
   const actions    = [...new Set(entries.map((e) => e.action))].sort()
-
-  const selectClass =
-    'px-2 py-1 text-sm rounded-[var(--border-radius-small)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)]'
 
   return (
     <main className="flex flex-col flex-1 min-h-0">
@@ -218,40 +217,25 @@ export default function AuditLogPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-            Category
-          </label>
-          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className={selectClass}>
-            <option value="all">All</option>
-            {categories.map((c) => (
-              <option key={c} value={c}>{CATEGORY_LABELS[c] ?? c}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-            Action
-          </label>
-          <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} className={selectClass}>
-            <option value="all">All</option>
-            {actions.map((a) => (
-              <option key={a} value={a}>{ACTION_STYLES[a]?.label ?? a}</option>
-            ))}
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-            Actor
-          </label>
-          <input
-            type="text"
-            value={actorFilter}
-            onChange={(e) => setActorFilter(e.target.value)}
-            placeholder="Filter by user…"
-            className={`${selectClass} w-40`}
-          />
-        </div>
+        <FilterSelect
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          placeholder="All categories"
+          options={categories.map((c) => ({ value: c, label: CATEGORY_LABELS[c] ?? c }))}
+        />
+        <FilterSelect
+          value={actionFilter}
+          onChange={setActionFilter}
+          placeholder="All actions"
+          options={actions.map((a) => ({ value: a, label: ACTION_STYLES[a]?.label ?? a }))}
+        />
+        <Input
+          type="text"
+          value={actorFilter}
+          onChange={(e) => setActorFilter(e.target.value)}
+          placeholder="Filter by user…"
+          className="w-40"
+        />
       </div>
 
       {/* Table */}

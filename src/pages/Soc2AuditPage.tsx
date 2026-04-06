@@ -1,48 +1,65 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
   RefreshCw,
   ExternalLink,
-  CheckCircle2,
-  XCircle,
   Clock,
-  AlertTriangle,
   ShieldCheck,
   Shield,
   Upload,
   GitBranch,
   Eye,
   EyeOff,
+  AlertTriangle,
+  XCircle,
+  HelpCircle,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { TableCard } from '@/components/ui/TableCard'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
+import { SlaBadge } from '@/components/ui/SlaBadge'
 import api from '@/lib/api'
-import type { Soc2AuditResponse, Soc2JobSummary, SlaStatus } from '@/types/api'
+import { IssueTable } from '@/components/security/IssueTable'
+import type { Soc2AuditResponse, Soc2JobSummary, SecurityIssuesResponse } from '@/types/api'
 
-// ── SLA badge ─────────────────────────────────────────────────────────────────
+// ── Stat card ─────────────────────────────────────────────────────────────────
 
-function SlaBadge({ status, deadline }: { status: SlaStatus; deadline?: string }) {
-  const map: Record<SlaStatus, { icon: React.ReactNode; label: string; cls: string }> = {
-    ON_TRACK:       { icon: <CheckCircle2 size={12} />, label: 'On Track',       cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
-    AT_RISK:        { icon: <AlertTriangle size={12} />, label: 'At Risk',        cls: 'bg-[var(--color-tags-warning-background)] text-[var(--color-tags-font-warning)]' },
-    OVERDUE:        { icon: <XCircle size={12} />,      label: 'Overdue',        cls: 'bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]' },
-    MET:            { icon: <CheckCircle2 size={12} />, label: 'SLA Met',        cls: 'bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]' },
-    MISSED:         { icon: <XCircle size={12} />,      label: 'SLA Missed',     cls: 'bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]' },
-    NOT_APPLICABLE: { icon: <Clock size={12} />,        label: 'N/A',            cls: 'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]' },
-  }
-  const entry = map[status] ?? map.NOT_APPLICABLE
-  const deadlineStr = deadline ? new Date(deadline).toLocaleDateString() : null
+function StatCard({
+  label,
+  value,
+  icon,
+  accent,
+  accentColor,
+  tooltip,
+}: {
+  label: string
+  value: string | number
+  icon: React.ReactNode
+  accent?: string
+  accentColor?: string
+  tooltip: string
+}) {
   return (
-    <Tooltip text={deadlineStr ? `Deadline: ${deadlineStr}` : 'No SLA configured'}>
-      <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${entry.cls}`}>
-        {entry.icon}
-        {entry.label}
-      </span>
-    </Tooltip>
+    <div className="bg-[var(--color-cards-card-background)] border border-[var(--color-cards-card-stroke)] rounded-[var(--border-radius-card)] overflow-hidden shadow-[0_1px_3px_var(--color-cards-card-drop-shadow)]">
+      <div className="h-1 w-full" style={{ backgroundColor: accentColor ?? 'var(--color-cards-card-stroke)' }} />
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] font-semibold text-[var(--color-fonts-font-color-support)] uppercase tracking-wider">
+              {label}
+            </span>
+            <Tooltip text={tooltip}>
+              <HelpCircle size={11} className="text-[var(--color-fonts-font-color-support)] opacity-50 cursor-default" />
+            </Tooltip>
+          </div>
+          <span className={accent ?? 'text-[var(--color-icons-icon)]'}>{icon}</span>
+        </div>
+        <p className="text-xl font-bold text-[var(--color-fonts-font-color-headings)]">{value}</p>
+      </div>
+    </div>
   )
 }
 
@@ -51,20 +68,20 @@ function SlaBadge({ status, deadline }: { status: SlaStatus; deadline?: string }
 function ReviewBadge({ status }: { status: 'NONE' | 'IN_PROGRESS' | 'COMPLETE' }) {
   if (status === 'COMPLETE') {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
         <Eye size={11} /> Reviewed
       </span>
     )
   }
   if (status === 'IN_PROGRESS') {
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-brand-background)] text-[var(--color-tags-font-brand)]">
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-brand-background)] text-[var(--color-tags-font-brand)]">
         <Clock size={11} /> In Progress
       </span>
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
       <EyeOff size={11} /> No Review
     </span>
   )
@@ -82,7 +99,7 @@ function StatusBadge({ status }: { status: string }) {
     PENDING:           'bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]',
   }
   return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${clsMap[status] ?? clsMap.PENDING}`}>
+    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold ${clsMap[status] ?? clsMap.PENDING}`}>
       {status}
     </span>
   )
@@ -126,7 +143,7 @@ function Soc2Row({ job, isEven }: { job: Soc2JobSummary; isEven: boolean }) {
       <td className="px-3 py-2 text-center">
         {job.aikidoIssueId ? (
           <Tooltip text={`Aikido: ${job.aikidoIssueId}`}>
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-danger-background)] text-[var(--color-tags-font-danger)]">
               <ShieldCheck size={11} /> Linked
             </span>
           </Tooltip>
@@ -154,12 +171,12 @@ function Soc2Row({ job, isEven }: { job: Soc2JobSummary; isEven: boolean }) {
       <td className="px-3 py-2 text-center">
         {job.scytaleUploaded ? (
           <Tooltip text="Evidence uploaded to Scytale">
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-success-background)] text-[var(--color-tags-font-success)]">
               <Upload size={11} /> Uploaded
             </span>
           </Tooltip>
         ) : (
-          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-[var(--border-radius-tag)] text-[10px] font-semibold bg-[var(--color-tags-neutral-background)] text-[var(--color-tags-font-neutral)]">
             <Upload size={11} /> Pending
           </span>
         )}
@@ -216,30 +233,67 @@ const REVIEW_OPTIONS = [
   { value: 'COMPLETE',    label: 'Reviewed' },
 ]
 
+const PRIORITY_OPTIONS = [
+  { value: 'Critical', label: 'Critical' },
+  { value: 'High',     label: 'High' },
+  { value: 'Medium',   label: 'Medium' },
+  { value: 'Low',      label: 'Low' },
+]
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function Soc2AuditPage() {
+  const queryClient = useQueryClient()
   const [statusFilter, setStatusFilter] = useState('')
   const [slaFilter, setSlaFilter] = useState('')
   const [reviewFilter, setReviewFilter] = useState('')
+  const [priorityFilter, setPriorityFilter] = useState('')
   const [page, setPage] = useState(0)
+  const [secRefreshing, setSecRefreshing] = useState(false)
   const limit = 50
 
   const params = new URLSearchParams({ limit: String(limit), page: String(page) })
-  if (statusFilter) params.set('status', statusFilter)
-  if (slaFilter)    params.set('slaStatus', slaFilter)
-  if (reviewFilter) params.set('reviewStatus', reviewFilter)
+  if (statusFilter)   params.set('status', statusFilter)
+  if (slaFilter)      params.set('slaStatus', slaFilter)
+  if (reviewFilter)   params.set('reviewStatus', reviewFilter)
+  if (priorityFilter) params.set('priority', priorityFilter)
 
   const { data, isLoading, isError, refetch, isFetching } = useQuery<Soc2AuditResponse>({
-    queryKey: ['soc2-audit', statusFilter, slaFilter, reviewFilter, page],
-    queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`),
+    queryKey: ['soc2-audit', statusFilter, slaFilter, reviewFilter, priorityFilter, page],
+    queryFn: () => api.get<Soc2AuditResponse>(`/compliance/soc2?${params}`).then(r => r.data),
+  })
+
+  const { data: secData, isLoading: secLoading, isError: secError } = useQuery<SecurityIssuesResponse>({
+    queryKey: ['security-issues'],
+    queryFn: () => api.get<SecurityIssuesResponse>('/security/issues').then(r => r.data),
+    refetchInterval: 60_000,
+    retry: 1,
   })
 
   const items = data?.items ?? []
   const total = data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / limit))
 
-  // Summary KPIs
+  async function handleSecRefresh() {
+    setSecRefreshing(true)
+    try {
+      await api.get('/security/issues?refresh=true')
+      await queryClient.invalidateQueries({ queryKey: ['security-issues'] })
+    } finally {
+      setSecRefreshing(false)
+    }
+  }
+
+  const allSecurityIssues = (secData?.items ?? []).flatMap(p => p.repos.flatMap(r => r.issues))
+  const aikidoHighIssues  = allSecurityIssues
+    .filter(i => {
+      const sev = (i.severity ?? '').toLowerCase()
+      return sev === 'high' || sev === 'critical'
+    })
+    .sort((a, b) => (b.severityScore ?? 0) - (a.severityScore ?? 0))
+
+  // Summary KPIs — computed from the full result set total counts via server, but
+  // for the KPI cards we use the current page items as a quick approximation.
   const overdue   = items.filter(j => j.slaStatus === 'OVERDUE').length
   const atRisk    = items.filter(j => j.slaStatus === 'AT_RISK').length
   const noReview  = items.filter(j => j.reviewStatus === 'NONE').length
@@ -265,25 +319,47 @@ export default function Soc2AuditPage() {
       />
 
       {/* KPI strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: 'Overdue SLA',      value: overdue,   cls: overdue   > 0 ? 'text-[var(--color-tags-font-danger)]'  : '' },
-          { label: 'At-risk SLA',      value: atRisk,    cls: atRisk    > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-          { label: 'Awaiting Review',  value: noReview,  cls: noReview  > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-          { label: 'Scytale Pending',  value: noScytale, cls: noScytale > 0 ? 'text-[var(--color-tags-font-warning)]' : '' },
-        ].map((kpi) => (
-          <div
-            key={kpi.label}
-            className="rounded-lg border border-[var(--color-card-card-stroke)] bg-[var(--color-card-card-background)] p-4 flex flex-col gap-1"
-          >
-            <span className="text-[11px] text-[var(--color-fonts-font-color-support)] uppercase tracking-wide">
-              {kpi.label}
-            </span>
-            <span className={`text-2xl font-bold ${kpi.cls || 'text-[var(--color-fonts-font-color-primary)]'}`}>
-              {kpi.value}
-            </span>
-          </div>
-        ))}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <StatCard
+          label="Overdue SLA"
+          value={overdue}
+          icon={<XCircle size={15} />}
+          accent={overdue > 0 ? 'text-red-500' : undefined}
+          accentColor={overdue > 0 ? '#ef4444' : undefined}
+          tooltip="Jobs that have exceeded their SLA deadline and require immediate attention."
+        />
+        <StatCard
+          label="At-risk SLA"
+          value={atRisk}
+          icon={<AlertTriangle size={15} />}
+          accent={atRisk > 0 ? 'text-orange-500' : undefined}
+          accentColor={atRisk > 0 ? '#f97316' : undefined}
+          tooltip="Jobs in the last 20% of their SLA window — act soon to avoid a breach."
+        />
+        <StatCard
+          label="Awaiting Review"
+          value={noReview}
+          icon={<EyeOff size={15} />}
+          accent={noReview > 0 ? 'text-orange-500' : undefined}
+          accentColor={noReview > 0 ? '#f97316' : undefined}
+          tooltip="Completed jobs that have not yet been reviewed by a human auditor."
+        />
+        <StatCard
+          label="Scytale Pending"
+          value={noScytale}
+          icon={<Upload size={15} />}
+          accent={noScytale > 0 ? 'text-orange-500' : undefined}
+          accentColor={noScytale > 0 ? '#f97316' : undefined}
+          tooltip="Successful jobs whose evidence has not yet been uploaded to Scytale."
+        />
+        <StatCard
+          label="Aikido High+"
+          value={secLoading ? '—' : aikidoHighIssues.length}
+          icon={<ShieldCheck size={15} />}
+          accent={aikidoHighIssues.length > 0 ? 'text-red-500' : undefined}
+          accentColor={aikidoHighIssues.length > 0 ? '#ef4444' : undefined}
+          tooltip="Open Critical and High severity Aikido vulnerabilities requiring SOC II remediation."
+        />
       </div>
 
       {/* Filters */}
@@ -306,11 +382,17 @@ export default function Soc2AuditPage() {
           options={REVIEW_OPTIONS}
           placeholder="All Review Statuses"
         />
-        {(statusFilter || slaFilter || reviewFilter) && (
+        <FilterSelect
+          value={priorityFilter}
+          onChange={(v) => { setPriorityFilter(v); setPage(0) }}
+          options={PRIORITY_OPTIONS}
+          placeholder="All Priorities"
+        />
+        {(statusFilter || slaFilter || reviewFilter || priorityFilter) && (
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => { setStatusFilter(''); setSlaFilter(''); setReviewFilter(''); setPage(0) }}
+            onClick={() => { setStatusFilter(''); setSlaFilter(''); setReviewFilter(''); setPriorityFilter(''); setPage(0) }}
           >
             Clear filters
           </Button>
@@ -321,7 +403,7 @@ export default function Soc2AuditPage() {
       </div>
 
       {/* Table */}
-      <TableCard>
+      <TableCard title="SOC II Jobs">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-[var(--color-tables-table-cell-stroke)] bg-[var(--color-tables-table-header)]">
@@ -392,6 +474,52 @@ export default function Soc2AuditPage() {
           </Button>
         </div>
       )}
+
+      {/* Aikido High / Critical Issues */}
+      <TableCard
+        title="Aikido High & Critical Issues"
+        subtitle={
+          secLoading
+            ? 'Loading…'
+            : secError
+              ? 'Error'
+              : `${aikidoHighIssues.length} open issue${aikidoHighIssues.length !== 1 ? 's' : ''}`
+        }
+        toolbar={
+          <Tooltip text="Force refresh from Aikido">
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<RefreshCw size={13} className={(secLoading || secRefreshing) ? 'animate-spin' : ''} />}
+              onClick={handleSecRefresh}
+              disabled={secRefreshing || secLoading}
+            >
+              Refresh
+            </Button>
+          </Tooltip>
+        }
+      >
+        {secLoading ? (
+          <div className="flex flex-col gap-2 p-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="h-8 skeleton-shimmer rounded" />
+            ))}
+          </div>
+        ) : secError ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-fonts-font-color-support)]">
+            <XCircle size={28} className="opacity-40 text-red-400" />
+            <p className="text-sm">Failed to load Aikido issues.</p>
+            <p className="text-[11px]">Check that the Aikido integration is configured and you have the required role.</p>
+          </div>
+        ) : aikidoHighIssues.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-[var(--color-fonts-font-color-support)]">
+            <ShieldCheck size={28} className="opacity-40" />
+            <p className="text-sm">No open High or Critical Aikido issues.</p>
+          </div>
+        ) : (
+          <IssueTable issues={aikidoHighIssues} />
+        )}
+      </TableCard>
     </main>
   )
 }

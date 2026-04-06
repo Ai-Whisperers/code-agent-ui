@@ -2,14 +2,16 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  Plus, Trash2, Target, Loader2, AlertTriangle, Pencil, X, Settings2, Link2,
+  Plus, Trash2, Target, Loader2, Pencil, X, Settings2, Link2,
   ExternalLink,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { Toast } from '@/components/ui/Toast'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ChipInput } from '@/components/ui/ChipInput'
 import api from '@/lib/api'
+import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type { Scope, ScopeLinkedProduct, LabelPreviewItem } from '@/types/api'
 
 interface AgentSetting { key: string; value: string }
@@ -257,7 +259,9 @@ function ScopeFormDialog({
 
 // ── ProductLinkerDialog ───────────────────────────────────────────────────────
 
-function ProductLinkerDialog({ scope, onClose }: { scope: Scope; onClose: () => void }) {
+type ToastState = { message: string; variant: 'success' | 'error' }
+
+function ProductLinkerDialog({ scope, onClose, onToast }: { scope: Scope; onClose: () => void; onToast: (t: ToastState) => void }) {
   const qc = useQueryClient()
   const [search, setSearch] = useState('')
 
@@ -285,13 +289,15 @@ function ProductLinkerDialog({ scope, onClose }: { scope: Scope; onClose: () => 
   const linkMutation = useMutation({
     mutationFn: (productId: string) =>
       api.put(`/scope/${scope.id}/products/${encodeURIComponent(productId)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-products', scope.id] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['scope-products', scope.id] }); onToast({ message: 'Product linked.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to link product.', variant: 'error' }),
   })
 
   const unlinkMutation = useMutation({
     mutationFn: (productId: string) =>
       api.delete(`/scope/${scope.id}/products/${encodeURIComponent(productId)}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['scope-products', scope.id] }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['scope-products', scope.id] }); onToast({ message: 'Product unlinked.', variant: 'success' }) },
+    onError: () => onToast({ message: 'Failed to unlink product.', variant: 'error' }),
   })
 
   return (
@@ -386,10 +392,11 @@ export default function ScopesPage() {
   const [editTarget,   setEditTarget]   = useState<Scope | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Scope | null>(null)
   const [linkTarget,   setLinkTarget]   = useState<Scope | null>(null)
+  const [toast, setToast] = useState<ToastState | null>(null)
 
   const { data: scopes, isLoading } = useQuery<Scope[]>({
-    queryKey: ['scopes'],
-    queryFn: () => api.get('/scope').then((r) => r.data).catch(() => []),
+    queryKey: ['scopes', 'po'],
+    queryFn: () => api.get('/scope?type=po').then((r) => r.data).catch(() => []),
     refetchInterval: 30_000,
   })
 
@@ -406,37 +413,43 @@ export default function ScopesPage() {
   }
 
   // Get Jira base URL for linking
-  const { data: mcpConfig } = useQuery<{ jira?: { baseUrl?: string } }>({
+  const { data: mcpConfig } = useQuery({
     queryKey: ['mcp-system-config'],
-    queryFn: () => api.get('/mcp/system-config').then((r) => r.data).catch(() => ({})),
+    queryFn: () => mcpProfilesApi.getSystemConfig().catch(() => ({ jira: { baseUrl: '', username: '' }, confluence: { baseUrl: '', username: '' }, xray: { baseUrl: '' } })),
     staleTime: 5 * 60_000,
   })
   const jiraBaseUrl = mcpConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''
 
   const createMutation = useMutation({
-    mutationFn: (body: ScopeFormValues) => api.post('/scope', body).then((r) => r.data),
+    mutationFn: (body: ScopeFormValues) =>
+      api.post('/scope', { ...body, scopeType: 'po' }).then((r) => r.data),
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['scopes'] })
+      qc.invalidateQueries({ queryKey: ['scopes', 'po'] })
       setShowCreate(false)
       if (data?.id) navigate({ to: `/metrics/scope/${data.id}` })
     },
+    onError: () => setToast({ message: 'Failed to create scope.', variant: 'error' }),
   })
 
   const updateMutation = useMutation({
     mutationFn: ({ id, ...body }: { id: string } & ScopeFormValues) =>
       api.put(`/scope/${id}`, body).then((r) => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['scopes'] })
+      qc.invalidateQueries({ queryKey: ['scopes', 'po'] })
       setEditTarget(null)
+      setToast({ message: 'Scope updated.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to update scope.', variant: 'error' }),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/scope/${id}`),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['scopes'] })
+      qc.invalidateQueries({ queryKey: ['scopes', 'po'] })
       setDeleteTarget(null)
+      setToast({ message: 'Scope deleted.', variant: 'success' })
     },
+    onError: () => setToast({ message: 'Failed to delete scope.', variant: 'error' }),
   })
 
   const list = Array.isArray(scopes) ? scopes : []
@@ -563,7 +576,7 @@ export default function ScopesPage() {
       )}
 
       {linkTarget && (
-        <ProductLinkerDialog scope={linkTarget} onClose={() => setLinkTarget(null)} />
+        <ProductLinkerDialog scope={linkTarget} onClose={() => setLinkTarget(null)} onToast={setToast} />
       )}
 
       {deleteTarget && (
@@ -582,12 +595,7 @@ export default function ScopesPage() {
         </ConfirmDialog>
       )}
 
-      {createMutation.isError && (
-        <div className="mt-4 flex items-center gap-2 p-3 rounded-lg bg-[var(--color-tags-critical-background)] text-[var(--color-tags-font-critical)] text-sm">
-          <AlertTriangle size={15} />
-          Failed to create scope. Please try again.
-        </div>
-      )}
+      {toast && <Toast message={toast.message} variant={toast.variant} onClose={() => setToast(null)} />}
     </main>
   )
 }

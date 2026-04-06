@@ -19,11 +19,13 @@ export function PlanIndicator({
   onClick
 }: PlanIndicatorProps) {
   const [isImplementing, setIsImplementing] = useState(false)
+  const [implementError, setImplementError] = useState<string | null>(null)
 
   const handleImplement = async () => {
     if (plan.status !== 'DRAFT') return
     
     setIsImplementing(true)
+    setImplementError(null)
     try {
       // First approve the plan
       const approveResponse = await fetch(`${import.meta.env.VITE_API_URL}/plans/${plan.planId}/approve`, {
@@ -54,7 +56,7 @@ export function PlanIndicator({
       onImplementPlan?.(plan.planId)
     } catch (error) {
       console.error('Failed to implement plan:', error)
-      // TODO: Show error to user
+      setImplementError(error instanceof Error ? error.message : 'Failed to implement plan')
     } finally {
       setIsImplementing(false)
     }
@@ -121,6 +123,10 @@ export function PlanIndicator({
               <p className="text-xs text-[var(--color-fonts-font-color-support)] line-clamp-2 mb-2">
                 {plan.summary}
               </p>
+            )}
+
+            {implementError && (
+              <p className="text-xs text-red-600 dark:text-red-400 mb-2">{implementError}</p>
             )}
 
             <div className="flex items-center gap-2 flex-wrap">

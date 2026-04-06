@@ -20,7 +20,8 @@ function handler(event) {
 
     var csp = "default-src 'self'; " +
               "script-src 'self'; " +
-              "style-src 'self' 'unsafe-inline'; " +
+              "style-src-elem 'self'; " +
+              "style-src-attr 'unsafe-inline'; " +
               "img-src 'self' data: blob:; " +
               "font-src 'self'; " +
               "connect-src 'self' https://lb-code-agent.julesenergy.com https://sso-prod.julesenergy.com; " +
@@ -33,7 +34,7 @@ function handler(event) {
     headers['x-content-type-options']     = { value: 'nosniff' };
     headers['x-frame-options']            = { value: 'SAMEORIGIN' };
     headers['referrer-policy']            = { value: 'strict-origin-when-cross-origin' };
-    headers['permissions-policy']         = { value: 'camera=(), microphone=(), geolocation=()' };
+    headers['permissions-policy']         = { value: 'camera=(self), microphone=(self), geolocation=()' };
     headers['strict-transport-security']  = { value: 'max-age=63072000; includeSubDomains; preload' };
 
     return response;

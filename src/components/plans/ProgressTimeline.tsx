@@ -1,4 +1,5 @@
-import { CheckCircle, Clock, XCircle, AlertCircle, RefreshCw } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, AlertCircle, RefreshCw, ExternalLink } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 import type { ExecutionPlan, PlanPhase, PlanStep } from '@/types/api'
 
 interface ProgressTimelineProps {
@@ -6,205 +7,201 @@ interface ProgressTimelineProps {
   isLive?: boolean
 }
 
+type PhaseStatus = 'completed' | 'running' | 'pending' | 'failed'
+
+function getPhaseStatus(phase: PlanPhase): PhaseStatus {
+  if (!phase.steps?.length) return 'pending'
+  const statuses = phase.steps.map((s) => s.status)
+  if (statuses.some((s) => s === 'FAILED')) return 'failed'
+  if (statuses.some((s) => s === 'EXECUTING')) return 'running'
+  if (statuses.every((s) => s === 'SUCCESS' || s === 'COMPLETED')) return 'completed'
+  return 'pending'
+}
+
+const PHASE_STATUS_CLASSES: Record<PhaseStatus, string> = {
+  completed: 'text-[var(--color-tags-font-success)] bg-[var(--color-tags-success-background)]',
+  running:   'text-[var(--color-fonts-font-color-brand)] bg-[var(--color-status-neutral-background)]',
+  failed:    'text-[var(--color-tags-font-critical)] bg-[var(--color-tags-critical-background)]',
+  pending:   'text-[var(--color-fonts-font-color-support)] bg-[var(--color-filters-filter-background)]',
+}
+
+const PHASE_CONNECTOR_CLASSES: Record<PhaseStatus, string> = {
+  completed: 'bg-[var(--color-status-border-success)]',
+  running:   'bg-[var(--color-cards-card-stroke)]',
+  failed:    'bg-[var(--color-status-border-critical)]',
+  pending:   'bg-[var(--color-cards-card-stroke)]',
+}
+
+function StepIcon({ step }: { step: PlanStep }) {
+  const cls = 'shrink-0'
+  switch (step.status) {
+    case 'SUCCESS':
+    case 'COMPLETED':
+      return <CheckCircle size={14} className={`${cls} text-[var(--color-status-border-success)]`} />
+    case 'EXECUTING':
+      return <RefreshCw size={14} className={`${cls} text-[var(--color-buttons-button-primary)] animate-spin`} />
+    case 'FAILED':
+      return <XCircle size={14} className={`${cls} text-[var(--color-status-border-critical)]`} />
+    case 'SKIPPED':
+      return <AlertCircle size={14} className={`${cls} text-[var(--color-fonts-font-color-support)]`} />
+    default:
+      return <Clock size={14} className={`${cls} text-[var(--color-fonts-font-color-support)]`} />
+  }
+}
+
+const STEP_STATUS_CLASSES: Record<string, string> = {
+  SUCCESS:   'text-[var(--color-tags-font-success)]',
+  COMPLETED: 'text-[var(--color-tags-font-success)]',
+  EXECUTING: 'text-[var(--color-buttons-button-primary)]',
+  FAILED:    'text-[var(--color-tags-font-critical)]',
+}
+
 export default function ProgressTimeline({ plan, isLive = false }: ProgressTimelineProps) {
-  if (!plan.planData?.phases || plan.planData.phases.length === 0) {
+  const navigate = useNavigate()
+  if (!plan.planData?.phases?.length) {
     return (
-      <div className="text-sm text-[var(--color-fonts-font-color-support)]">
-        No structured phases available
-      </div>
+      <p className="text-sm text-[var(--color-fonts-font-color-support)]">No structured phases available.</p>
     )
   }
 
-  const phases = plan.planData.phases.sort((a, b) => a.phaseOrder - b.phaseOrder)
+  const totalSteps = plan.planData.phases.reduce((t, p) => t + (p.steps?.length ?? 0), 0)
+  const doneSteps  = plan.planData.phases.reduce(
+    (t, p) => t + (p.steps?.filter((s) => s.status === 'SUCCESS' || s.status === 'COMPLETED').length ?? 0),
+    0,
+  )
+  const progress = totalSteps > 0 ? Math.round((doneSteps / totalSteps) * 100) : 0
 
-  const getPhaseStatus = (phase: PlanPhase): 'completed' | 'running' | 'pending' | 'failed' => {
-    if (!phase.steps || phase.steps.length === 0) return 'pending'
-    
-    const stepStatuses = phase.steps.map(step => step.status)
-    const hasRunning = stepStatuses.some(status => status === 'EXECUTING')
-    const hasFailed = stepStatuses.some(status => status === 'FAILED')
-    const allCompleted = stepStatuses.every(status => status === 'SUCCESS' || status === 'COMPLETED')
-    
-    if (hasFailed) return 'failed'
-    if (hasRunning) return 'running'
-    if (allCompleted) return 'completed'
-    return 'pending'
-  }
-
-  const getStepIcon = (step: PlanStep) => {
-    switch (step.status) {
-      case 'SUCCESS':
-      case 'COMPLETED':
-        return <CheckCircle className="text-[var(--color-status-border-success)]" size={16} />
-      case 'EXECUTING':
-        return <RefreshCw className="text-[var(--color-buttons-button-primary)] animate-spin" size={16} />
-      case 'FAILED':
-        return <XCircle className="text-[var(--color-status-border-critical)]" size={16} />
-      case 'SKIPPED':
-        return <AlertCircle className="text-[var(--color-fonts-font-color-support)]" size={16} />
-      default:
-        return <Clock className="text-[var(--color-fonts-font-color-support)]" size={16} />
-    }
-  }
-
-  const getPhaseIcon = (phase: PlanPhase) => {
-    const status = getPhaseStatus(phase)
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="text-[var(--color-status-border-success)]" size={20} />
-      case 'running':
-        return <RefreshCw className="text-[var(--color-buttons-button-primary)] animate-spin" size={20} />
-      case 'failed':
-        return <XCircle className="text-[var(--color-status-border-critical)]" size={20} />
-      default:
-        return <Clock className="text-[var(--color-fonts-font-color-support)]" size={20} />
-    }
-  }
-
-  const getStepDuration = (): string | null => {
-    // This would be calculated from step timing data if available
-    // For now, return null since we don't have timing information in the current step structure
-    return null
-  }
+  const phases = [...plan.planData.phases].sort((a, b) => a.phaseOrder - b.phaseOrder)
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-4">
-        <h3 className="text-lg font-medium text-[var(--color-fonts-font-color-primary)]">
-          Execution Progress
-        </h3>
-        {isLive && plan.status === 'EXECUTING' && (
-          <div className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)]">
-            <RefreshCw size={12} className="animate-spin" />
-            Live updates
+    <div className="space-y-4">
+      {/* Header + progress bar */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--color-fonts-font-color-support)]">
+              Execution Progress
+            </span>
+            {isLive && plan.status === 'EXECUTING' && (
+              <span className="flex items-center gap-1 text-xs text-[var(--color-fonts-font-color-brand)]">
+                <RefreshCw size={10} className="animate-spin" />
+                Live
+              </span>
+            )}
           </div>
-        )}
+          <span className="text-xs text-[var(--color-fonts-font-color-support)]">
+            {doneSteps}/{totalSteps} steps
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-[var(--color-cards-card-stroke)] overflow-hidden">
+          <div
+            className="h-full rounded-full bg-[var(--color-buttons-button-primary)] transition-all duration-500"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
       </div>
 
-      <div className="space-y-4">
-        {phases.map((phase, phaseIndex) => {
+      {/* Phases */}
+      <div className="space-y-3">
+        {phases.map((phase, idx) => {
           const phaseStatus = getPhaseStatus(phase)
-          const isLastPhase = phaseIndex === phases.length - 1
+          const isLast = idx === phases.length - 1
 
           return (
             <div key={phase.phaseOrder} className="relative">
-              {/* Phase Header */}
-              <div className="flex items-start gap-3 mb-3">
-                <div className="relative">
-                  {getPhaseIcon(phase)}
-                  {!isLastPhase && (
-                    <div 
-                      className={`absolute top-6 left-1/2 transform -translate-x-1/2 w-0.5 h-8 ${
-                        phaseStatus === 'completed' 
-                          ? 'bg-[var(--color-status-border-success)]' 
-                          : 'bg-[var(--color-cards-card-stroke)]'
-                      }`}
-                    />
+              {/* Phase header */}
+              <div className="flex items-center gap-2.5">
+                {/* Connector line */}
+                <div className="relative flex flex-col items-center self-stretch">
+                  <div
+                    className={`w-4 h-4 rounded-full shrink-0 flex items-center justify-center ${
+                      phaseStatus === 'completed' ? 'bg-[var(--color-status-border-success)]' :
+                      phaseStatus === 'running'   ? 'bg-[var(--color-buttons-button-primary)]' :
+                      phaseStatus === 'failed'    ? 'bg-[var(--color-status-border-critical)]' :
+                                                   'bg-[var(--color-cards-card-stroke)]'
+                    }`}
+                  >
+                    {phaseStatus === 'running' && (
+                      <RefreshCw size={9} className="text-white animate-spin" />
+                    )}
+                    {phaseStatus === 'completed' && (
+                      <CheckCircle size={10} className="text-white" />
+                    )}
+                    {phaseStatus === 'failed' && (
+                      <XCircle size={10} className="text-white" />
+                    )}
+                  </div>
+                  {!isLast && (
+                    <div className={`w-0.5 flex-1 mt-1 ${PHASE_CONNECTOR_CLASSES[phaseStatus]}`} style={{ minHeight: '12px' }} />
                   )}
                 </div>
-                <div className="flex-1">
-                  <h4 className="font-medium text-[var(--color-fonts-font-color-primary)]">
-                    Phase {phase.phaseOrder}: {phase.title}
-                  </h4>
-                  <div className="flex items-center gap-4 mt-1">
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      phaseStatus === 'completed' ? 'bg-[var(--color-status-success-background)] text-[var(--color-tags-font-success)]' :
-                      phaseStatus === 'running' ? 'bg-[var(--color-status-neutral-background)] text-[var(--color-buttons-button-primary)]' :
-                      phaseStatus === 'failed' ? 'bg-[var(--color-status-critical-background)] text-[var(--color-tags-font-critical)]' :
-                      'bg-[var(--color-filters-filter-background)] text-[var(--color-fonts-font-color-support)]'
-                    }`}>
-                      {phaseStatus}
-                    </span>
-                    <span className="text-xs text-[var(--color-fonts-font-color-support)]">
-                      {phase.steps?.length || 0} step{(phase.steps?.length || 0) !== 1 ? 's' : ''}
-                    </span>
-                  </div>
+
+                <div className="flex items-center gap-2 flex-1 min-w-0 pb-1">
+                  <span className="text-sm font-medium text-[var(--color-fonts-font-color-primary)] truncate">
+                    {phase.title}
+                  </span>
+                  <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${PHASE_STATUS_CLASSES[phaseStatus]} shrink-0`}>
+                    {phaseStatus}
+                  </span>
+                  <span className="text-xs text-[var(--color-fonts-font-color-support)] shrink-0">
+                    {phase.steps?.length ?? 0} step{(phase.steps?.length ?? 0) !== 1 ? 's' : ''}
+                  </span>
                 </div>
               </div>
 
-              {/* Phase Steps */}
-              {phase.steps && phase.steps.length > 0 && (
-                <div className="ml-8 space-y-2">
-                  {phase.steps.map((step) => {
-                    const duration = getStepDuration()
-                    
-                    return (
-                      <div 
-                        key={step.stepId}
-                        className="flex items-start gap-3 p-3 rounded-lg bg-[var(--color-cards-small-section-background)] border border-[var(--color-cards-card-stroke)]"
-                      >
-                        <div className="mt-0.5">
-                          {getStepIcon(step)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-[var(--color-fonts-font-color-primary)] truncate">
-                                {step.title}
-                              </p>
-                              {step.description && (
-                                <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-1">
-                                  {step.description}
-                                </p>
-                              )}
-                              {step.status === 'FAILED' && step.errorMessage && (
-                                <div className="mt-2 p-2 rounded bg-[var(--color-status-critical-background)] border border-[var(--color-status-border-critical)]">
-                                  <div className="flex items-start gap-1.5">
-                                    <AlertCircle size={14} className="text-[var(--color-tags-font-critical)] mt-0.5 shrink-0" />
-                                    <span className="text-xs text-[var(--color-tags-font-critical)]">
-                                      {step.errorMessage}
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 ml-3">
-                              {duration && (
-                                <span className="text-xs text-[var(--color-fonts-font-color-support)] bg-[var(--color-filters-filter-background)] px-2 py-1 rounded">
-                                  {duration}
-                                </span>
-                              )}
-                              <span className={`text-xs font-medium ${
-                                step.status === 'SUCCESS' || step.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
-                                step.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
-                                step.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
-                                'text-[var(--color-fonts-font-color-support)]'
-                              }`}>
-                                {step.status}
-                              </span>
-                            </div>
+              {/* Steps */}
+              {phase.steps?.length > 0 && (
+                <div className="ml-6 mt-1.5 space-y-1.5 pb-2">
+                  {phase.steps.map((step) => (
+                    <div
+                      key={step.stepId}
+                      className="flex items-start gap-2.5 p-2.5 rounded bg-[var(--color-cards-small-section-background)] border border-[var(--color-cards-card-stroke)]"
+                    >
+                      <StepIcon step={step} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-xs font-medium text-[var(--color-fonts-font-color-primary)] truncate">
+                            {step.title}
+                          </p>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[10px] font-medium ${STEP_STATUS_CLASSES[step.status] ?? 'text-[var(--color-fonts-font-color-support)]'}`}>
+                              {step.status}
+                            </span>
+                            {step.jobId && (
+                              <button
+                                onClick={() => navigate({ to: '/jobs/$id', params: { id: step.jobId! } })}
+                                className="flex items-center gap-0.5 text-[10px] font-medium text-[var(--color-fonts-font-color-brand)] hover:underline"
+                                title={`View job ${step.jobId}`}
+                              >
+                                <ExternalLink size={10} />
+                                Job
+                              </button>
+                            )}
                           </div>
                         </div>
+                        {step.description && (
+                          <p className="text-xs text-[var(--color-fonts-font-color-support)] mt-0.5 truncate">
+                            {step.description}
+                          </p>
+                        )}
+                        {step.jobId && (
+                          <p className="text-[10px] text-[var(--color-fonts-font-color-support)] mt-0.5 font-mono">
+                            {step.jobId}
+                          </p>
+                        )}
+                        {step.status === 'FAILED' && step.errorMessage && (
+                          <div className="mt-1.5 p-2 rounded bg-[var(--color-status-critical-background)] border border-[var(--color-status-border-critical)]">
+                            <p className="text-xs text-[var(--color-tags-font-critical)]">{step.errorMessage}</p>
+                          </div>
+                        )}
                       </div>
-                    )
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )
         })}
-      </div>
-
-      {/* Overall Progress */}
-      <div className="mt-6 pt-4 border-t border-[var(--color-cards-card-stroke)]">
-        <div className="flex items-center justify-between text-sm">
-          <span className="text-[var(--color-fonts-font-color-support)]">
-            Overall Progress
-          </span>
-          <div className="flex items-center gap-2">
-            {plan.status === 'EXECUTING' && (
-              <RefreshCw size={12} className="text-[var(--color-buttons-button-primary)] animate-spin" />
-            )}
-            <span className={`font-medium ${
-              plan.status === 'COMPLETED' ? 'text-[var(--color-tags-font-success)]' :
-              plan.status === 'EXECUTING' ? 'text-[var(--color-buttons-button-primary)]' :
-              plan.status === 'FAILED' ? 'text-[var(--color-tags-font-critical)]' :
-              'text-[var(--color-fonts-font-color-support)]'
-            }`}>
-              {plan.status}
-            </span>
-          </div>
-        </div>
       </div>
     </div>
   )
