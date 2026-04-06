@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSmoothScrollToBottom } from '@/hooks/useSmoothScrollToBottom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useParams } from '@tanstack/react-router'
 import {
@@ -57,6 +58,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isAtBottomRef = useRef(true)
+  const { scrollToBottom, cancelScroll } = useSmoothScrollToBottom(scrollContainerRef)
   const chatInputRef = useRef<ChatInputHandle>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
@@ -68,7 +70,9 @@ export default function Chat() {
     const el = scrollContainerRef.current
     if (!el) return
     const onScroll = () => {
-      isAtBottomRef.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
+      const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
+      isAtBottomRef.current = atBottom
+      if (!atBottom) cancelScroll()
     }
     el.addEventListener('scroll', onScroll, { passive: true })
     return () => el.removeEventListener('scroll', onScroll)
@@ -183,31 +187,18 @@ export default function Chat() {
     }
   }, [messages])
 
-  // When streaming starts the user just hit Send — smoothly scroll to bottom once
+  // When streaming starts snap isAtBottom to true and begin the lerp loop
   useEffect(() => {
     if (isViewingStream) {
       isAtBottomRef.current = true
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      scrollToBottom()
     }
-  }, [isViewingStream])
+  }, [isViewingStream, scrollToBottom])
 
-  // Follow streaming tokens as they arrive — use direct scrollTop instead of
-  // scrollIntoView({ behavior: 'smooth' }) to avoid competing scroll animations
-  // that fight each other at token-arrival frequency and cause choppy movement.
+  // Keep the lerp loop fed on every token / thinking-step update
   useEffect(() => {
-    if (isViewingStream && isAtBottomRef.current) {
-      const el = scrollContainerRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    }
-  }, [streamingContent, isViewingStream])
-
-  // Scroll when new tool logs are added
-  useEffect(() => {
-    if (streamingThinkingSteps.length > 0 && isViewingStream && isAtBottomRef.current) {
-      const el = scrollContainerRef.current
-      if (el) el.scrollTop = el.scrollHeight
-    }
-  }, [streamingThinkingSteps, isViewingStream])
+    if (isViewingStream && isAtBottomRef.current) scrollToBottom()
+  }, [streamingContent, streamingThinkingSteps, isViewingStream, scrollToBottom])
 
   const sendMessage = useCallback(
     async (text: string, attachmentIds?: string[], mode?: 'chat' | 'ask' | 'plan', conversationContext?: ConversationContext, thinking?: boolean | null) => {

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSmoothScrollToBottom } from '@/hooks/useSmoothScrollToBottom'
 import { X, FileCode, Bot, Loader2 } from 'lucide-react'
 import { refreshToken, getToken } from '@/lib/keycloak'
 import { MessageBubble, StreamingMarkdownMessage, ThinkingPanel, ChatInputBar } from '@/components/chat'
@@ -27,24 +28,21 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
   const [secretWarning, setSecretWarning] = useState<string | null>(null)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const inputBarRef = useRef<ChatInputHandle>(null)
   const hasGreeted = useRef(false)
+  const { scrollToBottom: scrollMessagesToBottom } = useSmoothScrollToBottom(messagesScrollRef)
 
-  // Smooth scroll when a complete message is added
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    scrollMessagesToBottom()
+  }, [messages, scrollMessagesToBottom])
 
-  // Instant scroll while tokens arrive — smooth scroll at token frequency
-  // creates competing animations that feel choppy
   useEffect(() => {
-    if (isStreaming && streamingContent) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-    }
-  }, [streamingContent, isStreaming])
+    if (isStreaming && streamingContent) scrollMessagesToBottom()
+  }, [streamingContent, isStreaming, scrollMessagesToBottom])
 
   // Close on Escape
   useEffect(() => {
@@ -282,7 +280,7 @@ export function CommentChatDialog({ comment, jobId, onClose, onAction }: Props) 
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-4 min-h-0">
+        <div ref={messagesScrollRef} className="flex-1 overflow-y-auto custom-scrollbar px-4 py-4 space-y-4 min-h-0">
           {messages.map(msg => (
             <MessageBubble key={msg.id} message={msg} />
           ))}

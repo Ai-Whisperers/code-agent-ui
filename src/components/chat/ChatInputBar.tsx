@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
 import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2, Mic, Brain } from 'lucide-react'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -715,27 +716,29 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
         {/* Clear context button - positioned top-right */}
         {getContextItemCount() > 0 && (
           <div className="absolute top-2 right-2 z-10">
-            <button
-              onClick={clearAllContext}
-              className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-red-100 bg-white border border-red-200 hover:border-red-300 text-red-600 hover:text-red-700 transition-colors shadow-sm"
-              title="Clear all context items"
-            >
-              <Trash2 size={14} />
-            </button>
+            <Tooltip text="Clear all context" position="top">
+              <button
+                onClick={clearAllContext}
+                className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-red-100 bg-white border border-red-200 hover:border-red-300 text-red-600 hover:text-red-700 transition-colors shadow-sm"
+              >
+                <Trash2 size={14} />
+              </button>
+            </Tooltip>
           </div>
         )}
 
         <div className="flex items-center gap-2 p-3">        
         {/* Context and attachment menu — hidden in simplified mode */}
         {!simplified && <div className="relative" ref={contextMenuRef}>
-          <button
-            onClick={() => setShowContextMenu(!showContextMenu)}
-            disabled={isStreaming || uploading}
-            className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
-            title={uploading ? 'Uploading...' : 'Add context or attachment'}
-          >
-            <Plus size={18} />
-          </button>
+          <Tooltip text={uploading ? 'Uploading…' : 'Add file or context'} position="top">
+            <button
+              onClick={() => setShowContextMenu(!showContextMenu)}
+              disabled={isStreaming || uploading}
+              className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-gray-600"
+            >
+              <Plus size={18} />
+            </button>
+          </Tooltip>
 
           {/* Context/Attachment selection menu */}
           {showContextMenu && (
@@ -823,20 +826,30 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
         {/* Mode switcher button — hidden in simplified mode */}
         {!simplified && <div className="relative" ref={modeMenuRef}>
-          <button
-            onClick={() => setShowModeMenu(!showModeMenu)}
-            disabled={isStreaming}
-            className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+          <Tooltip
+            text={
               mode === 'plan'
-                ? 'hover:bg-orange-200 text-orange-600'
+                ? 'Plan mode\nBuilds an execution plan before acting\n⌘. to cycle modes'
                 : mode === 'ask'
-                  ? 'hover:bg-green-200 text-green-600'
-                  : 'hover:bg-gray-200 text-gray-600'
-            }`}
-            title={`Current mode: ${mode === 'plan' ? 'Plan' : mode === 'ask' ? 'Ask' : 'Chat'}`}
+                  ? 'Ask mode\nRead-only — no changes will be made\n⌘. to cycle modes'
+                  : 'Chat mode\n⌘. to cycle modes'
+            }
+            position="top"
           >
-            {mode === 'plan' ? <Lightbulb size={16} /> : mode === 'ask' ? <BookOpen size={16} /> : <MessageSquare size={16} />}
-          </button>
+            <button
+              onClick={() => setShowModeMenu(!showModeMenu)}
+              disabled={isStreaming}
+              className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                mode === 'plan'
+                  ? 'hover:bg-orange-200 text-orange-600'
+                  : mode === 'ask'
+                    ? 'hover:bg-green-200 text-green-600'
+                    : 'hover:bg-gray-200 text-gray-600'
+              }`}
+            >
+              {mode === 'plan' ? <Lightbulb size={16} /> : mode === 'ask' ? <BookOpen size={16} /> : <MessageSquare size={16} />}
+            </button>
+          </Tooltip>
 
           {/* Mode selection menu */}
           {showModeMenu && (
@@ -885,26 +898,30 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
         {isSupported && (
           <div className="flex items-center gap-1.5 shrink-0">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                if (isStreaming) return
-                /** Second event of a double-click has detail=2; ignore so we don't stop right after start. */
-                if (e.detail === 2) return
-                toggleListening()
-              }}
-              disabled={isStreaming}
-              title={isListening ? 'Click to stop dictation' : 'Click to dictate — speak naturally, pauses send each chunk'}
-              aria-pressed={isListening}
-              className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
-                isListening
-                  ? 'bg-red-100 ring-2 ring-red-500 text-red-600 shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
+            <Tooltip
+              text={isListening ? 'Stop dictation' : 'Dictate with voice\nSpeak naturally — pauses send each chunk'}
+              position="top"
             >
-              <Mic size={16} aria-hidden />
-            </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault()
+                  if (isStreaming) return
+                  /** Second event of a double-click has detail=2; ignore so we don't stop right after start. */
+                  if (e.detail === 2) return
+                  toggleListening()
+                }}
+                disabled={isStreaming}
+                aria-pressed={isListening}
+                className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+                  isListening
+                    ? 'bg-red-100 ring-2 ring-red-500 text-red-600 shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Mic size={16} aria-hidden />
+              </button>
+            </Tooltip>
             {(isListening || isTranscribing) && (
               <div className="flex flex-col gap-0.5">
                 <MicWaveform active={isListening} />
@@ -945,39 +962,49 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
 
         {/* Thinking toggle */}
         {!simplified && (
-          <button
-            type="button"
-            onClick={() => setThinkingEnabled(prev => prev === true ? null : true)}
-            disabled={isStreaming}
-            title={thinkingEnabled === true ? 'Extended thinking: ON (click to use server default)' : 'Extended thinking: server default (click to force on)'}
-            className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+          <Tooltip
+            text={
               thinkingEnabled === true
-                ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-400'
-                : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
-            }`}
+                ? 'Extended thinking: ON\nClick to use server default'
+                : 'Extended thinking: server default\nClick to force on'
+            }
+            position="top"
           >
-            <Brain size={16} />
-          </button>
+            <button
+              type="button"
+              onClick={() => setThinkingEnabled(prev => prev === true ? null : true)}
+              disabled={isStreaming}
+              className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+                thinkingEnabled === true
+                  ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-400'
+                  : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+              }`}
+            >
+              <Brain size={16} />
+            </button>
+          </Tooltip>
         )}
 
         {/* Send / Stop button */}
         {isStreaming ? (
-          <button
-            onClick={onStop}
-            className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 transition-colors text-white"
-            title="Stop generation"
-          >
-            <Square size={14} fill="currentColor" />
-          </button>
+          <Tooltip text="Stop generation" position="top">
+            <button
+              onClick={onStop}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 transition-colors text-white"
+            >
+              <Square size={14} fill="currentColor" />
+            </button>
+          </Tooltip>
         ) : (
-          <button
-            onClick={() => handleSend(input)}
-            disabled={!input.trim()}
-            className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 transition-colors text-white"
-            title="Send message"
-          >
-            <Send size={16} />
-          </button>
+          <Tooltip text={'Send\nEnter'} position="top">
+            <button
+              onClick={() => handleSend(input)}
+              disabled={!input.trim()}
+              className="flex items-center justify-center w-8 h-8 rounded-full bg-black hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-400 transition-colors text-white"
+            >
+              <Send size={16} />
+            </button>
+          </Tooltip>
         )}
         </div>
         </div>

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useSmoothScrollToBottom } from '@/hooks/useSmoothScrollToBottom'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
@@ -505,22 +506,19 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const chatInputRef = useRef<ChatInputHandle>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatScrollRef = useRef<HTMLDivElement>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const streamingContentRef = useRef('')
   const streamingRafRef = useRef<number | null>(null)
+  const { scrollToBottom: scrollChatToBottom } = useSmoothScrollToBottom(chatScrollRef)
 
-  // Smooth scroll when a complete message is added/removed
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages])
+    scrollChatToBottom()
+  }, [chatMessages, scrollChatToBottom])
 
-  // Instant scroll while tokens arrive — smooth scroll at token frequency creates
-  // competing animations that cause the jarring "rubber-band" choppiness
   useEffect(() => {
-    if (isStreaming && streamingContent) {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' })
-    }
-  }, [streamingContent, isStreaming])
+    if (isStreaming && streamingContent) scrollChatToBottom()
+  }, [streamingContent, isStreaming, scrollChatToBottom])
 
   const sendMessage = useCallback(
     async (
@@ -1037,7 +1035,7 @@ export default function ScopeImprove({ scopeId, issueKey }: ScopeImproveProps) {
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div ref={chatScrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
             {chatMessages.length === 0 && !isStreaming && (
               <div className="flex flex-col items-center justify-center h-full gap-4 py-12">
                 <Sparkles size={28} className="text-violet-400 opacity-50" />

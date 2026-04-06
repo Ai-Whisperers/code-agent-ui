@@ -80,6 +80,28 @@ body {
   animation: slide-in-right 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* ── Streaming markdown animations ─────────────────────────────────────────── */
+/* Applied to individual words inside the active (last) paragraph as they       */
+/* arrive, giving a smooth per-word fade rather than an abrupt block-pop.       */
+@keyframes stream-word-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* Applied to new block-level elements (headings, list items, blockquotes)      */
+/* inside a streaming message. React creates a fresh DOM node for each new      */
+/* structural element, so this animation only runs once per element.            */
+@keyframes stream-block-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stream-md h1, .stream-md h2, .stream-md h3,
+.stream-md ul, .stream-md ol, .stream-md li,
+.stream-md blockquote, .stream-md pre,
+.stream-md table, .stream-md hr {
+  animation: stream-block-in 180ms ease-out both;
+}
+
 .application-menu-text {
   color: var(--color-fonts-font-color-primary, #004766);
   font-family: Lato;
