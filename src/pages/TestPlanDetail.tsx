@@ -4,7 +4,7 @@ import {
   ArrowLeft, BookOpen, Target, GitBranch, ShieldAlert, FlaskConical,
   Network, BarChart3, LogIn, Flag, HelpCircle, CheckCircle2, AlertTriangle, Loader2,
   TestTube2, ExternalLink, ChevronRight, Download, Check, X, StickyNote, PanelRightClose,
-  PanelRightOpen,
+  PanelRightOpen, Upload,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
@@ -15,10 +15,11 @@ import { RiskBadge } from '@/components/shared/RiskBadge'
 import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import api from '@/lib/api'
 import { mcpProfilesApi } from '@/lib/mcpProfiles'
+import { Select } from '@/components/ui/Select'
 import type {
   QaTestPlanRecord, FeatureTestPlan,
   StoryBehaviour, Risk, ConditionGroup, StoryCoverage, RiskCoverage, Gap,
-  Clarification, ReadinessItem, TraceRow,
+  Clarification, ReadinessItem, TraceRow, IntegrationFilter,
 } from '@/types/api'
 
 const TERMINAL_JOB_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED']
@@ -884,6 +885,9 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [etrProjectKey, setEtrProjectKey] = useState('')
   const [notesPanelOpen, setNotesPanelOpen] = useState(() => localStorage.getItem('qa-testplan-notes-panel') === 'open')
+  const [jiraExportDialogOpen, setJiraExportDialogOpen] = useState(false)
+  const [exportProjectKey, setExportProjectKey] = useState('')
+  const [exportIssueType, setExportIssueType] = useState('Story')
 
   // ── Active job state (shared with TestCasesPage via localStorage) ──────────
   const [activeJobId, setActiveJobId] = useState<string | null>(
@@ -945,6 +949,14 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
     staleTime: 5 * 60_000,
   })
 
+  const { data: jiraProjects = [], isLoading: loadingProjects } = useQuery<IntegrationFilter[]>({
+    queryKey: ['integration-filters-jira'],
+    queryFn: () => api.get<IntegrationFilter[]>('/integration-filters?type=jira').then((r) => r.data).catch(() => []),
+    staleTime: 5 * 60_000,
+  })
+  const enabledJiraProjects = jiraProjects.filter((p) => p.enabled)
+  const jiraProjectOptions = enabledJiraProjects.map((p) => ({ value: p.key, label: `${p.key} — ${p.name}` }))
+
   const { data: testCaseCount } = useQuery<number>({
     queryKey: ['qa-test-case-count', record?.id],
     queryFn: async () => {
@@ -1003,6 +1015,37 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
     onError: (err: any) => {
       setImportDialogOpen(false)
       const msg = err?.response?.data?.error ?? 'Import from Jira failed'
+      setToast({ message: msg, variant: 'error' })
+    },
+  })
+
+  const exportToJiraMutation = useMutation({
+    mutationFn: (params: { projectKey?: string; issueType?: string }) =>
+      api.post(
+        `/qa-scope/${scopeId}/features/${issueKey}/test-plan/export-to-jira`,
+        params,
+      ),
+    onSuccess: (res) => {
+      setJiraExportDialogOpen(false)
+      const { action, jiraIssueKey: newKey, linkWarning } = res.data ?? {}
+      if (linkWarning) {
+        setToast({
+          message: (action === 'created' ? `Created ${newKey}` : `Updated ${newKey}`) + ` — link warning: ${linkWarning}`,
+          variant: 'error',
+        })
+      } else {
+        setToast({
+          message: action === 'created'
+            ? `Created Jira issue ${newKey} — linked to ${issueKey}`
+            : `Updated Jira issue ${newKey}`,
+          variant: 'success',
+        })
+      }
+      qc.invalidateQueries({ queryKey: ['qa-test-plan', scopeId, issueKey] })
+    },
+    onError: (err: any) => {
+      setJiraExportDialogOpen(false)
+      const msg = err?.response?.data?.error ?? 'Export to Jira failed'
       setToast({ message: msg, variant: 'error' })
     },
   })
@@ -1125,6 +1168,18 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
             )}
             {record.testPlanStatus === 'json_ready' && (
               <button
+                onClick={() => setJiraExportDialogOpen(true)}
+                disabled={exportToJiraMutation.isPending}
+                className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] disabled:opacity-50 transition-colors"
+              >
+                {exportToJiraMutation.isPending
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : <Upload size={13} />}
+                {record.jiraIssueKey ? `Update ${record.jiraIssueKey}` : 'Export to Jira'}
+              </button>
+            )}
+            {record.testPlanStatus === 'json_ready' && (
+              <button
                 onClick={() => setImportDialogOpen(true)}
                 disabled={importFromJiraMutation.isPending}
                 className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-primary)] hover:bg-[var(--color-cards-card-background-hover)] disabled:opacity-50 transition-colors"
@@ -1235,6 +1290,95 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
                   ? <Loader2 size={13} className="animate-spin" />
                   : <Download size={13} />}
                 {importFromJiraMutation.isPending ? 'Importing…' : 'Import'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export to Jira dialog */}
+      {jiraExportDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setJiraExportDialogOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] shadow-2xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-[var(--color-fonts-font-color-headings)] mb-1">
+              {record.jiraIssueKey ? 'Update Jira QA Issue' : 'Export Test Plan to Jira'}
+            </h2>
+            <p className="text-xs text-[var(--color-fonts-font-color-support)] mb-4">
+              {record.jiraIssueKey
+                ? <>Updates the existing Jira issue{' '}
+                    <code className="font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">{record.jiraIssueKey}</code>{' '}
+                    with the latest test plan summary and KPIs.
+                  </>
+                : <>Creates a new Jira issue containing the test plan summary, linked to{' '}
+                    <code className="font-mono font-semibold text-[var(--color-fonts-font-color-brand)]">{issueKey}</code>{' '}
+                    via a &ldquo;Tests&rdquo; link.
+                  </>
+              }
+            </p>
+
+            {!record.jiraIssueKey && (
+              <div className="flex flex-col gap-3 mb-2">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-fonts-font-color-primary)] mb-1">
+                    Jira Project <span className="text-[var(--color-tags-font-critical)]">*</span>
+                  </label>
+                  {loadingProjects ? (
+                    <div className="flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] py-1.5">
+                      <Loader2 size={12} className="animate-spin" /> Loading projects…
+                    </div>
+                  ) : enabledJiraProjects.length === 0 ? (
+                    <p className="text-xs text-[var(--color-tags-font-attention)]">
+                      No enabled Jira projects found. Enable projects under <strong>Settings → Integrations</strong>.
+                    </p>
+                  ) : (
+                    <Select
+                      value={exportProjectKey}
+                      onChange={setExportProjectKey}
+                      options={jiraProjectOptions}
+                      placeholder="Select project…"
+                    />
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-[var(--color-fonts-font-color-primary)] mb-1">
+                    Issue Type
+                  </label>
+                  <Select
+                    value={exportIssueType}
+                    onChange={setExportIssueType}
+                    options={['Story', 'Task', 'Sub-task', 'Test Plan'].map((t) => ({ value: t, label: t }))}
+                    placeholder="Select type…"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setJiraExportDialogOpen(false)}
+                className="text-sm px-4 py-2 rounded-[var(--border-radius-button)] border border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-cards-card-background-hover)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => exportToJiraMutation.mutate(
+                  record.jiraIssueKey
+                    ? {}
+                    : { projectKey: exportProjectKey, issueType: exportIssueType }
+                )}
+                disabled={exportToJiraMutation.isPending || (!record.jiraIssueKey && !exportProjectKey.trim())}
+                className="flex items-center gap-1.5 text-sm px-4 py-2 rounded-[var(--border-radius-button)] bg-[var(--color-fonts-font-color-brand)] text-white hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {exportToJiraMutation.isPending
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : <Upload size={13} />}
+                {exportToJiraMutation.isPending
+                  ? (record.jiraIssueKey ? 'Updating…' : 'Creating…')
+                  : (record.jiraIssueKey ? 'Update Issue' : 'Create Issue')}
               </button>
             </div>
           </div>
