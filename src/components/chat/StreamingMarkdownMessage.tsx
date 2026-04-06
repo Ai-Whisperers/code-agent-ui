@@ -128,6 +128,12 @@ export function StreamingMarkdownMessage({
 }) {
   const cursor = isStreaming ? ' ▍' : ''
 
+  // Keep a ref so the memoized code renderer can read the latest isStreaming
+  // value without being recreated on every streaming tick (which would
+  // invalidate SettledMarkdown's memo and re-render all settled content).
+  const isStreamingRef = useRef(isStreaming)
+  isStreamingRef.current = isStreaming
+
   // Build streaming-specific component overrides once (stable reference)
   const streamingComponents = useMemo<Components>(
     () => ({
@@ -138,8 +144,14 @@ export function StreamingMarkdownMessage({
         ...props
       }: React.ComponentPropsWithoutRef<'code'> & { className?: string }) {
         const code = String(children).replace(/\n$/, '')
+        const language = /language-(\w+)/.exec(className ?? '')?.[1] ?? ''
+        const isDiagram = /^(mermaid|chart|chartjs)$/i.test(language)
 
-        if (code === DIAGRAM_LOADING_PLACEHOLDER) {
+        // While streaming, never attempt to render diagrams — show a spinner
+        // for all mermaid/chart blocks, whether the fence is still open
+        // (placeholder) or has just closed. This prevents Mermaid from
+        // appending error SVGs to <body> for partially-received diagrams.
+        if (code === DIAGRAM_LOADING_PLACEHOLDER || (isStreamingRef.current && isDiagram)) {
           return (
             <span className="inline-flex items-center gap-1.5 text-xs text-[var(--color-fonts-font-color-support)] py-1">
               <Loader2 size={12} className="animate-spin" />
@@ -167,6 +179,7 @@ export function StreamingMarkdownMessage({
         )
       },
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   )
 
@@ -195,13 +208,14 @@ export function StreamingMarkdownMessage({
         // ── Text segment ────────────────────────────────────────────────────
         const patched = patchStreamingContent(seg.content)
 
-        // Non-streaming or non-last segments render fully (no split needed)
+        // Non-streaming or non-last segments are complete — render with the
+        // base components so diagrams appear immediately (no streaming guard).
         if (!isStreaming || !isLastSeg) {
           return (
             <div key={segIdx} className="stream-md">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
-                components={streamingComponents}
+                components={markdownComponents}
               >
                 {patched}
               </ReactMarkdown>
@@ -229,7 +243,9 @@ export function StreamingMarkdownMessage({
 
         return (
           <div key={segIdx} className="stream-md">
-            <SettledMarkdown content={settled} components={streamingComponents} />
+            {/* Settled content is known-complete: render diagrams freely. */}
+            <SettledMarkdown content={settled} components={markdownComponents} />
+            {/* Active leading edge: hold diagrams back until streaming ends. */}
             <ActiveContent text={active + cursor} components={streamingComponents} />
           </div>
         )

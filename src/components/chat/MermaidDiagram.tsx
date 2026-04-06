@@ -42,10 +42,23 @@ export function MermaidDiagram({ code }: { code: string }) {
     const rendererKey = `rnd${crypto.randomUUID().replace(/-/g, '')}`
     const displayKey = `dsp${crypto.randomUUID().replace(/-/g, '')}`
 
+    // Mermaid 10.x logs parse/render failures via console.error before either
+    // resolving with an error SVG or rejecting. Suppress those noisy logs for
+    // the duration of the render call so they don't surface to users.
+    const savedConsoleError = console.error
+    console.error = () => {}
+
     mermaid
       .render(rendererKey, code)
       .then(({ svg: rawSvg }) => {
         if (renderId !== renderIdRef.current) return
+        // In some Mermaid 10.x builds the promise resolves with an error SVG
+        // instead of rejecting (suppressErrorRendering is ignored). Detect the
+        // error marker text and fall through to the error state.
+        if (/syntax error/i.test(rawSvg)) {
+          setRenderError(true)
+          return
+        }
         const renamed = rawSvg.replaceAll(rendererKey, displayKey)
         setSvg(DOMPurify.sanitize(renamed, { USE_PROFILES: { svg: true, svgFilters: true } }))
         setRenderError(false)
@@ -53,6 +66,9 @@ export function MermaidDiagram({ code }: { code: string }) {
       .catch(() => {
         if (renderId !== renderIdRef.current) return
         setRenderError(true)
+      })
+      .finally(() => {
+        console.error = savedConsoleError
       })
   }, [code])
 
