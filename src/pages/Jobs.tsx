@@ -345,7 +345,7 @@ function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: bool
               </Button>
             </>
           )}
-          {(job.status === 'PENDING' || job.status === 'QUEUED') && (
+          {(job.status === 'PENDING' || job.status === 'QUEUED' || job.status === 'RUNNING') && (
             job.soc2Protected ? (
               <Tooltip text="SOC II: cancellation not permitted for compliance records.">
                 <Button variant="danger" size="xs" icon={<Ban size={14} />} disabled>

@@ -1,4 +1,5 @@
 import { memo, useMemo, Fragment } from 'react'
+import DOMPurify from 'dompurify'
 import Prism from 'prismjs'
 // Language registrations — load base/dependency grammars first
 import 'prismjs/components/prism-markup'   // must precede php, markdown (embeds HTML)
@@ -86,7 +87,8 @@ export const DiffLineRow = memo(function DiffLineRow({ type, oldLine, newLine, c
     const grammar = Prism.languages[language]
     if (!grammar) return null
     try {
-      return Prism.highlight(content, grammar, language)
+      const raw = Prism.highlight(content, grammar, language)
+      return DOMPurify.sanitize(raw, { ALLOWED_TAGS: ['span'], ALLOWED_ATTR: ['class'] })
     } catch {
       return null
     }

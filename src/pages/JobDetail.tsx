@@ -451,7 +451,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                 </Tooltip>
               </>
             )}
-            {(job?.status === 'PENDING' || job?.status === 'QUEUED') && (
+            {(job?.status === 'PENDING' || job?.status === 'QUEUED' || job?.status === 'RUNNING') && (
               job?.soc2Protected ? (
                 <Tooltip text="SOC II compliance record — cancellation is not permitted.">
                   <Button variant="danger" size="md" icon={<Ban size={14} />} disabled>

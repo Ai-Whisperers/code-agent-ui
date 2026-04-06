@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
 
 // Initialize mermaid once at module level
 mermaid.initialize({
   startOnLoad: false,
   theme: 'neutral',
-  securityLevel: 'loose',
+  securityLevel: 'antiscript',
   suppressErrorRendering: true,
 } as Parameters<typeof mermaid.initialize>[0])
 
@@ -33,7 +34,8 @@ export function MermaidDiagram({ code }: { code: string }) {
       .render(rendererKey, code)
       .then(({ svg: rawSvg }) => {
         if (renderId !== renderIdRef.current) return
-        setSvg(rawSvg.replaceAll(rendererKey, displayKey))
+        const renamed = rawSvg.replaceAll(rendererKey, displayKey)
+        setSvg(DOMPurify.sanitize(renamed, { USE_PROFILES: { svg: true, svgFilters: true } }))
         setRenderError(false)
       })
       .catch(() => {
