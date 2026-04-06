@@ -580,7 +580,6 @@ const SETTING_GROUPS: SettingGroup[] = [
     label: 'Security',
     settings: [
       { key: 'api.key', label: 'API Key', description: 'Shared API key for all REST endpoints. Leave blank to disable auth in dev mode.', isSecret: true },
-      { key: 'settings.encryption.key', label: 'Settings Encryption Key', description: '64-char hex key (32 bytes) for AES-256-GCM encryption of secrets. Generate: openssl rand -hex 32', isSecret: true },
       { key: 'webhook.secret.bitbucket', label: 'Webhook Secret: Bitbucket', description: 'HMAC-SHA256 secret for validating Bitbucket webhook payloads', isSecret: true },
       { key: 'webhook.secret.azuredevops', label: 'Webhook Secret: Azure DevOps', description: 'HMAC-SHA256 secret for validating Azure DevOps webhook payloads', isSecret: true },
       { key: 'webhook.secret.gitlab', label: 'Webhook Secret: GitLab', description: 'HMAC-SHA256 secret for validating GitLab webhook payloads', isSecret: true },
