@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -587,11 +587,14 @@ function ReviewEmptyState() {
 
 // ── Item Detail Panel ─────────────────────────────────────────────────────────
 
+const SCOPE_PANEL_WIDTH_KEY = 'scope-panel-width'
 
 function ItemDetailPanel({
   node,
   scopeId,
   items,
+  width,
+  onWidthChange,
   onClose,
   onReview,
   onAccept,
@@ -603,6 +606,8 @@ function ItemDetailPanel({
   node: TreeNode
   scopeId: string
   items: ScopeTreeItem[]
+  width: number
+  onWidthChange: (w: number) => void
   onClose: () => void
   onReview: () => void
   onAccept: () => void
@@ -616,6 +621,36 @@ function ItemDetailPanel({
   const isOverridden = !!node.overrideStatus
   const isVirtual = !!node.isVirtual
   const [activeProposal, setActiveProposal] = useState<ScopeProposal | null>(null)
+
+  const widthRef = useRef(width)
+  widthRef.current = width
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      const startX = e.clientX
+      const startWidth = widthRef.current
+
+      const onMouseMove = (mv: MouseEvent) => {
+        const newWidth = Math.max(280, Math.min(window.innerWidth - 200, startWidth + (startX - mv.clientX)))
+        onWidthChange(newWidth)
+        localStorage.setItem(SCOPE_PANEL_WIDTH_KEY, String(newWidth))
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [onWidthChange],
+  )
 
   const { data: systemConfig } = useQuery<SystemConfig>({
     queryKey: ['mcp-system-config'],
@@ -646,7 +681,16 @@ function ItemDetailPanel({
   }, [onClose])
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-50 w-[420px] flex flex-col bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] shadow-2xl overflow-hidden">
+    <aside
+      style={{ width }}
+      className="fixed inset-y-0 right-0 z-50 flex flex-col bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] shadow-2xl overflow-hidden"
+    >
+      {/* Drag handle */}
+      <div
+        onMouseDown={handleDragStart}
+        className="absolute left-0 inset-y-0 w-1.5 cursor-col-resize z-10 hover:bg-[var(--color-buttons-button-primary)]/40 transition-colors"
+        title="Drag to resize"
+      />
       {/* Header */}
       <div className="shrink-0 border-b border-[var(--color-borders-border-primary)] bg-[var(--color-cards-card-background-hover)]">
         <div className="flex items-center justify-between gap-3 px-4 pt-3 pb-2">
@@ -939,6 +983,14 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
   const [filters, setFilters] = useState<FilterState>({ issueKey: '', issueType: '', readiness: '', summary: '', assignee: '', reporter: '' })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [reviewConfirm, setReviewConfirm] = useState<{ force: boolean } | null>(null)
+  const [panelWidth, setPanelWidth] = useState(() => {
+    const stored = localStorage.getItem(SCOPE_PANEL_WIDTH_KEY)
+    if (stored) {
+      const parsed = parseInt(stored, 10)
+      if (!isNaN(parsed)) return parsed
+    }
+    return 420
+  })
 
   const { data: scope } = useQuery<Scope>({
     queryKey: ['scope', scopeId],
@@ -1437,11 +1489,13 @@ export default function ScopeDetail({ scopeId }: { scopeId: string }) {
         </div>
 
         {selectedKey && selectedNode && (
-          <div className="w-[420px] shrink-0 sticky top-0 self-start h-screen overflow-hidden">
+          <div style={{ width: panelWidth }} className="shrink-0 sticky top-0 self-start h-screen overflow-hidden">
             <ItemDetailPanel
               node={selectedNode}
               scopeId={scopeId}
               items={items}
+              width={panelWidth}
+              onWidthChange={setPanelWidth}
               onClose={() => setSelectedKey(null)}
               onReview={() => reviewOneMutation.mutate(selectedNode.issueKey)}
               onAccept={() => overrideMutation.mutate({ issueKey: selectedNode.issueKey, status: 'ACCEPTED' })}

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -101,6 +101,81 @@ function SortableHeader({
   )
 }
 
+// ── Resizable drawer shell ────────────────────────────────────────────────────
+
+const DRAWER_WIDTH_KEY = 'qa-drawer-width'
+
+function ResizableDrawer({
+  onClose,
+  children,
+  defaultWidth = 768,
+  minWidth = 360,
+  maxWidth,
+}: {
+  onClose: () => void
+  children: React.ReactNode
+  defaultWidth?: number
+  minWidth?: number
+  maxWidth?: number
+}) {
+  const [width, setWidth] = useState(() => {
+    const stored = localStorage.getItem(DRAWER_WIDTH_KEY)
+    if (stored) {
+      const parsed = parseInt(stored, 10)
+      if (!isNaN(parsed)) return parsed
+    }
+    return defaultWidth
+  })
+  const widthRef = useRef(width)
+  widthRef.current = width
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault()
+      const startX = e.clientX
+      const startWidth = widthRef.current
+
+      const onMouseMove = (mv: MouseEvent) => {
+        const maxW = maxWidth ?? window.innerWidth - 60
+        const newWidth = Math.max(minWidth, Math.min(maxW, startWidth + (startX - mv.clientX)))
+        setWidth(newWidth)
+        localStorage.setItem(DRAWER_WIDTH_KEY, String(newWidth))
+      }
+
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+      }
+
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    },
+    [minWidth, maxWidth],
+  )
+
+  return (
+    <div className="fixed inset-0 z-40 flex">
+      <div className="flex-1 bg-black/30" onClick={onClose} />
+      <div
+        style={{ width }}
+        className="relative bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl"
+      >
+        {/* Drag handle */}
+        <div
+          onMouseDown={handleDragStart}
+          className="absolute left-0 inset-y-0 w-1.5 cursor-col-resize z-10 group hover:bg-[var(--color-buttons-button-primary)]/40 transition-colors"
+          title="Drag to resize"
+        />
+        {children}
+      </div>
+    </div>
+  )
+}
+
 // ── Analysis View Drawer (read-only) ─────────────────────────────────────────
 
 function AnalysisViewDrawer({
@@ -123,65 +198,59 @@ function AnalysisViewDrawer({
   })
 
   return (
-    <div className="fixed inset-0 z-40 flex">
-      {/* Backdrop */}
-      <div className="flex-1 bg-black/30" onClick={onClose} />
-
-      {/* Drawer */}
-      <div className="w-full max-w-4xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
-                Analysis — {feature.issueKey}
-              </h2>
-              <TestPlanStatusBadge status={feature.testPlanStatus} analysisEdited={feature.analysisEdited} />
-            </div>
-            <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate mt-0.5">
-              {feature.summary}
-            </p>
+    <ResizableDrawer onClose={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+              Analysis — {feature.issueKey}
+            </h2>
+            <TestPlanStatusBadge status={feature.testPlanStatus} analysisEdited={feature.analysisEdited} />
           </div>
-          <Tooltip text="Close">
-            <button
-              onClick={onClose}
-              className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] shrink-0 ml-3"
-            >
-              <X size={18} />
-            </button>
-          </Tooltip>
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate mt-0.5">
+            {feature.summary}
+          </p>
         </div>
-
-        {/* Body — scrollable markdown content */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-24">
-              <Loader2 size={20} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
-            </div>
-          ) : !plan?.analysisText ? (
-            <div className="flex items-center justify-center h-24 text-[var(--color-fonts-font-color-support)] text-sm">
-              No analysis yet — use the <strong className="mx-1">Analyse</strong> button to generate one.
-            </div>
-          ) : (
-            <MarkdownMessage content={plan.analysisText} />
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[var(--color-borders-border-primary)] shrink-0">
-          <Button variant="secondary" size="md" onClick={onClose}>
-            Close
-          </Button>
-          {plan?.analysisText && (
-            <Tooltip text="Switch to the editor to modify the analysis text">
-              <Button variant="secondary" size="md" icon={<Pencil size={13} />} onClick={onEdit}>
-                Edit Analysis
-              </Button>
-            </Tooltip>
-          )}
-        </div>
+        <Tooltip text="Close">
+          <button
+            onClick={onClose}
+            className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] shrink-0 ml-3"
+          >
+            <X size={18} />
+          </button>
+        </Tooltip>
       </div>
-    </div>
+
+      {/* Body — scrollable markdown content */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5">
+        {isLoading ? (
+          <div className="flex items-center justify-center h-24">
+            <Loader2 size={20} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
+          </div>
+        ) : !plan?.analysisText ? (
+          <div className="flex items-center justify-center h-24 text-[var(--color-fonts-font-color-support)] text-sm">
+            No analysis yet — use the <strong className="mx-1">Analyse</strong> button to generate one.
+          </div>
+        ) : (
+          <MarkdownMessage content={plan.analysisText} />
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[var(--color-borders-border-primary)] shrink-0">
+        <Button variant="secondary" size="md" onClick={onClose}>
+          Close
+        </Button>
+        {plan?.analysisText && (
+          <Tooltip text="Switch to the editor to modify the analysis text">
+            <Button variant="secondary" size="md" icon={<Pencil size={13} />} onClick={onEdit}>
+              Edit Analysis
+            </Button>
+          </Tooltip>
+        )}
+      </div>
+    </ResizableDrawer>
   )
 }
 
@@ -242,92 +311,86 @@ function AnalysisEditDrawer({
   })
 
   return (
-    <div className="fixed inset-0 z-40 flex">
-      {/* Backdrop */}
-      <div className="flex-1 bg-black/30" onClick={onClose} />
-
-      {/* Drawer */}
-      <div className="w-full max-w-4xl bg-[var(--color-cards-card-background)] border-l border-[var(--color-borders-border-primary)] flex flex-col shadow-xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
-                Analysis — {feature.issueKey}
-              </h2>
-              {plan?.analysisEdited && (
-                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
-                  Edited
-                </span>
-              )}
-            </div>
-            <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate mt-0.5">
-              {feature.summary}
-            </p>
-          </div>
-          <Tooltip text="Close drawer">
-            <button onClick={onClose} className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] shrink-0 ml-3">
-              <X size={18} />
-            </button>
-          </Tooltip>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 min-h-0 flex flex-col p-5 gap-3">
-          {isLoading ? (
-            <div className="flex items-center justify-center flex-1">
-              <Loader2 size={20} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
-            </div>
-          ) : !plan?.analysisText ? (
-            <div className="flex-1 flex items-center justify-center text-[var(--color-fonts-font-color-support)] text-sm">
-              No analysis yet. Generate analysis first.
-            </div>
-          ) : (
-            <RichTextEditor
-              value={currentText}
-              onChange={(md) => setEditText(md)}
-              placeholder="Analysis text…"
-              fill
-            />
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[var(--color-borders-border-primary)] shrink-0">
-          <Button variant="secondary" size="md" onClick={onClose}>
-            Close
-          </Button>
+    <ResizableDrawer onClose={onClose}>
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-borders-border-primary)] shrink-0">
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            {isDirty && (
-              <Tooltip text="Save manual edits to the analysis text">
-                <Button
-                  variant="secondary"
-                  size="md"
-                  loading={saveMutation.isPending}
-                  icon={<Save size={13} />}
-                  onClick={() => saveMutation.mutate()}
-                  disabled={saveMutation.isPending}
-                >
-                  Save
-                </Button>
-              </Tooltip>
+            <h2 className="text-sm font-semibold text-[var(--color-fonts-font-color-headings)]">
+              Analysis — {feature.issueKey}
+            </h2>
+            {plan?.analysisEdited && (
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-[var(--border-radius-tag)] bg-[var(--color-tags-attention-background)] text-[var(--color-tags-font-attention)]">
+                Edited
+              </span>
             )}
-            <Tooltip text="Convert analysis to structured JSON test plan (step 2)">
+          </div>
+          <p className="text-xs text-[var(--color-fonts-font-color-support)] truncate mt-0.5">
+            {feature.summary}
+          </p>
+        </div>
+        <Tooltip text="Close drawer">
+          <button onClick={onClose} className="text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] shrink-0 ml-3">
+            <X size={18} />
+          </button>
+        </Tooltip>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 min-h-0 flex flex-col p-5 gap-3">
+        {isLoading ? (
+          <div className="flex items-center justify-center flex-1">
+            <Loader2 size={20} className="animate-spin text-[var(--color-fonts-font-color-support)]" />
+          </div>
+        ) : !plan?.analysisText ? (
+          <div className="flex-1 flex items-center justify-center text-[var(--color-fonts-font-color-support)] text-sm">
+            No analysis yet. Generate analysis first.
+          </div>
+        ) : (
+          <RichTextEditor
+            value={currentText}
+            onChange={(md) => setEditText(md)}
+            placeholder="Analysis text…"
+            fill
+          />
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between gap-3 px-5 py-4 border-t border-[var(--color-borders-border-primary)] shrink-0">
+        <Button variant="secondary" size="md" onClick={onClose}>
+          Close
+        </Button>
+        <div className="flex items-center gap-2">
+          {isDirty && (
+            <Tooltip text="Save manual edits to the analysis text">
               <Button
-                variant="primary"
+                variant="secondary"
                 size="md"
-                loading={generateJsonMutation.isPending}
-                icon={<Wand2 size={13} />}
-                onClick={() => generateJsonMutation.mutate()}
-                disabled={generateJsonMutation.isPending || !plan?.analysisText}
+                loading={saveMutation.isPending}
+                icon={<Save size={13} />}
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
               >
-                Generate JSON
+                Save
               </Button>
             </Tooltip>
-          </div>
+          )}
+          <Tooltip text="Convert analysis to structured JSON test plan (step 2)">
+            <Button
+              variant="primary"
+              size="md"
+              loading={generateJsonMutation.isPending}
+              icon={<Wand2 size={13} />}
+              onClick={() => generateJsonMutation.mutate()}
+              disabled={generateJsonMutation.isPending || !plan?.analysisText}
+            >
+              Generate JSON
+            </Button>
+          </Tooltip>
         </div>
       </div>
-    </div>
+    </ResizableDrawer>
   )
 }
 
