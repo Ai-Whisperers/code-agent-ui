@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react'
-import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2, Mic } from 'lucide-react'
+import { Send, Square, Plus, AlertCircle, X, MessageSquare, Lightbulb, BookOpen, FileText, Eye, Zap, Loader2, Building2, Package, Shield, Bug, Trash2, Mic, Brain } from 'lucide-react'
 import { detectSecrets } from './SecretScanner'
 import { getToken } from '@/lib/keycloak'
 import type { ChatAttachment, ExecutionPlan, CustomerContextItem, ProductContextItem, AikidoIssueContextItem, JiraIssueContextItem, ConfluenceDocContextItem, ConversationContext } from '@/types/api'
@@ -23,7 +23,7 @@ type ChatMode = 'chat' | 'ask' | 'plan'
 type ChatInputBarProps = {
   isStreaming: boolean
   conversationId?: string
-  onSend: (text: string, attachmentIds?: string[], mode?: ChatMode, conversationContext?: ConversationContext) => void
+  onSend: (text: string, attachmentIds?: string[], mode?: ChatMode, conversationContext?: ConversationContext, thinking?: boolean | null) => void
   onStop?: () => void
   onSecretWarning: (findings: string[], pendingText: string) => void
   onConversationCreate?: (conversationId: string) => void
@@ -57,6 +57,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
   { isStreaming, conversationId, onSend, onStop, onSecretWarning, onConversationCreate, existingAttachments = EMPTY_ATTACHMENTS, existingContext, activePlans = EMPTY_PLANS, isGeneratingPlan = false, generatingPlanTitle = '', onViewPlan, onImplementPlan, onDismissPlan, canPlan = false, simplified = false },
   ref,
 ) {
+  const [thinkingEnabled, setThinkingEnabled] = useState<boolean | null>(null)
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({})
@@ -214,7 +215,7 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
       ? attachments.map(a => a.attachmentId) 
       : undefined
 
-    onSend(text, attachmentIds, mode, conversationContext || undefined)
+    onSend(text, attachmentIds, mode, conversationContext || undefined, thinkingEnabled)
     setInput('')
     setAttachments([])
     setUploadError(null)
@@ -941,6 +942,23 @@ export const ChatInputBar = forwardRef<ChatInputHandle, ChatInputBarProps>(funct
           className="flex-1 bg-transparent border-none outline-none resize-none text-sm text-gray-900 placeholder:text-gray-500 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ maxHeight: '120px', overflowY: 'auto' }}
         />
+
+        {/* Thinking toggle */}
+        {!simplified && (
+          <button
+            type="button"
+            onClick={() => setThinkingEnabled(prev => prev === true ? null : true)}
+            disabled={isStreaming}
+            title={thinkingEnabled === true ? 'Extended thinking: ON (click to use server default)' : 'Extended thinking: server default (click to force on)'}
+            className={`flex items-center justify-center w-8 h-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0 ${
+              thinkingEnabled === true
+                ? 'bg-purple-100 text-purple-600 ring-2 ring-purple-400'
+                : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+            }`}
+          >
+            <Brain size={16} />
+          </button>
+        )}
 
         {/* Send / Stop button */}
         {isStreaming ? (

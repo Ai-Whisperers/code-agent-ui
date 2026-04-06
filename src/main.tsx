@@ -60,6 +60,7 @@ import LogAnalysisPage from '@/pages/LogAnalysis'
 import PrCycleTimePage from '@/pages/PrCycleTime'
 import AiEffectivenessPage from '@/pages/AiEffectiveness'
 import CoverageTrendPage from '@/pages/CoverageTrend'
+import JobConfigurationPage from '@/pages/JobConfiguration'
 
 import './styles/index.css'
 
@@ -331,6 +332,13 @@ const teamsRoute = createRoute({
   component: TeamsPage,
 })
 
+const jobConfigRoute = createRoute({
+  getParentRoute: () => layoutRoute,
+  path: '/settings/jobs',
+  beforeLoad: createRouteGuard({ requiredRoles: ['app_admin'] }),
+  component: JobConfigurationPage,
+})
+
 const scopesRoute = createRoute({
   getParentRoute: () => layoutRoute,
   path: '/metrics/scope',
@@ -496,6 +504,7 @@ const routeTree = rootRoute.addChildren([
     auditLogRoute,
     adminUsersRoute,
     teamsRoute,
+    jobConfigRoute,
     scopesRoute,
     scopeDetailRoute,
     scopeImproveRoute,

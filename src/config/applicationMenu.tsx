@@ -328,6 +328,7 @@ export function ApplicationMenuItems(
       isActive: currentPath.startsWith('/settings'),
       requiredPermission: 'MANAGE_SETTINGS',
       children: [
+        // ── Infrastructure ────────────────────────────────────────────────────
         {
           id: 'repos',
           label: 'Repositories',
@@ -339,6 +340,16 @@ export function ApplicationMenuItems(
           onClick: () => go('/settings/repos'),
         },
         {
+          id: 'integration-filters',
+          label: 'Integrations',
+          icon: <Filter size={16} />,
+          path: '/settings/integrations',
+          isActive: currentPath === '/settings/integrations',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/integrations'),
+        },
+        {
           id: 'hooks',
           label: 'Hooks',
           icon: <Zap size={16} />,
@@ -347,6 +358,17 @@ export function ApplicationMenuItems(
           type: 'item',
           requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/hooks'),
+        },
+        // ── Agent configuration ───────────────────────────────────────────────
+        {
+          id: 'job-configuration',
+          label: 'Job Configuration',
+          icon: <Cpu size={16} />,
+          path: '/settings/jobs',
+          isActive: currentPath === '/settings/jobs',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/jobs'),
         },
         {
           id: 'prompts',
@@ -369,16 +391,6 @@ export function ApplicationMenuItems(
           onClick: () => go('/settings/memories'),
         },
         {
-          id: 'customers',
-          label: 'Customers',
-          icon: <Users size={16} />,
-          path: '/settings/customers',
-          isActive: currentPath === '/settings/customers',
-          type: 'item',
-          requiredPermission: 'MANAGE_SETTINGS',
-          onClick: () => go('/settings/customers'),
-        },
-        {
           id: 'knowledge-index',
           label: 'Knowledge Index',
           icon: <BookOpen size={16} />,
@@ -388,36 +400,18 @@ export function ApplicationMenuItems(
           requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/knowledge'),
         },
+        // ── Data ──────────────────────────────────────────────────────────────
         {
-          id: 'integration-filters',
-          label: 'Integrations',
-          icon: <Filter size={16} />,
-          path: '/settings/integrations',
-          isActive: currentPath === '/settings/integrations',
+          id: 'customers',
+          label: 'Customers',
+          icon: <Users size={16} />,
+          path: '/settings/customers',
+          isActive: currentPath === '/settings/customers',
           type: 'item',
           requiredPermission: 'MANAGE_SETTINGS',
-          onClick: () => go('/settings/integrations'),
+          onClick: () => go('/settings/customers'),
         },
-        {
-          id: 'webhook-audit',
-          label: 'Webhook Audit',
-          icon: <ScrollText size={16} />,
-          path: '/settings/webhook-audit',
-          isActive: currentPath === '/settings/webhook-audit',
-          type: 'item',
-          requiredPermission: 'MANAGE_SETTINGS',
-          onClick: () => go('/settings/webhook-audit'),
-        },
-        {
-          id: 'audit-log',
-          label: 'Audit Log',
-          icon: <ClipboardList size={16} />,
-          path: '/settings/audit',
-          isActive: currentPath === '/settings/audit',
-          type: 'item',
-          requiredPermission: 'MANAGE_SETTINGS',
-          onClick: () => go('/settings/audit'),
-        },
+        // ── People ────────────────────────────────────────────────────────────
         {
           id: 'admin-users',
           label: 'Users',
@@ -438,6 +432,7 @@ export function ApplicationMenuItems(
           requiredPermission: 'MANAGE_USERS',
           onClick: () => go('/settings/teams'),
         },
+        // ── System ────────────────────────────────────────────────────────────
         {
           id: 'system-settings',
           label: 'System',
@@ -447,6 +442,27 @@ export function ApplicationMenuItems(
           type: 'item',
           requiredPermission: 'MANAGE_SETTINGS',
           onClick: () => go('/settings/system'),
+        },
+        // ── Audit ─────────────────────────────────────────────────────────────
+        {
+          id: 'webhook-audit',
+          label: 'Webhook Audit',
+          icon: <ScrollText size={16} />,
+          path: '/settings/webhook-audit',
+          isActive: currentPath === '/settings/webhook-audit',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/webhook-audit'),
+        },
+        {
+          id: 'audit-log',
+          label: 'Audit Log',
+          icon: <ClipboardList size={16} />,
+          path: '/settings/audit',
+          isActive: currentPath === '/settings/audit',
+          type: 'item',
+          requiredPermission: 'MANAGE_SETTINGS',
+          onClick: () => go('/settings/audit'),
         },
       ],
     },
