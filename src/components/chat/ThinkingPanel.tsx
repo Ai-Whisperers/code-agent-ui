@@ -99,12 +99,16 @@ export function ThinkingPanel({ steps, isLive }: { steps: ThinkingStep[]; isLive
         <div className="mt-2 ml-3 border-l border-[var(--color-cards-card-stroke)] pl-3 flex flex-col gap-2">
           {steps.map((step, i) => {
             if (step.kind === 'thought') {
+              const thoughtText = step.text
+                .replace(/<\/?thinking>/gi, '')
+                .trim()
+              if (!thoughtText) return null
               return (
                 <p
                   key={`step-${i}`}
-                  className="text-xs italic text-[var(--color-fonts-font-color-support)] opacity-60 leading-relaxed"
+                  className="text-[11px] font-mono leading-relaxed text-[var(--color-fonts-font-color-support)] opacity-35 border-l border-[var(--color-cards-card-stroke)] pl-2"
                 >
-                  {step.text}
+                  {thoughtText}
                 </p>
               )
             } else {

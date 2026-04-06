@@ -1,4 +1,57 @@
 /**
+ * A segment of message content, split by <thinking> blocks.
+ * The model sometimes emits literal <thinking>…</thinking> XML in its text
+ * stream. We split on those boundaries so each portion can be rendered
+ * independently — thinking text gets a muted style; everything else is normal
+ * markdown.
+ */
+export type ContentSegment =
+  | { type: 'text'; content: string }
+  | { type: 'thinking'; content: string }
+
+/**
+ * Splits `content` on <thinking> / </thinking> tag boundaries.
+ *
+ * - A closed block: the inner text is extracted as a 'thinking' segment.
+ * - An unclosed opening tag (streaming in progress): everything after
+ *   <thinking> becomes an open 'thinking' segment.
+ * - Plain text between / before / after blocks becomes 'text' segments.
+ *
+ * Tags are matched case-insensitively so <Thinking> variants are handled too.
+ */
+export function splitThinkingBlocks(content: string): ContentSegment[] {
+  const segments: ContentSegment[] = []
+  const lower = content.toLowerCase()
+  let pos = 0
+
+  while (pos < content.length) {
+    const openIdx = lower.indexOf('<thinking>', pos)
+    if (openIdx === -1) {
+      const remaining = content.slice(pos)
+      if (remaining) segments.push({ type: 'text', content: remaining })
+      break
+    }
+
+    if (openIdx > pos) {
+      segments.push({ type: 'text', content: content.slice(pos, openIdx) })
+    }
+
+    const contentStart = openIdx + '<thinking>'.length
+    const closeIdx = lower.indexOf('</thinking>', contentStart)
+
+    if (closeIdx === -1) {
+      segments.push({ type: 'thinking', content: content.slice(contentStart) })
+      pos = content.length
+    } else {
+      segments.push({ type: 'thinking', content: content.slice(contentStart, closeIdx) })
+      pos = closeIdx + '</thinking>'.length
+    }
+  }
+
+  return segments.length > 0 ? segments : [{ type: 'text', content }]
+}
+
+/**
  * Placeholder injected into the markdown content when a special code block
  * (mermaid, chart, chartjs, or a Chart.js-shaped js/json block) is still
  * open (streaming in-progress). react-markdown will call the custom `code`

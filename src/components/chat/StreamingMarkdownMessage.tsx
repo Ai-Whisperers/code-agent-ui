@@ -3,33 +3,26 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Loader2 } from 'lucide-react'
 import { markdownComponents } from './markdownComponents'
-import { patchStreamingContent, DIAGRAM_LOADING_PLACEHOLDER } from './streamingUtils'
+import { splitThinkingBlocks, patchStreamingContent, DIAGRAM_LOADING_PLACEHOLDER } from './streamingUtils'
 
 /**
  * Streaming-safe variant of MarkdownMessage.
  *
- * Before passing accumulated content to react-markdown it runs
- * patchStreamingContent(), which:
- *   - closes any non-special open code fence so the parser doesn't swallow
- *     the rest of the document as code
- *   - replaces any in-flight mermaid/chart/chartjs block with a placeholder
- *     so mermaid.render() is never called with partial/invalid syntax
+ * Handles two concerns before handing content to react-markdown:
  *
- * The placeholder is rendered as a subtle "Rendering diagram…" spinner via a
- * custom `code` component override. When the block's closing fence arrives the
- * next RAF update will contain valid content and MermaidDiagram / ChartBlock
- * render normally.
+ * 1. <thinking>…</thinking> blocks — models sometimes emit these as literal
+ *    XML in their text stream. Each block is extracted and rendered with a
+ *    muted "internal thought" style instead of as normal markdown.
+ *
+ * 2. Unclosed code fences — patchStreamingContent() closes any open fence so
+ *    react-markdown never sees truly un-terminated fences, and replaces
+ *    in-flight diagram blocks with a spinner placeholder.
+ *
+ * The ▍ cursor is appended to whichever segment is last so the eye always
+ * has a focal point at the leading edge of the stream.
  */
 export function StreamingMarkdownMessage({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
-  const safeContent = useMemo(() => {
-    const patched = patchStreamingContent(content)
-    // Append a block cursor while tokens are arriving so the eye has a stable
-    // focal point. This makes the irregular token cadence feel intentional
-    // rather than jarring.
-    return isStreaming ? patched + ' ▍' : patched
-  }, [content, isStreaming])
-
-  const components = useMemo(() => ({
+  const streamingComponents = useMemo(() => ({
     ...markdownComponents,
     code({ className, children, ...props }: React.ComponentPropsWithoutRef<'code'> & { className?: string }) {
       const code = String(children).replace(/\n$/, '')
@@ -43,7 +36,6 @@ export function StreamingMarkdownMessage({ content, isStreaming }: { content: st
         )
       }
 
-      // Delegate to the shared component map for all other code blocks
       const sharedCode = markdownComponents.code
       if (sharedCode) {
         const SharedCode = sharedCode as React.ComponentType<React.ComponentPropsWithoutRef<'code'> & { className?: string }>
@@ -54,9 +46,41 @@ export function StreamingMarkdownMessage({ content, isStreaming }: { content: st
     },
   }), [])
 
+  const segments = useMemo(() => {
+    const raw = splitThinkingBlocks(content)
+    return raw.map((seg, i) => {
+      const isLast = i === raw.length - 1
+      const cursor = isStreaming && isLast ? ' ▍' : ''
+
+      if (seg.type === 'thinking') {
+        return { ...seg, content: seg.content + cursor }
+      }
+
+      return { ...seg, content: patchStreamingContent(seg.content) + cursor }
+    })
+  }, [content, isStreaming])
+
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-      {safeContent}
-    </ReactMarkdown>
+    <>
+      {segments.map((seg, i) => {
+        if (seg.type === 'thinking') {
+          const text = seg.content.trim()
+          if (!text) return null
+          return (
+            <p
+              key={i}
+              className="text-[11px] font-mono leading-relaxed text-[var(--color-fonts-font-color-support)] opacity-35 border-l border-[var(--color-cards-card-stroke)] pl-2 mb-2"
+            >
+              {text}
+            </p>
+          )
+        }
+        return (
+          <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={streamingComponents}>
+            {seg.content}
+          </ReactMarkdown>
+        )
+      })}
+    </>
   )
 }
