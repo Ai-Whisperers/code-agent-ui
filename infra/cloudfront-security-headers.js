@@ -22,7 +22,7 @@ function handler(event) {
               "script-src 'self'; " +
               "style-src-elem 'self'; " +
               "style-src-attr 'unsafe-inline'; " +
-              "img-src 'self' data: blob:; " +
+              "img-src 'self' data: blob: https://*.s3.eu-central-1.amazonaws.com;" +
               "font-src 'self'; " +
               "connect-src 'self' https://lb-code-agent.julesenergy.com https://sso-prod.julesenergy.com; " +
               "form-action 'self' https://sso-prod.julesenergy.com; " +
