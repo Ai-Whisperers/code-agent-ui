@@ -11,6 +11,7 @@ import { Toast } from '@/components/ui/Toast'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ChipInput } from '@/components/ui/ChipInput'
 import api from '@/lib/api'
+import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type { Scope, ScopeLinkedProduct, LabelPreviewItem } from '@/types/api'
 
 interface AgentSetting { key: string; value: string }
@@ -412,9 +413,9 @@ export default function ScopesPage() {
   }
 
   // Get Jira base URL for linking
-  const { data: mcpConfig } = useQuery<{ jira?: { baseUrl?: string } }>({
+  const { data: mcpConfig } = useQuery({
     queryKey: ['mcp-system-config'],
-    queryFn: () => api.get('/mcp/system-config').then((r) => r.data).catch(() => ({})),
+    queryFn: () => mcpProfilesApi.getSystemConfig().catch(() => ({ jira: { baseUrl: '', username: '' }, confluence: { baseUrl: '', username: '' }, xray: { baseUrl: '' } })),
     staleTime: 5 * 60_000,
   })
   const jiraBaseUrl = mcpConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''

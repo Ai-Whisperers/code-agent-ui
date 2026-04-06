@@ -377,3 +377,40 @@ h3 {
   color: #fff;
   opacity: 0.3;
 }
+
+/* Tables */
+.adf-editor-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+  font-size: 0.875em;
+  table-layout: fixed;
+  overflow: hidden;
+}
+.adf-editor-content table td,
+.adf-editor-content table th {
+  border: 1px solid var(--color-borders-border-primary, rgba(0,0,0,0.15));
+  padding: 4px 8px;
+  vertical-align: top;
+  position: relative;
+  min-width: 2.5rem;
+  word-break: break-word;
+}
+.adf-editor-content table th {
+  background: var(--color-tables-table-header-background);
+  font-weight: 600;
+  text-align: left;
+  color: var(--color-fonts-font-color-headings);
+}
+.adf-editor-content table td > *,
+.adf-editor-content table th > * {
+  margin: 0;
+}
+.adf-editor-content table .selectedCell:after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--color-buttons-button-primary);
+  opacity: 0.1;
+  pointer-events: none;
+}

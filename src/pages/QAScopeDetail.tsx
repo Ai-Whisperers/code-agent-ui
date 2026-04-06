@@ -19,6 +19,7 @@ import { IssueTypeIcon } from '@/components/ui/IssueTypeIcon'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { TestPlanStatusBadge } from '@/components/shared/TestPlanStatusBadge'
+import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import api from '@/lib/api'
 import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type { Scope, QaFeatureItem, ScopeTreeItem } from '@/types/api'
@@ -282,11 +283,11 @@ function AnalysisEditDrawer({
               No analysis yet. Generate analysis first.
             </div>
           ) : (
-            <textarea
+            <RichTextEditor
               value={currentText}
-              onChange={(e) => setEditText(e.target.value)}
-              className="flex-1 w-full px-4 py-3 rounded-[var(--border-radius-card)] border border-[var(--color-inputs-input-border)] bg-[var(--color-inputs-input-background)] text-sm font-mono text-[var(--color-fonts-font-color-user-input)] focus:outline-none focus:border-[var(--color-buttons-button-primary)] resize-none"
+              onChange={(md) => setEditText(md)}
               placeholder="Analysis text…"
+              fill
             />
           )}
         </div>

@@ -19,6 +19,7 @@ import { TestPlanStatusBadge } from '@/components/shared/TestPlanStatusBadge'
 import { JiraIssueLink } from '@/components/ui/JiraIssueLink'
 import { Tooltip } from '@/components/ui/Tooltip'
 import api from '@/lib/api'
+import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type { QaTestPlanSummary } from '@/types/api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -199,9 +200,9 @@ export default function TestPlansPage() {
     staleTime: 30_000,
   })
 
-  const { data: mcpConfig } = useQuery<{ jira?: { baseUrl?: string } }>({
+  const { data: mcpConfig } = useQuery({
     queryKey: ['mcp-system-config'],
-    queryFn: () => api.get('/mcp/system-config').then((r) => r.data).catch(() => ({})),
+    queryFn: () => mcpProfilesApi.getSystemConfig().catch(() => ({ jira: { baseUrl: '', username: '' }, confluence: { baseUrl: '', username: '' }, xray: { baseUrl: '' } })),
     staleTime: 5 * 60_000,
   })
   const jiraBaseUrl = mcpConfig?.jira?.baseUrl?.replace(/\/$/, '') ?? ''

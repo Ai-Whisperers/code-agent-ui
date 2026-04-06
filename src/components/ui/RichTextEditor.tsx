@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table'
 import { Markdown } from 'tiptap-markdown'
 import {
   Bold, Italic, Strikethrough,
@@ -10,6 +11,7 @@ import {
   Link as LinkIcon,
   Minus,
   ChevronDown,
+  Table as TableIcon,
 } from 'lucide-react'
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
@@ -140,6 +142,10 @@ export function RichTextEditor({
       StarterKit,
       Placeholder.configure({ placeholder }),
       Markdown.configure({ html: false, transformPastedText: true }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     // placeholder rarely changes; if it does we intentionally accept the re-init
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -246,6 +252,13 @@ export function RichTextEditor({
             </ToolbarBtn>
             <ToolbarBtn title="Horizontal rule" onClick={() => editor?.chain().focus().setHorizontalRule().run()}>
               <Minus size={13} />
+            </ToolbarBtn>
+            <ToolbarBtn
+              title="Insert table (3×3)"
+              active={editor?.isActive('table')}
+              onClick={() => editor?.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+            >
+              <TableIcon size={13} />
             </ToolbarBtn>
           </div>
           <div className="h-px bg-[var(--color-borders-border-primary)] opacity-60" />

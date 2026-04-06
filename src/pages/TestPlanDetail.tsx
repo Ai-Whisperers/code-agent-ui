@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, BookOpen, Target, GitBranch, ShieldAlert, FlaskConical,
   Network, BarChart3, LogIn, Flag, HelpCircle, CheckCircle2, AlertTriangle, Loader2,
-  TestTube2, ExternalLink, ChevronRight, Download, Check, X,
+  TestTube2, ExternalLink, ChevronRight, Download, Check, X, StickyNote, PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react'
 import { useNavigate } from '@tanstack/react-router'
 import { Breadcrumb } from '@/components/ui/Breadcrumb'
@@ -11,6 +12,7 @@ import type { BreadcrumbItem } from '@/components/ui/Breadcrumb'
 import { IdPill } from '@/components/shared/IdPill'
 import { PriorityBadge } from '@/components/shared/PriorityBadge'
 import { RiskBadge } from '@/components/shared/RiskBadge'
+import { RichTextEditor } from '@/components/ui/RichTextEditor'
 import api from '@/lib/api'
 import { mcpProfilesApi } from '@/lib/mcpProfiles'
 import type {
@@ -21,6 +23,52 @@ import type {
 
 const TERMINAL_JOB_STATUSES = ['SUCCESS', 'FAILED', 'CANCELLED']
 const jobStorageKey = (key: string) => `qa-testcase-job:${key}`
+const notesStorageKey = (id: string) => `qa-testplan-notes:${id}`
+
+// ── Notes sidebar ─────────────────────────────────────────────────────────────
+
+function NotesSidebar({ planId }: { planId: string }) {
+  const storageKey = notesStorageKey(planId)
+  const [notes, setNotes] = useState(() => localStorage.getItem(storageKey) ?? '')
+  const [savedAt, setSavedAt] = useState<Date | null>(null)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const handleChange = (md: string) => {
+    setNotes(md)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      localStorage.setItem(storageKey, md)
+      setSavedAt(new Date())
+    }, 800)
+  }
+
+  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }, [])
+
+  const savedLabel = savedAt
+    ? `Saved ${savedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+    : null
+
+  return (
+    <>
+      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--color-borders-border-primary)] sticky top-0 bg-[var(--color-cards-card-background)] z-10">
+        <div className="flex items-center gap-1.5">
+          <StickyNote size={13} className="text-[var(--color-fonts-font-color-brand)]" />
+          <span className="text-xs font-semibold text-[var(--color-fonts-font-color-headings)]">Notes</span>
+        </div>
+        {savedLabel && (
+          <span className="text-[10px] text-[var(--color-fonts-font-color-support)]">{savedLabel}</span>
+        )}
+      </div>
+      <RichTextEditor
+        value={notes}
+        onChange={handleChange}
+        placeholder="Add notes, tables, checklists…"
+        minHeight={400}
+        className="border-0 rounded-none rounded-b-[var(--border-radius-card)]"
+      />
+    </>
+  )
+}
 
 // ── Jira link helper ──────────────────────────────────────────────────────────
 
@@ -835,6 +883,7 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
   const [suggestions, setSuggestions] = useState<MatchSuggestion[]>([])
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [etrProjectKey, setEtrProjectKey] = useState('')
+  const [notesPanelOpen, setNotesPanelOpen] = useState(() => localStorage.getItem('qa-testplan-notes-panel') === 'open')
 
   // ── Active job state (shared with TestCasesPage via localStorage) ──────────
   const [activeJobId, setActiveJobId] = useState<string | null>(
@@ -846,6 +895,14 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
     if (jobId) localStorage.setItem(jobStorageKey(issueKey), jobId)
     else localStorage.removeItem(jobStorageKey(issueKey))
   }, [issueKey])
+
+  const toggleNotesPanel = () => {
+    setNotesPanelOpen((prev) => {
+      const next = !prev
+      localStorage.setItem('qa-testplan-notes-panel', next ? 'open' : 'closed')
+      return next
+    })
+  }
 
   const { data: jobStatus } = useQuery<{ status: string }>({
     queryKey: ['job-status', activeJobId],
@@ -1096,6 +1153,19 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
               )
             )}
             <button
+              onClick={toggleNotesPanel}
+              title={notesPanelOpen ? 'Hide notes' : 'Show notes'}
+              className={[
+                'flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[var(--border-radius-button)] border transition-colors',
+                notesPanelOpen
+                  ? 'border-[var(--color-fonts-font-color-brand)] text-[var(--color-fonts-font-color-brand)] bg-[var(--color-fonts-font-color-brand)]/5'
+                  : 'border-[var(--color-cards-card-stroke)] text-[var(--color-fonts-font-color-support)] hover:bg-[var(--color-cards-card-background-hover)]',
+              ].join(' ')}
+            >
+              {notesPanelOpen ? <PanelRightClose size={13} /> : <PanelRightOpen size={13} />}
+              Notes
+            </button>
+            <button
               onClick={() => navigate({ to: `/qa/scope/${scopeId}` })}
               className="flex items-center gap-1.5 text-sm text-[var(--color-fonts-font-color-support)] hover:text-[var(--color-fonts-font-color-primary)] transition-colors"
             >
@@ -1232,33 +1302,47 @@ export default function TestPlanDetail({ scopeId, issueKey }: TestPlanDetailProp
         </div>
       )}
 
-      <StickyNav />
+      {/* Two-column layout: main content + optional notes sidebar */}
+      <div className="flex gap-5 items-start">
 
-      {/* Sections */}
-      <div className="flex flex-col gap-10">
-        <ExecSummary s={plan.section01_executiveSummary} jiraBaseUrl={jiraBaseUrl} />
-        <CapabilitySection s={plan.section02_featureCapabilityBreakdown} jiraBaseUrl={jiraBaseUrl} />
-        <BehavioursSection s={plan.section03_storyBehaviourBreakdown} jiraBaseUrl={jiraBaseUrl} />
-        <RisksSection s={plan.section04_riskAssessment} />
-        <TestConditionsSection
-          id="behaviour-tcs"
-          icon={FlaskConical}
-          title={plan.section05_behaviourTestConditions.title}
-          groups={plan.section05_behaviourTestConditions.testConditions}
-          jiraBaseUrl={jiraBaseUrl}
-        />
-        <TestConditionsSection
-          id="capability-tcs"
-          icon={FlaskConical}
-          title={plan.section06_capabilityTestConditions.title}
-          groups={plan.section06_capabilityTestConditions.testConditions}
-          jiraBaseUrl={jiraBaseUrl}
-        />
-        <TraceabilitySection s={plan.section07_traceabilityMatrix} jiraBaseUrl={jiraBaseUrl} />
-        <CoverageSection s={plan.section08_coverageAnalysis} jiraBaseUrl={jiraBaseUrl} />
-        <EntryExitSection s={plan.section10_entryExitCriteria} />
-        <ReadinessSection s={plan.section13_readinessForTestCaseDesign} jiraBaseUrl={jiraBaseUrl} />
-        <ClarificationsSection s={plan.section14_clarificationsNeeded} />
+        {/* Main scroll area */}
+        <div className="flex-1 min-w-0">
+          <StickyNav />
+
+          {/* Sections */}
+          <div className="flex flex-col gap-10">
+            <ExecSummary s={plan.section01_executiveSummary} jiraBaseUrl={jiraBaseUrl} />
+            <CapabilitySection s={plan.section02_featureCapabilityBreakdown} jiraBaseUrl={jiraBaseUrl} />
+            <BehavioursSection s={plan.section03_storyBehaviourBreakdown} jiraBaseUrl={jiraBaseUrl} />
+            <RisksSection s={plan.section04_riskAssessment} />
+            <TestConditionsSection
+              id="behaviour-tcs"
+              icon={FlaskConical}
+              title={plan.section05_behaviourTestConditions.title}
+              groups={plan.section05_behaviourTestConditions.testConditions}
+              jiraBaseUrl={jiraBaseUrl}
+            />
+            <TestConditionsSection
+              id="capability-tcs"
+              icon={FlaskConical}
+              title={plan.section06_capabilityTestConditions.title}
+              groups={plan.section06_capabilityTestConditions.testConditions}
+              jiraBaseUrl={jiraBaseUrl}
+            />
+            <TraceabilitySection s={plan.section07_traceabilityMatrix} jiraBaseUrl={jiraBaseUrl} />
+            <CoverageSection s={plan.section08_coverageAnalysis} jiraBaseUrl={jiraBaseUrl} />
+            <EntryExitSection s={plan.section10_entryExitCriteria} />
+            <ReadinessSection s={plan.section13_readinessForTestCaseDesign} jiraBaseUrl={jiraBaseUrl} />
+            <ClarificationsSection s={plan.section14_clarificationsNeeded} />
+          </div>
+        </div>
+
+        {/* Notes sidebar */}
+        {notesPanelOpen && (
+          <aside className="w-80 xl:w-96 shrink-0 sticky top-4 h-[calc(100vh-2rem)] rounded-[var(--border-radius-card)] border border-[var(--color-cards-card-stroke)] bg-[var(--color-cards-card-background)] overflow-y-auto shadow-sm">
+            <NotesSidebar planId={record.id} />
+          </aside>
+        )}
       </div>
     </main>
   )
