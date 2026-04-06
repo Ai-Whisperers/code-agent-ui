@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
-import { Plus, RefreshCw, ExternalLink, CheckCircle, XCircle, Ban, RotateCcw } from 'lucide-react'
+import { Plus, RefreshCw, ExternalLink, CheckCircle, XCircle, Ban, RotateCcw, Play } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { JobStatusBadge } from '@/components/ui/JobStatusBadge'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +10,7 @@ import { Toast } from '@/components/ui/Toast'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { FilterSelect } from '@/components/ui/FilterSelect'
 import type { FilterSelectOption } from '@/components/ui/FilterSelect'
+import { RestartJobDialog } from '@/components/job-detail/RestartJobDialog'
 import api from '@/lib/api'
 import type { JobStatusResponse, JobType } from '@/types/api'
 
@@ -217,6 +218,7 @@ type ToastState = { message: string; variant: 'success' | 'error' }
 function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: boolean; onToast: (t: ToastState) => void }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [showRestartDialog, setShowRestartDialog] = useState(false)
 
   const approveMutation = useMutation({
     mutationFn: () => api.post(`/jobs/${job.jobId}/approve`),
@@ -240,6 +242,21 @@ function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: bool
     mutationFn: () => api.post(`/jobs/${job.jobId}/rerun`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['jobs'] }); onToast({ message: 'Job queued for rerun.', variant: 'success' }) },
     onError: () => onToast({ message: 'Failed to rerun job.', variant: 'error' }),
+  })
+
+  const restartMutation = useMutation({
+    mutationFn: (additionalIterations: number) =>
+      api.post(`/jobs/${job.jobId}/restart`, { additionalIterations }),
+    onSuccess: (data: { jobId: string }) => {
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      setShowRestartDialog(false)
+      onToast({ message: 'Job restart queued.', variant: 'success' })
+      navigate({ to: '/jobs/$id', params: { id: data.jobId } })
+    },
+    onError: () => {
+      setShowRestartDialog(false)
+      onToast({ message: 'Failed to restart job.', variant: 'error' })
+    },
   })
 
   return (
@@ -357,6 +374,28 @@ function JobRow({ job, isEven, onToast }: { job: JobStatusResponse; isEven: bool
             >
               Rerun
             </Button>
+          )}
+          {job.status === 'FAILED' && job.hasCheckpoint && (
+            <Tooltip text="Resume from last checkpoint">
+              <Button
+                variant="ghost"
+                size="xs"
+                icon={<Play size={14} />}
+                onClick={() => setShowRestartDialog(true)}
+              >
+                Restart
+              </Button>
+            </Tooltip>
+          )}
+          {showRestartDialog && (
+            <RestartJobDialog
+              jobId={job.jobId}
+              checkpointIteration={job.checkpointIteration ?? 0}
+              iterationCap={job.iterationCap ?? 50}
+              isPending={restartMutation.isPending}
+              onConfirm={(n) => restartMutation.mutate(n)}
+              onCancel={() => setShowRestartDialog(false)}
+            />
           )}
         </div>
       </td>

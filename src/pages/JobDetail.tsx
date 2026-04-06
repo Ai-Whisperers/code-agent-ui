@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from '@tanstack/react-router'
 import {
-  ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw,
+  ArrowLeft, ExternalLink, CheckCircle, XCircle, RefreshCw, Ban, RotateCcw, Play,
   ShieldCheck, AlertTriangle, Clock,
 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
@@ -24,6 +24,7 @@ import type {
   JobDiffResponse, JobReviewResponse, ReviewCommentEntry, JobEvidenceResponse,
   JobCommitsResponse, QualityReport,
 } from '@/types/api'
+import { RestartJobDialog } from '@/components/job-detail/RestartJobDialog'
 import { AiCallsCard } from '@/components/job-detail/AiCallsCard'
 import { CoverageTab } from '@/components/job-detail/CoverageTab'
 import { EvidenceTab } from '@/components/job-detail/EvidenceTab'
@@ -285,6 +286,22 @@ export default function JobDetail({ jobId }: JobDetailProps) {
     onError: () => setToast({ variant: 'error', message: 'Failed to rerun job.' }),
   })
 
+  const [showRestartDialog, setShowRestartDialog] = useState(false)
+  const restartMutation = useMutation({
+    mutationFn: (additionalIterations: number) =>
+      api.post(`/jobs/${jobId}/restart`, { additionalIterations }),
+    onSuccess: (data: { jobId: string }) => {
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      setShowRestartDialog(false)
+      setToast({ variant: 'success', message: 'Job restart queued.' })
+      setTimeout(() => navigate({ to: '/jobs/$id', params: { id: data.jobId } }), 800)
+    },
+    onError: () => {
+      setShowRestartDialog(false)
+      setToast({ variant: 'error', message: 'Failed to restart job.' })
+    },
+  })
+
   const hasPr = !!job?.prUrl
 
   // SOC II helpers
@@ -456,7 +473,7 @@ export default function JobDetail({ jobId }: JobDetailProps) {
               )
             )}
             {(job?.status === 'FAILED' || job?.status === 'SUCCESS') && (
-              <Tooltip text="Re-queue this job">
+              <Tooltip text="Re-queue this job from scratch">
                 <Button
                   variant="ghost"
                   size="md"
@@ -467,6 +484,28 @@ export default function JobDetail({ jobId }: JobDetailProps) {
                   Rerun
                 </Button>
               </Tooltip>
+            )}
+            {job?.status === 'FAILED' && job?.hasCheckpoint && (
+              <Tooltip text="Resume from last checkpoint">
+                <Button
+                  variant="ghost"
+                  size="md"
+                  icon={<Play size={14} />}
+                  onClick={() => setShowRestartDialog(true)}
+                >
+                  Restart
+                </Button>
+              </Tooltip>
+            )}
+            {showRestartDialog && job && (
+              <RestartJobDialog
+                jobId={jobId}
+                checkpointIteration={job.checkpointIteration ?? 0}
+                iterationCap={job.iterationCap ?? 50}
+                isPending={restartMutation.isPending}
+                onConfirm={(n) => restartMutation.mutate(n)}
+                onCancel={() => setShowRestartDialog(false)}
+              />
             )}
             <Button
               variant="ghost"

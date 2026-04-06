@@ -66,6 +66,10 @@ export interface JobStatusResponse {
   scytaleEvidenceRef?: string
   scytaleEnabled?: boolean
   promotionJobId?: string
+  // Checkpoint / restart fields
+  hasCheckpoint?: boolean
+  checkpointIteration?: number
+  iterationCap?: number
 }
 
 // ---- PR Diff ----
